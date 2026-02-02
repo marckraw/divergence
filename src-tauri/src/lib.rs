@@ -29,7 +29,7 @@ pub fn run() {
             commands::create_divergence,
             commands::list_divergences,
             commands::delete_divergence,
-            commands::check_branch_merged,
+            commands::check_branch_status,
             commands::get_divergence_base_path,
             commands::kill_tmux_session,
         ])

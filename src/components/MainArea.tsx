@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import Terminal from "./Terminal";
 import ProjectSettingsPanel from "./ProjectSettingsPanel";
 import type { TerminalSession } from "../types";
@@ -25,6 +25,7 @@ function MainArea({
   onProjectSettingsSaved,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
+  const commandMapRef = useRef<Map<string, (command: string) => void>>(new Map());
   const activeProject = activeSession?.type === "project"
     ? projects.find(project => project.id === activeSession.targetId) ?? null
     : null;
@@ -36,103 +37,140 @@ function MainArea({
     [onStatusChange]
   );
 
+  const handleRegisterCommand = useCallback((sessionId: string, sendCommand: (command: string) => void) => {
+    commandMapRef.current.set(sessionId, sendCommand);
+  }, []);
+
+  const handleUnregisterCommand = useCallback((sessionId: string) => {
+    commandMapRef.current.delete(sessionId);
+  }, []);
+
+  const sendTmuxCommand = useCallback((command: string) => {
+    if (!activeSession?.useTmux) {
+      return;
+    }
+    const sender = commandMapRef.current.get(activeSession.id);
+    sender?.(command);
+  }, [activeSession]);
+
   return (
     <main className="flex-1 h-full bg-main flex flex-col">
       {/* Tab bar */}
-      <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1 overflow-x-auto">
-        {sessionList.length === 0 ? (
-          <span className="text-xs text-subtext">No terminal open</span>
-        ) : (
-          sessionList.map((session, index) => (
-            <div
-              key={session.id}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer text-sm ${
-                session.id === activeSession?.id
-                  ? "bg-main text-text"
-                  : "text-subtext hover:text-text hover:bg-surface/50"
-              }`}
-              onClick={() => onSelectSession(session.id)}
-            >
-              {/* Tab number */}
-              <span className="text-xs text-subtext">{index + 1}</span>
-
-              {/* Status dot */}
+      <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto flex-1">
+          {sessionList.length === 0 ? (
+            <span className="text-xs text-subtext">No terminal open</span>
+          ) : (
+            sessionList.map((session, index) => (
               <div
-                className={`w-2 h-2 rounded-full ${
-                  session.status === "busy"
-                    ? "bg-yellow animate-pulse"
-                    : session.status === "active"
-                    ? "bg-accent"
-                    : "bg-subtext/50"
+                key={session.id}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer text-sm ${
+                  session.id === activeSession?.id
+                    ? "bg-main text-text"
+                    : "text-subtext hover:text-text hover:bg-surface/50"
                 }`}
-              />
-
-              {/* Session type icon */}
-              {session.type === "divergence" ? (
-                <svg
-                  className="w-3 h-3 text-accent"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                  />
-                </svg>
-              ) : (
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                  />
-                </svg>
-              )}
-
-              {/* Name */}
-              <span className="truncate max-w-32">{session.name}</span>
-
-              {/* tmux badge */}
-              {session.useTmux && (
-                <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">
-                  tmux
-                </span>
-              )}
-
-              {/* Close button */}
-              <button
-                className="w-4 h-4 flex items-center justify-center text-subtext hover:text-red rounded"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCloseSession(session.id);
-                }}
+                onClick={() => onSelectSession(session.id)}
               >
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                {/* Tab number */}
+                <span className="text-xs text-subtext">{index + 1}</span>
+
+                {/* Status dot */}
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    session.status === "busy"
+                      ? "bg-yellow animate-pulse"
+                      : session.status === "active"
+                      ? "bg-accent"
+                      : "bg-subtext/50"
+                  }`}
+                />
+
+                {/* Session type icon */}
+                {session.type === "divergence" ? (
+                  <svg
+                    className="w-3 h-3 text-accent"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                    />
+                  </svg>
+                ) : (
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                    />
+                  </svg>
+                )}
+
+                {/* Name */}
+                <span className="truncate max-w-32">{session.name}</span>
+
+                {/* tmux badge */}
+                {session.useTmux && (
+                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">
+                    tmux
+                  </span>
+                )}
+
+                {/* Close button */}
+                <button
+                  className="w-4 h-4 flex items-center justify-center text-subtext hover:text-red rounded"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCloseSession(session.id);
+                  }}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-          ))
-        )}
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 ml-2">
+          <button
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            onClick={() => sendTmuxCommand('tmux split-window -h -c "#{pane_current_path}" \\; select-layout even-horizontal')}
+            disabled={!activeSession?.useTmux}
+            title="Split vertically"
+          >
+            Split H
+          </button>
+          <button
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            onClick={() => sendTmuxCommand('tmux split-window -v -c "#{pane_current_path}" \\; select-layout even-vertical')}
+            disabled={!activeSession?.useTmux}
+            title="Split horizontally"
+          >
+            Split V
+          </button>
+        </div>
       </div>
 
       {/* Terminal area */}
@@ -152,6 +190,8 @@ function MainArea({
                     sessionId={session.id}
                     useTmux={session.useTmux}
                     tmuxSessionName={session.tmuxSessionName}
+                    onRegisterCommand={handleRegisterCommand}
+                    onUnregisterCommand={handleUnregisterCommand}
                     onStatusChange={handleStatusChange(session.id)}
                     onClose={() => onCloseSession(session.id)}
                   />

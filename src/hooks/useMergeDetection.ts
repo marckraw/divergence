@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import Database from "@tauri-apps/plugin-sql";
 import type { Divergence } from "../types";
 
 interface MergeNotification {
@@ -15,6 +16,7 @@ export function useMergeDetection(
   const [mergedDivergences, setMergedDivergences] = useState<Set<number>>(new Set());
   const checkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const checkedRef = useRef<Set<number>>(new Set());
+  const divergedRef = useRef<Set<number>>(new Set());
 
   const checkDivergence = useCallback(async (divergence: Divergence) => {
     // Skip if already checked or marked as merged
@@ -23,12 +25,26 @@ export function useMergeDetection(
     }
 
     try {
-      const isMerged = await invoke<boolean>("check_branch_merged", {
+      const status = await invoke<{ merged: boolean; diverged: boolean }>("check_branch_status", {
         path: divergence.path,
         branch: divergence.branch,
       });
 
-      if (isMerged) {
+      const hasDiverged = Boolean(divergence.has_diverged)
+        || divergedRef.current.has(divergence.id)
+        || status.diverged;
+
+      if (status.diverged && !divergence.has_diverged) {
+        divergedRef.current.add(divergence.id);
+        try {
+          const db = await Database.load("sqlite:divergence.db");
+          await db.execute("UPDATE divergences SET has_diverged = 1 WHERE id = ?", [divergence.id]);
+        } catch (err) {
+          console.warn("Failed to update divergence has_diverged flag:", err);
+        }
+      }
+
+      if (status.merged && hasDiverged) {
         setMergedDivergences(prev => new Set(prev).add(divergence.id));
         const project = projectsById.get(divergence.project_id);
         if (project && onMergeDetected) {

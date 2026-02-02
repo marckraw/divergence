@@ -9,6 +9,8 @@ interface TerminalProps {
   sessionId: string;
   useTmux?: boolean;
   tmuxSessionName?: string;
+  onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
+  onUnregisterCommand?: (sessionId: string) => void;
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
   onClose?: () => void;
 }
@@ -18,6 +20,8 @@ function Terminal({
   sessionId,
   useTmux = false,
   tmuxSessionName,
+  onRegisterCommand,
+  onUnregisterCommand,
   onStatusChange,
   onClose,
 }: TerminalProps) {
@@ -94,19 +98,24 @@ function Terminal({
       terminal.open(container);
       fitAddon.fit();
 
-      // Ensure scrollback works reliably (especially with tmux)
-      terminal.attachCustomWheelEventHandler((event) => {
-        if (event.deltaY === 0) {
-          return true;
-        }
-        if (event.ctrlKey || event.metaKey) {
-          return true;
-        }
-        const lineHeight = 40;
-        const lines = Math.round(event.deltaY / lineHeight);
-        terminal.scrollLines(lines);
-        return false;
-      });
+      if (!useTmux) {
+        // Ensure scrollback works reliably when not in tmux
+        terminal.attachCustomWheelEventHandler((event) => {
+          if (event.ctrlKey || event.metaKey) {
+            return true;
+          }
+
+          const deltaY = event.deltaY;
+          if (deltaY === 0) {
+            return false;
+          }
+
+          // Trackpads can send very small deltas; scale to at least 1 line.
+          const lines = Math.max(1, Math.ceil(Math.abs(deltaY) / 20));
+          terminal.scrollLines(deltaY > 0 ? lines : -lines);
+          return false;
+        });
+      }
 
       const spawnShell = () => spawn("/bin/zsh", ["-l", "-i"], {
         cols: terminal.cols,
@@ -122,7 +131,7 @@ function Terminal({
         .replace(/[^a-zA-Z0-9_-]/g, "_");
       const tmuxCommand = `
 if command -v tmux >/dev/null 2>&1; then
-  exec tmux new-session -A -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD"
+  exec tmux new-session -A -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD" \\; set -g mouse on
 else
   echo "tmux not found, starting zsh"
   exec /bin/zsh -l -i
@@ -148,6 +157,15 @@ fi
 
         ptyRef.current = pty;
         console.log(`[${sessionId}] PTY spawned`);
+
+        const sendCommand = (command: string) => {
+          if (!command.trim()) {
+            return;
+          }
+          ptyRef.current?.write(command + "\n");
+          updateStatus("busy");
+        };
+        onRegisterCommand?.(sessionId, sendCommand);
 
         // Handle PTY output - convert to Uint8Array as per official example
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -207,6 +225,7 @@ fi
       if (activityTimeoutRef.current) {
         clearTimeout(activityTimeoutRef.current);
       }
+      onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
       ptyRef.current = null;
@@ -214,7 +233,7 @@ fi
       fitAddonRef.current = null;
       initializedRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, onRegisterCommand, onUnregisterCommand]);
 
   if (error) {
     return (

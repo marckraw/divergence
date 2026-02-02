@@ -21,6 +21,7 @@ pub struct Divergence {
     pub branch: String,
     pub path: String,
     pub created_at: String,
+    pub has_diverged: i32,
 }
 
 #[tauri::command]
@@ -94,6 +95,7 @@ pub async fn create_divergence(
         branch: branch_name,
         path: divergence_path.to_string_lossy().to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
+        has_diverged: 0,
     })
 }
 
@@ -122,10 +124,17 @@ pub async fn delete_divergence(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BranchStatus {
+    pub merged: bool,
+    pub diverged: bool,
+}
+
 #[tauri::command]
-pub async fn check_branch_merged(path: String, branch: String) -> Result<bool, String> {
+pub async fn check_branch_status(path: String, branch: String) -> Result<BranchStatus, String> {
     let repo_path = PathBuf::from(&path);
-    git::is_branch_merged(&repo_path, &branch)
+    let (merged, diverged) = git::get_branch_status(&repo_path, &branch)?;
+    Ok(BranchStatus { merged, diverged })
 }
 
 #[tauri::command]

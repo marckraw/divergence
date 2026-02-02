@@ -245,6 +245,111 @@ pub fn is_branch_merged(repo_path: &Path, branch: &str) -> Result<bool, String> 
     Ok(false)
 }
 
+pub fn get_branch_status(repo_path: &Path, branch: &str) -> Result<(bool, bool), String> {
+    // Fetch latest remote state (best effort)
+    let _ = Command::new("git")
+        .args(["fetch", "origin"])
+        .current_dir(repo_path)
+        .output();
+
+    let Some(base_ref) = find_base_ref(repo_path)? else {
+        return Ok((false, false));
+    };
+
+    let diverged = branch_ahead_count(repo_path, &base_ref, branch)? > 0;
+    let merged = merge_base_is_ancestor(repo_path, branch, &base_ref)?;
+
+    Ok((merged, diverged))
+}
+
+fn find_base_ref(repo_path: &Path) -> Result<Option<String>, String> {
+    if let Some(default_remote) = get_default_remote_branch(repo_path)? {
+        return Ok(Some(default_remote));
+    }
+
+    let remote_candidates = [
+        ("origin/main", "refs/remotes/origin/main"),
+        ("origin/master", "refs/remotes/origin/master"),
+        ("origin/develop", "refs/remotes/origin/develop"),
+    ];
+
+    for (name, reference) in remote_candidates {
+        if ref_exists(repo_path, reference)? {
+            return Ok(Some(name.to_string()));
+        }
+    }
+
+    let local_candidates = [
+        ("main", "refs/heads/main"),
+        ("master", "refs/heads/master"),
+        ("develop", "refs/heads/develop"),
+    ];
+
+    for (name, reference) in local_candidates {
+        if ref_exists(repo_path, reference)? {
+            return Ok(Some(name.to_string()));
+        }
+    }
+
+    Ok(None)
+}
+
+fn get_default_remote_branch(repo_path: &Path) -> Result<Option<String>, String> {
+    let output = Command::new("git")
+        .args(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git symbolic-ref: {}", e))?;
+
+    if output.status.success() {
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !branch.is_empty() {
+            return Ok(Some(branch));
+        }
+    }
+
+    Ok(None)
+}
+
+fn ref_exists(repo_path: &Path, reference: &str) -> Result<bool, String> {
+    let status = Command::new("git")
+        .args(["show-ref", "--verify", "--quiet", reference])
+        .current_dir(repo_path)
+        .status()
+        .map_err(|e| format!("Failed to execute git show-ref: {}", e))?;
+
+    Ok(status.success())
+}
+
+fn branch_ahead_count(repo_path: &Path, base_ref: &str, branch: &str) -> Result<i64, String> {
+    let output = Command::new("git")
+        .args(["rev-list", "--count", &format!("{}..{}", base_ref, branch)])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git rev-list: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to compute branch ahead count: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let count_str = String::from_utf8_lossy(&output.stdout);
+    let count = count_str.trim().parse::<i64>().unwrap_or(0);
+    Ok(count)
+}
+
+fn merge_base_is_ancestor(repo_path: &Path, branch: &str, base_ref: &str) -> Result<bool, String> {
+    let status = Command::new("git")
+        .args(["merge-base", "--is-ancestor", branch, base_ref])
+        .current_dir(repo_path)
+        .status()
+        .map_err(|e| format!("Failed to execute git merge-base: {}", e))?;
+
+    Ok(status.success())
+}
+
 pub fn get_remote_url(repo_path: &Path) -> Result<Option<String>, String> {
     let output = Command::new("git")
         .args(["remote", "get-url", "origin"])

@@ -12,6 +12,7 @@ export interface Divergence {
   branch: string;
   path: string;
   created_at: string;
+  has_diverged: number;
 }
 
 export interface TerminalSession {

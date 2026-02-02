@@ -24,6 +24,7 @@ export async function getDb(): Promise<Database> {
         branch TEXT NOT NULL,
         path TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        has_diverged INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       )
     `);
@@ -36,6 +37,7 @@ export async function getDb(): Promise<Database> {
       )
     `);
     await ensureProjectSettingsColumns(db);
+    await ensureDivergenceColumns(db);
   }
   return db;
 }
@@ -53,6 +55,22 @@ async function ensureProjectSettingsColumns(database: Database) {
     }
   } catch (err) {
     console.warn("Failed to ensure project_settings columns:", err);
+  }
+}
+
+async function ensureDivergenceColumns(database: Database) {
+  try {
+    const columns = await database.select<{ name: string }[]>(
+      "PRAGMA table_info(divergences)"
+    );
+    const hasDiverged = columns.some(column => column.name === "has_diverged");
+    if (!hasDiverged) {
+      await database.execute(
+        "ALTER TABLE divergences ADD COLUMN has_diverged INTEGER NOT NULL DEFAULT 0"
+      );
+    }
+  } catch (err) {
+    console.warn("Failed to ensure divergences columns:", err);
   }
 }
 
@@ -151,8 +169,15 @@ export function useDivergences(projectId: number | null) {
     try {
       const database = await getDb();
       await database.execute(
-        "INSERT INTO divergences (project_id, name, branch, path, created_at) VALUES (?, ?, ?, ?, ?)",
-        [divergence.project_id, divergence.name, divergence.branch, divergence.path, divergence.created_at]
+        "INSERT INTO divergences (project_id, name, branch, path, created_at, has_diverged) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          divergence.project_id,
+          divergence.name,
+          divergence.branch,
+          divergence.path,
+          divergence.created_at,
+          divergence.has_diverged ?? 0,
+        ]
       );
       await loadDivergences();
     } catch (err) {

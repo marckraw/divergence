@@ -39,8 +39,15 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
       // Save to database
       const db = await Database.load("sqlite:divergence.db");
       await db.execute(
-        "INSERT INTO divergences (project_id, name, branch, path, created_at) VALUES (?, ?, ?, ?, ?)",
-        [divergence.project_id, divergence.name, divergence.branch, divergence.path, divergence.created_at]
+        "INSERT INTO divergences (project_id, name, branch, path, created_at, has_diverged) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          divergence.project_id,
+          divergence.name,
+          divergence.branch,
+          divergence.path,
+          divergence.created_at,
+          divergence.has_diverged ?? 0,
+        ]
       );
 
       // Get the ID of the inserted row so we can open it immediately
