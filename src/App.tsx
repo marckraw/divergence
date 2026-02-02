@@ -1,0 +1,264 @@
+import { useState, useCallback, useEffect, useMemo } from "react";
+import Sidebar from "./components/Sidebar";
+import MainArea from "./components/MainArea";
+import QuickSwitcher from "./components/QuickSwitcher";
+import Settings from "./components/Settings";
+import MergeNotification from "./components/MergeNotification";
+import { useProjects, useAllDivergences } from "./hooks/useDatabase";
+import { useMergeDetection } from "./hooks/useMergeDetection";
+import type { Project, Divergence, TerminalSession } from "./types";
+
+interface MergeNotificationData {
+  divergence: Divergence;
+  projectName: string;
+}
+
+function App() {
+  const { projects, addProject, removeProject } = useProjects();
+  const { divergencesByProject, refresh: refreshDivergences } = useAllDivergences();
+  const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
+
+  // Build projects by ID map for merge detection
+  const projectsById = useMemo(() => {
+    const map = new Map<number, { name: string }>();
+    projects.forEach(p => map.set(p.id, { name: p.name }));
+    return map;
+  }, [projects]);
+
+  // Flatten divergences for merge detection
+  const allDivergences = useMemo(() => {
+    const all: Divergence[] = [];
+    divergencesByProject.forEach(divs => all.push(...divs));
+    return all;
+  }, [divergencesByProject]);
+
+  // Merge detection
+  useMergeDetection(allDivergences, projectsById, (notification) => {
+    setMergeNotification(notification);
+  });
+
+  const createSession = useCallback((
+    type: "project" | "divergence",
+    target: Project | Divergence
+  ): TerminalSession => {
+    const id = `${type}-${target.id}`;
+    const existing = sessions.get(id);
+    if (existing) {
+      return existing;
+    }
+
+    const session: TerminalSession = {
+      id,
+      type,
+      targetId: target.id,
+      name: target.name,
+      path: target.path,
+      status: "idle",
+    };
+
+    setSessions(prev => new Map(prev).set(id, session));
+    return session;
+  }, [sessions]);
+
+  const handleSelectProject = useCallback((project: Project) => {
+    const session = createSession("project", project);
+    setActiveSessionId(session.id);
+  }, [createSession]);
+
+  const handleSelectDivergence = useCallback((divergence: Divergence) => {
+    const session = createSession("divergence", divergence);
+    setActiveSessionId(session.id);
+  }, [createSession]);
+
+  const handleCloseSession = useCallback((sessionId: string) => {
+    setSessions(prev => {
+      const newSessions = new Map(prev);
+      newSessions.delete(sessionId);
+      return newSessions;
+    });
+    if (activeSessionId === sessionId) {
+      const remainingSessions = Array.from(sessions.keys()).filter(id => id !== sessionId);
+      setActiveSessionId(remainingSessions[0] || null);
+    }
+  }, [activeSessionId, sessions]);
+
+  const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
+    setSessions(prev => {
+      const newSessions = new Map(prev);
+      const session = newSessions.get(sessionId);
+      if (session) {
+        newSessions.set(sessionId, { ...session, status, lastActivity: new Date() });
+      }
+      return newSessions;
+    });
+  }, []);
+
+  const handleAddProject = useCallback(async (name: string, path: string) => {
+    await addProject(name, path);
+  }, [addProject]);
+
+  const handleRemoveProject = useCallback(async (id: number) => {
+    await removeProject(id);
+    // Close any sessions for this project
+    const sessionsToClose = Array.from(sessions.entries())
+      .filter(([, s]) => s.type === "project" && s.targetId === id)
+      .map(([sessionId]) => sessionId);
+    sessionsToClose.forEach(handleCloseSession);
+  }, [removeProject, sessions, handleCloseSession]);
+
+  const handleDivergenceCreated = useCallback(() => {
+    refreshDivergences();
+  }, [refreshDivergences]);
+
+  const handleDeleteDivergence = useCallback(async (id: number) => {
+    // Close any sessions for this divergence
+    const sessionsToClose = Array.from(sessions.entries())
+      .filter(([, s]) => s.type === "divergence" && s.targetId === id)
+      .map(([sessionId]) => sessionId);
+    sessionsToClose.forEach(handleCloseSession);
+    await refreshDivergences();
+  }, [sessions, handleCloseSession, refreshDivergences]);
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    const isMeta = e.metaKey || e.ctrlKey;
+
+    // Quick Switcher - Cmd+K
+    if (isMeta && e.key === "k") {
+      e.preventDefault();
+      setShowQuickSwitcher(prev => !prev);
+      return;
+    }
+
+    // Settings - Cmd+,
+    if (isMeta && e.key === ",") {
+      e.preventDefault();
+      setShowSettings(prev => !prev);
+      return;
+    }
+
+    // Close modal on Escape
+    if (e.key === "Escape") {
+      setShowQuickSwitcher(false);
+      setShowSettings(false);
+      return;
+    }
+
+    // Close current session - Cmd+W
+    if (isMeta && e.key === "w") {
+      e.preventDefault();
+      if (activeSessionId) {
+        handleCloseSession(activeSessionId);
+      }
+      return;
+    }
+
+    // Switch tabs - Cmd+1-9
+    if (isMeta && e.key >= "1" && e.key <= "9") {
+      e.preventDefault();
+      const index = parseInt(e.key) - 1;
+      const sessionIds = Array.from(sessions.keys());
+      if (index < sessionIds.length) {
+        setActiveSessionId(sessionIds[index]);
+      }
+      return;
+    }
+
+    // Previous tab - Cmd+[
+    if (isMeta && e.key === "[") {
+      e.preventDefault();
+      const sessionIds = Array.from(sessions.keys());
+      if (activeSessionId && sessionIds.length > 1) {
+        const currentIndex = sessionIds.indexOf(activeSessionId);
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : sessionIds.length - 1;
+        setActiveSessionId(sessionIds[prevIndex]);
+      }
+      return;
+    }
+
+    // Next tab - Cmd+]
+    if (isMeta && e.key === "]") {
+      e.preventDefault();
+      const sessionIds = Array.from(sessions.keys());
+      if (activeSessionId && sessionIds.length > 1) {
+        const currentIndex = sessionIds.indexOf(activeSessionId);
+        const nextIndex = currentIndex < sessionIds.length - 1 ? currentIndex + 1 : 0;
+        setActiveSessionId(sessionIds[nextIndex]);
+      }
+      return;
+    }
+  }, [sessions, activeSessionId, handleCloseSession]);
+
+  // Set up keyboard listener
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
+  const activeSession = activeSessionId ? sessions.get(activeSessionId) ?? null : null;
+
+  return (
+    <div className="flex h-full w-full">
+      <Sidebar
+        projects={projects}
+        divergencesByProject={divergencesByProject}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectProject={handleSelectProject}
+        onSelectDivergence={handleSelectDivergence}
+        onAddProject={handleAddProject}
+        onRemoveProject={handleRemoveProject}
+        onDivergenceCreated={handleDivergenceCreated}
+        onDeleteDivergence={handleDeleteDivergence}
+      />
+      <MainArea
+        sessions={sessions}
+        activeSession={activeSession}
+        onCloseSession={handleCloseSession}
+        onSelectSession={setActiveSessionId}
+        onStatusChange={handleSessionStatusChange}
+      />
+
+      {/* Quick Switcher */}
+      {showQuickSwitcher && (
+        <QuickSwitcher
+          projects={projects}
+          divergencesByProject={divergencesByProject}
+          onSelect={(type, item) => {
+            if (type === "project") {
+              handleSelectProject(item as Project);
+            } else {
+              handleSelectDivergence(item as Divergence);
+            }
+            setShowQuickSwitcher(false);
+          }}
+          onClose={() => setShowQuickSwitcher(false)}
+        />
+      )}
+
+      {/* Settings */}
+      {showSettings && (
+        <Settings onClose={() => setShowSettings(false)} />
+      )}
+
+      {/* Merge Notification */}
+      {mergeNotification && (
+        <MergeNotification
+          divergence={mergeNotification.divergence}
+          projectName={mergeNotification.projectName}
+          onClose={() => setMergeNotification(null)}
+          onDeleted={() => {
+            handleDeleteDivergence(mergeNotification.divergence.id);
+            setMergeNotification(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+export default App;
