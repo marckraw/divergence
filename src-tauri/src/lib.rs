@@ -31,6 +31,7 @@ pub fn run() {
             commands::delete_divergence,
             commands::check_branch_merged,
             commands::get_divergence_base_path,
+            commands::kill_tmux_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

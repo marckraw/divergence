@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import Database from "@tauri-apps/plugin-sql";
 import type { Divergence } from "../types";
+import { buildTmuxSessionName, buildLegacyTmuxSessionName } from "../lib/tmux";
 
 interface MergeNotificationProps {
   divergence: Divergence;
@@ -21,10 +21,18 @@ function MergeNotification({ divergence, projectName, onClose, onDeleted }: Merg
     try {
       // Delete the directory
       await invoke("delete_divergence", { path: divergence.path });
-
-      // Delete from database
-      const db = await Database.load("sqlite:divergence.db");
-      await db.execute("DELETE FROM divergences WHERE id = ?", [divergence.id]);
+      await invoke("kill_tmux_session", {
+        sessionName: buildTmuxSessionName({
+          type: "divergence",
+          projectName,
+          projectId: divergence.project_id,
+          divergenceId: divergence.id,
+          branch: divergence.branch,
+        }),
+      });
+      await invoke("kill_tmux_session", {
+        sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
+      });
 
       onDeleted();
       onClose();
@@ -32,7 +40,7 @@ function MergeNotification({ divergence, projectName, onClose, onDeleted }: Merg
       setError(err instanceof Error ? err.message : String(err));
       setIsDeleting(false);
     }
-  }, [divergence, onDeleted, onClose]);
+  }, [divergence, projectName, onDeleted, onClose]);
 
   return (
     <div className="fixed bottom-4 right-4 bg-sidebar border border-surface rounded-lg shadow-xl max-w-md animate-slide-in z-50">

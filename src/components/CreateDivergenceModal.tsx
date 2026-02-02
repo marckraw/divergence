@@ -2,11 +2,12 @@ import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import type { Project, Divergence } from "../types";
+import { loadProjectSettings } from "../lib/projectSettings";
 
 interface CreateDivergenceModalProps {
   project: Project;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (divergence: Divergence) => void;
 }
 
 function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergenceModalProps) {
@@ -24,12 +25,15 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
     setError(null);
 
     try {
+      const settings = await loadProjectSettings(project.id);
+
       // Create divergence via Tauri command (handles git clone/checkout)
       const divergence = await invoke<Divergence>("create_divergence", {
         projectId: project.id,
         projectName: project.name,
         projectPath: project.path,
         branchName: branchName.trim(),
+        copyIgnoredSkip: settings.copyIgnoredSkip,
       });
 
       // Save to database
@@ -39,7 +43,11 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
         [divergence.project_id, divergence.name, divergence.branch, divergence.path, divergence.created_at]
       );
 
-      onCreated();
+      // Get the ID of the inserted row so we can open it immediately
+      const rows = await db.select<{ id: number }>("SELECT last_insert_rowid() as id");
+      const insertedId = rows[0]?.id ?? 0;
+
+      onCreated({ ...divergence, id: insertedId });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

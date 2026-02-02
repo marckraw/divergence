@@ -1,23 +1,33 @@
 import { useCallback } from "react";
 import Terminal from "./Terminal";
+import ProjectSettingsPanel from "./ProjectSettingsPanel";
 import type { TerminalSession } from "../types";
+import type { Project } from "../types";
+import type { ProjectSettings } from "../lib/projectSettings";
 
 interface MainAreaProps {
+  projects: Project[];
   sessions: Map<string, TerminalSession>;
   activeSession: TerminalSession | null;
   onCloseSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
+  onProjectSettingsSaved: (settings: ProjectSettings) => void;
 }
 
 function MainArea({
+  projects,
   sessions,
   activeSession,
   onCloseSession,
   onSelectSession,
   onStatusChange,
+  onProjectSettingsSaved,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
+  const activeProject = activeSession?.type === "project"
+    ? projects.find(project => project.id === activeSession.targetId) ?? null
+    : null;
 
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
@@ -91,6 +101,13 @@ function MainArea({
               {/* Name */}
               <span className="truncate max-w-32">{session.name}</span>
 
+              {/* tmux badge */}
+              {session.useTmux && (
+                <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">
+                  tmux
+                </span>
+              )}
+
               {/* Close button */}
               <button
                 className="w-4 h-4 flex items-center justify-center text-subtext hover:text-red rounded"
@@ -121,23 +138,35 @@ function MainArea({
       {/* Terminal area */}
       <div className="flex-1 relative overflow-hidden">
         {activeSession ? (
-          <>
-            {sessionList.map((session) => (
-              <div
-                key={session.id}
-                className={`absolute inset-0 ${
-                  session.id === activeSession.id ? "visible z-10" : "invisible z-0"
-                }`}
-              >
-                <Terminal
-                  cwd={session.path}
-                  sessionId={session.id}
-                  onStatusChange={handleStatusChange(session.id)}
-                  onClose={() => onCloseSession(session.id)}
+          <div className={`flex h-full w-full ${activeProject ? "gap-0" : ""}`}>
+            <div className="flex-1 relative overflow-hidden">
+              {sessionList.map((session) => (
+                <div
+                  key={session.id}
+                  className={`absolute inset-0 ${
+                    session.id === activeSession.id ? "visible z-10" : "invisible z-0"
+                  }`}
+                >
+                  <Terminal
+                    cwd={session.path}
+                    sessionId={session.id}
+                    useTmux={session.useTmux}
+                    tmuxSessionName={session.tmuxSessionName}
+                    onStatusChange={handleStatusChange(session.id)}
+                    onClose={() => onCloseSession(session.id)}
+                  />
+                </div>
+              ))}
+            </div>
+            {activeProject && (
+              <div className="w-96 border-l border-surface bg-sidebar">
+                <ProjectSettingsPanel
+                  project={activeProject}
+                  onSaved={onProjectSettingsSaved}
                 />
               </div>
-            ))}
-          </>
+            )}
+          </div>
         ) : (
           <div className="flex-1 h-full flex items-center justify-center">
             <div className="text-center text-subtext">

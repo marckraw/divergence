@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Project, Divergence, TerminalSession } from "../types";
 import StatusIndicator from "./StatusIndicator";
 import CreateDivergenceModal from "./CreateDivergenceModal";
+import { buildTmuxSessionName, buildLegacyTmuxSessionName } from "../lib/tmux";
 
 interface SidebarProps {
   projects: Project[];
@@ -98,15 +99,28 @@ function Sidebar({
   const handleDeleteDivergence = useCallback(async () => {
     if (contextMenu?.type === "divergence") {
       const divergence = contextMenu.item as Divergence;
+      const projectName = projects.find(project => project.id === divergence.project_id)?.name ?? "project";
       try {
         await invoke("delete_divergence", { path: divergence.path });
+        await invoke("kill_tmux_session", {
+          sessionName: buildTmuxSessionName({
+            type: "divergence",
+            projectName,
+            projectId: divergence.project_id,
+            divergenceId: divergence.id,
+            branch: divergence.branch,
+          }),
+        });
+        await invoke("kill_tmux_session", {
+          sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
+        });
         await onDeleteDivergence(divergence.id);
       } catch (err) {
         console.error("Failed to delete divergence:", err);
       }
     }
     closeContextMenu();
-  }, [contextMenu, onDeleteDivergence, closeContextMenu]);
+  }, [contextMenu, onDeleteDivergence, closeContextMenu, projects]);
 
   const getSessionStatus = useCallback((type: "project" | "divergence", id: number): TerminalSession["status"] | null => {
     const sessionId = `${type}-${id}`;
@@ -340,7 +354,10 @@ function Sidebar({
         <CreateDivergenceModal
           project={createDivergenceFor}
           onClose={() => setCreateDivergenceFor(null)}
-          onCreated={onDivergenceCreated}
+          onCreated={(divergence) => {
+            onDivergenceCreated();
+            onSelectDivergence(divergence);
+          }}
         />
       )}
     </>

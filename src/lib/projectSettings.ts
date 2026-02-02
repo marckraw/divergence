@@ -1,0 +1,97 @@
+import { getDb } from "../hooks/useDatabase";
+
+export const DEFAULT_COPY_IGNORED_SKIP = [
+  "node_modules",
+  "dist",
+  "build",
+  "target",
+  ".turbo",
+  ".next",
+  ".cache",
+];
+export const DEFAULT_USE_TMUX = true;
+
+export interface ProjectSettings {
+  projectId: number;
+  copyIgnoredSkip: string[];
+  useTmux: boolean;
+}
+
+function normalizeSkipList(entries: string[]): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of entries) {
+    const trimmed = entry.trim();
+    if (!trimmed) {
+      continue;
+    }
+    if (seen.has(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+
+  return result;
+}
+
+export async function loadProjectSettings(projectId: number): Promise<ProjectSettings> {
+  const database = await getDb();
+  const rows = await database.select<{ copy_ignored_skip: string; use_tmux?: number }[]>(
+    "SELECT copy_ignored_skip, use_tmux FROM project_settings WHERE project_id = ?",
+    [projectId]
+  );
+
+  if (!rows.length || !rows[0]?.copy_ignored_skip) {
+    return {
+      projectId,
+      copyIgnoredSkip: DEFAULT_COPY_IGNORED_SKIP,
+      useTmux: DEFAULT_USE_TMUX,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(rows[0].copy_ignored_skip);
+    if (Array.isArray(parsed)) {
+      return {
+        projectId,
+        copyIgnoredSkip: normalizeSkipList(parsed.map(String)),
+        useTmux: Boolean(rows[0].use_tmux ?? DEFAULT_USE_TMUX),
+      };
+    }
+  } catch {
+    // Fall back to defaults if parsing fails
+  }
+
+  return {
+    projectId,
+    copyIgnoredSkip: DEFAULT_COPY_IGNORED_SKIP,
+    useTmux: DEFAULT_USE_TMUX,
+  };
+}
+
+export async function saveProjectSettings(
+  projectId: number,
+  copyIgnoredSkip: string[],
+  useTmux: boolean
+): Promise<ProjectSettings> {
+  const normalized = normalizeSkipList(copyIgnoredSkip);
+  const database = await getDb();
+  await database.execute(
+    `
+      INSERT INTO project_settings (project_id, copy_ignored_skip, use_tmux)
+      VALUES (?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        copy_ignored_skip = excluded.copy_ignored_skip,
+        use_tmux = excluded.use_tmux
+    `,
+    [projectId, JSON.stringify(normalized), useTmux ? 1 : 0]
+  );
+
+  return {
+    projectId,
+    copyIgnoredSkip: normalized,
+    useTmux,
+  };
+}

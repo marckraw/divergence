@@ -18,8 +18,11 @@ export interface TerminalSession {
   id: string;
   type: "project" | "divergence";
   targetId: number;
+  projectId: number;
   name: string;
   path: string;
+  useTmux: boolean;
+  tmuxSessionName: string;
   status: "idle" | "active" | "busy";
   lastActivity?: Date;
 }

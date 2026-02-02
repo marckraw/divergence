@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import Database from "@tauri-apps/plugin-sql";
 import Sidebar from "./components/Sidebar";
 import MainArea from "./components/MainArea";
 import QuickSwitcher from "./components/QuickSwitcher";
@@ -6,7 +8,10 @@ import Settings from "./components/Settings";
 import MergeNotification from "./components/MergeNotification";
 import { useProjects, useAllDivergences } from "./hooks/useDatabase";
 import { useMergeDetection } from "./hooks/useMergeDetection";
+import { useProjectSettingsMap } from "./hooks/useProjectSettingsMap";
 import type { Project, Divergence, TerminalSession } from "./types";
+import { DEFAULT_USE_TMUX } from "./lib/projectSettings";
+import { buildTmuxSessionName, buildLegacyTmuxSessionName } from "./lib/tmux";
 
 interface MergeNotificationData {
   divergence: Divergence;
@@ -16,6 +21,7 @@ interface MergeNotificationData {
 function App() {
   const { projects, addProject, removeProject } = useProjects();
   const { divergencesByProject, refresh: refreshDivergences } = useAllDivergences();
+  const { settingsByProjectId, updateProjectSettings } = useProjectSettingsMap(projects);
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
@@ -51,18 +57,35 @@ function App() {
       return existing;
     }
 
+    const projectId = type === "project" ? target.id : (target as Divergence).project_id;
+    const useTmux = settingsByProjectId.get(projectId)?.useTmux ?? DEFAULT_USE_TMUX;
+    const projectName = type === "project"
+      ? (target as Project).name
+      : projectsById.get(projectId)?.name ?? "project";
+    const branchName = type === "divergence" ? (target as Divergence).branch : undefined;
+    const tmuxSessionName = buildTmuxSessionName({
+      type,
+      projectName,
+      projectId,
+      divergenceId: type === "divergence" ? target.id : undefined,
+      branch: branchName,
+    });
+
     const session: TerminalSession = {
       id,
       type,
       targetId: target.id,
+      projectId,
       name: target.name,
       path: target.path,
+      useTmux,
+      tmuxSessionName,
       status: "idle",
     };
 
     setSessions(prev => new Map(prev).set(id, session));
     return session;
-  }, [sessions]);
+  }, [sessions, settingsByProjectId, projectsById]);
 
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
@@ -108,7 +131,38 @@ function App() {
       .filter(([, s]) => s.type === "project" && s.targetId === id)
       .map(([sessionId]) => sessionId);
     sessionsToClose.forEach(handleCloseSession);
-  }, [removeProject, sessions, handleCloseSession]);
+
+    // Kill tmux sessions for this project and its divergences
+    try {
+      await invoke("kill_tmux_session", {
+        sessionName: buildTmuxSessionName({
+          type: "project",
+          projectName: projectsById.get(id)?.name ?? "project",
+          projectId: id,
+        }),
+      });
+      await invoke("kill_tmux_session", {
+        sessionName: buildLegacyTmuxSessionName(`project-${id}`),
+      });
+      const divergences = divergencesByProject.get(id) || [];
+      for (const divergence of divergences) {
+        await invoke("kill_tmux_session", {
+          sessionName: buildTmuxSessionName({
+            type: "divergence",
+            projectName: projectsById.get(id)?.name ?? "project",
+            projectId: id,
+            divergenceId: divergence.id,
+            branch: divergence.branch,
+          }),
+        });
+        await invoke("kill_tmux_session", {
+          sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to kill tmux sessions:", err);
+    }
+  }, [removeProject, sessions, handleCloseSession, divergencesByProject, projectsById]);
 
   const handleDivergenceCreated = useCallback(() => {
     refreshDivergences();
@@ -120,6 +174,12 @@ function App() {
       .filter(([, s]) => s.type === "divergence" && s.targetId === id)
       .map(([sessionId]) => sessionId);
     sessionsToClose.forEach(handleCloseSession);
+    try {
+      const db = await Database.load("sqlite:divergence.db");
+      await db.execute("DELETE FROM divergences WHERE id = ?", [id]);
+    } catch (err) {
+      console.warn("Failed to delete divergence from database:", err);
+    }
     await refreshDivergences();
   }, [sessions, handleCloseSession, refreshDivergences]);
 
@@ -216,11 +276,13 @@ function App() {
         onDeleteDivergence={handleDeleteDivergence}
       />
       <MainArea
+        projects={projects}
         sessions={sessions}
         activeSession={activeSession}
         onCloseSession={handleCloseSession}
         onSelectSession={setActiveSessionId}
         onStatusChange={handleSessionStatusChange}
+        onProjectSettingsSaved={updateProjectSettings}
       />
 
       {/* Quick Switcher */}

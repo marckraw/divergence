@@ -4,7 +4,7 @@ import type { Project, Divergence } from "../types";
 
 let db: Database | null = null;
 
-async function getDb(): Promise<Database> {
+export async function getDb(): Promise<Database> {
   if (!db) {
     db = await Database.load("sqlite:divergence.db");
     // Initialize schema
@@ -27,8 +27,33 @@ async function getDb(): Promise<Database> {
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       )
     `);
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS project_settings (
+        project_id INTEGER PRIMARY KEY,
+        copy_ignored_skip TEXT NOT NULL,
+        use_tmux INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `);
+    await ensureProjectSettingsColumns(db);
   }
   return db;
+}
+
+async function ensureProjectSettingsColumns(database: Database) {
+  try {
+    const columns = await database.select<{ name: string }[]>(
+      "PRAGMA table_info(project_settings)"
+    );
+    const hasUseTmux = columns.some(column => column.name === "use_tmux");
+    if (!hasUseTmux) {
+      await database.execute(
+        "ALTER TABLE project_settings ADD COLUMN use_tmux INTEGER NOT NULL DEFAULT 1"
+      );
+    }
+  } catch (err) {
+    console.warn("Failed to ensure project_settings columns:", err);
+  }
 }
 
 export function useProjects() {
@@ -75,6 +100,10 @@ export function useProjects() {
       // First delete associated divergences
       await database.execute(
         "DELETE FROM divergences WHERE project_id = ?",
+        [id]
+      );
+      await database.execute(
+        "DELETE FROM project_settings WHERE project_id = ?",
         [id]
       );
       await database.execute("DELETE FROM projects WHERE id = ?", [id]);

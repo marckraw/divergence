@@ -1,47 +1,61 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { spawn, type IPty } from "tauri-pty";
+import { spawn } from "tauri-pty";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
   cwd: string;
   sessionId: string;
+  useTmux?: boolean;
+  tmuxSessionName?: string;
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
   onClose?: () => void;
 }
 
-function Terminal({ cwd, sessionId, onStatusChange, onClose }: TerminalProps) {
+function Terminal({
+  cwd,
+  sessionId,
+  useTmux = false,
+  tmuxSessionName,
+  onStatusChange,
+  onClose,
+}: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const ptyRef = useRef<IPty | null>(null);
+  const ptyRef = useRef<ReturnType<typeof spawn> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
+  const onStatusChangeRef = useRef<TerminalProps["onStatusChange"]>(onStatusChange);
+
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange]);
 
   const updateStatus = useCallback((status: "idle" | "active" | "busy") => {
-    onStatusChange?.(status);
-  }, [onStatusChange]);
+    onStatusChangeRef.current?.(status);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || initializedRef.current) return;
+    let handleResize: (() => void) | null = null;
 
-    // Wait for container to have dimensions
-    const initTerminal = async () => {
-      // Ensure container has dimensions
+    const initTerminal = () => {
       const rect = container.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
-        // Retry after a short delay
         setTimeout(initTerminal, 100);
         return;
       }
 
       initializedRef.current = true;
+      console.log(`[${sessionId}] Initializing terminal`);
 
-      // Create terminal instance
+      // Create terminal - note convertEol for proper line handling
       const terminal = new XTerm({
+        convertEol: true,
         cursorBlink: true,
         fontSize: 14,
         fontFamily: '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
@@ -68,7 +82,6 @@ function Terminal({ cwd, sessionId, onStatusChange, onClose }: TerminalProps) {
           brightCyan: "#94e2d5",
           brightWhite: "#a6adc8",
         },
-        allowTransparency: false,
         scrollback: 10000,
       });
 
@@ -78,92 +91,130 @@ function Terminal({ cwd, sessionId, onStatusChange, onClose }: TerminalProps) {
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
-      // Open terminal in container
       terminal.open(container);
+      fitAddon.fit();
 
-      // Fit after opening
-      setTimeout(() => {
-        fitAddon.fit();
-        initPty(terminal);
-      }, 50);
-
-      async function initPty(term: XTerm) {
-        try {
-          const cols = term.cols || 80;
-          const rows = term.rows || 24;
-
-          console.log(`[${sessionId}] Spawning PTY with cols=${cols}, rows=${rows}, cwd=${cwd}`);
-
-          const pty = spawn("/bin/zsh", ["-l"], {
-            cols,
-            rows,
-            cwd,
-            env: {
-              TERM: "xterm-256color",
-              COLORTERM: "truecolor",
-            },
-          });
-
-          ptyRef.current = pty;
-
-          // Handle PTY output
-          pty.onData((data: Uint8Array) => {
-            const text = new TextDecoder().decode(data);
-            term.write(text);
-            updateStatus("active");
-            if (activityTimeoutRef.current) {
-              clearTimeout(activityTimeoutRef.current);
-            }
-            activityTimeoutRef.current = setTimeout(() => {
-              updateStatus("idle");
-            }, 2000);
-          });
-
-          pty.onExit(() => {
-            term.write("\r\n\x1b[90m[Terminal session ended]\x1b[0m\r\n");
-            updateStatus("idle");
-          });
-
-          // Handle terminal input
-          term.onData((data: string) => {
-            pty.write(data);
-          });
-
-          term.focus();
-        } catch (err) {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          console.error(`[${sessionId}] PTY spawn error:`, err);
-          setError(errorMessage);
-          term.write(`\r\n\x1b[31mFailed to start terminal: ${errorMessage}\x1b[0m\r\n`);
+      // Ensure scrollback works reliably (especially with tmux)
+      terminal.attachCustomWheelEventHandler((event) => {
+        if (event.deltaY === 0) {
+          return true;
         }
+        if (event.ctrlKey || event.metaKey) {
+          return true;
+        }
+        const lineHeight = 40;
+        const lines = Math.round(event.deltaY / lineHeight);
+        terminal.scrollLines(lines);
+        return false;
+      });
+
+      const spawnShell = () => spawn("/bin/zsh", ["-l", "-i"], {
+        cols: terminal.cols,
+        rows: terminal.rows,
+        cwd,
+        env: {
+          TERM: "xterm-256color",
+          COLORTERM: "truecolor",
+        },
+      });
+
+      const safeSessionName = (tmuxSessionName || `divergence-${sessionId}`)
+        .replace(/[^a-zA-Z0-9_-]/g, "_");
+      const tmuxCommand = `
+if command -v tmux >/dev/null 2>&1; then
+  exec tmux new-session -A -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD"
+else
+  echo "tmux not found, starting zsh"
+  exec /bin/zsh -l -i
+fi
+      `.trim();
+
+      // Spawn PTY - use zsh (login + interactive) to match iTerm behavior
+      try {
+        const pty = useTmux
+          ? spawn("/bin/zsh", ["-l", "-i", "-c", tmuxCommand], {
+              cols: terminal.cols,
+              rows: terminal.rows,
+              cwd,
+              env: {
+                TERM: "xterm-256color",
+                COLORTERM: "truecolor",
+                SHELL: "/bin/zsh",
+                DIVERGENCE_TMUX_SESSION: safeSessionName,
+                DIVERGENCE_TMUX_CWD: cwd,
+              },
+            })
+          : spawnShell();
+
+        ptyRef.current = pty;
+        console.log(`[${sessionId}] PTY spawned`);
+
+        // Handle PTY output - convert to Uint8Array as per official example
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        pty.onData((data: any) => {
+          terminal.write(new Uint8Array(data));
+          updateStatus("active");
+
+          if (activityTimeoutRef.current) {
+            clearTimeout(activityTimeoutRef.current);
+          }
+          activityTimeoutRef.current = setTimeout(() => {
+            updateStatus("idle");
+          }, 2000);
+        });
+
+        pty.onExit(({ exitCode }: { exitCode: number }) => {
+          console.log(`[${sessionId}] PTY exited: ${exitCode}`);
+          terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
+          updateStatus("idle");
+        });
+
+        // Handle terminal input
+        terminal.onData((data: string) => {
+          pty.write(data);
+        });
+
+        // Handle terminal resize
+        terminal.onResize((e: { cols: number; rows: number }) => {
+          pty.resize(e.cols, e.rows);
+        });
+
+        terminal.focus();
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error(`[${sessionId}] PTY error:`, err);
+        setError(errorMessage);
+        terminal.write(`\r\n\x1b[31mFailed to start terminal: ${errorMessage}\x1b[0m\r\n`);
       }
 
-      // Handle resize
-      const resizeObserver = new ResizeObserver(() => {
-        if (fitAddonRef.current && terminalRef.current && ptyRef.current) {
-          fitAddonRef.current.fit();
+      // Window resize handler
+      handleResize = () => {
+        fitAddonRef.current?.fit();
+        if (terminalRef.current && ptyRef.current) {
           ptyRef.current.resize(terminalRef.current.cols, terminalRef.current.rows);
         }
-      });
-      resizeObserver.observe(container);
-
-      // Cleanup function stored for later
-      return () => {
-        resizeObserver.disconnect();
       };
+      window.addEventListener("resize", handleResize);
     };
 
     initTerminal();
 
-    // Cleanup
     return () => {
+      console.log(`[${sessionId}] Cleanup`);
+      if (handleResize) {
+        window.removeEventListener("resize", handleResize);
+      }
       if (activityTimeoutRef.current) {
         clearTimeout(activityTimeoutRef.current);
       }
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
+      ptyRef.current = null;
+      terminalRef.current = null;
+      fitAddonRef.current = null;
+      initializedRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName]);
 
   if (error) {
     return (
@@ -185,7 +236,8 @@ function Terminal({ cwd, sessionId, onStatusChange, onClose }: TerminalProps) {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 overflow-hidden p-1"
+      className="absolute inset-0 overflow-hidden p-2"
+      style={{ backgroundColor: "#181825" }}
     />
   );
 }
