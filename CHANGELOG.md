@@ -1,5 +1,11 @@
 # divergence
 
+## 0.2.2
+
+### Patch Changes
+
+- 159bc1d: fix release again
+
 ## 0.2.1
 
 ### Patch Changes
