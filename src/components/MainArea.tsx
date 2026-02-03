@@ -7,6 +7,7 @@ import QuickEditDrawer from "./QuickEditDrawer";
 import type { TerminalSession, SplitOrientation, Project } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { buildSplitTmuxSessionName } from "../lib/tmux";
+import type { EditorThemeId } from "../lib/editorThemes";
 
 interface MainAreaProps {
   projects: Project[];
@@ -24,6 +25,7 @@ interface MainAreaProps {
   reconnectBySessionId: Map<string, number>;
   onReconnectSession: (sessionId: string) => void;
   globalTmuxHistoryLimit: number;
+  editorTheme: EditorThemeId;
 }
 
 function MainArea({
@@ -42,6 +44,7 @@ function MainArea({
   reconnectBySessionId,
   onReconnectSession,
   globalTmuxHistoryLimit,
+  editorTheme,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -477,6 +480,7 @@ function MainArea({
         isOpen={isDrawerOpen}
         filePath={openFilePath}
         content={openFileContent}
+        editorTheme={editorTheme}
         isDirty={isDirty}
         isSaving={isSavingFile}
         isLoading={isLoadingFile}

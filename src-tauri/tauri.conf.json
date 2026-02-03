@@ -42,6 +42,9 @@
   "plugins": {
     "sql": {
       "preload": ["sqlite:divergence.db"]
+    },
+    "fs": {
+      "requireLiteralLeadingDot": false
     }
   }
 }

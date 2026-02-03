@@ -500,6 +500,7 @@ function App() {
         onReconnectSession={handleReconnectSession}
         globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
         selectToCopy={selectToCopy}
+        editorTheme={appSettings.editorTheme}
       />
 
       {/* Quick Switcher */}

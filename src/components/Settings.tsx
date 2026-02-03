@@ -7,6 +7,7 @@ import {
   saveAppSettings,
   broadcastAppSettings,
 } from "../lib/appSettings";
+import { EDITOR_THEME_OPTIONS, type EditorThemeId } from "../lib/editorThemes";
 
 interface SettingsProps {
   onClose: () => void;
@@ -15,6 +16,7 @@ interface SettingsProps {
 interface SettingsState {
   defaultShell: string;
   theme: "dark" | "light";
+  editorTheme: EditorThemeId;
   selectToCopy: boolean;
   divergenceBasePath: string;
   tmuxHistoryLimit: number;
@@ -161,6 +163,27 @@ function Settings({ onClose }: SettingsProps) {
                 Light
               </button>
             </div>
+          </div>
+
+          {/* Editor Theme */}
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Editor Theme
+            </label>
+            <select
+              value={settings.editorTheme}
+              onChange={(e) => updateSetting("editorTheme", e.target.value as EditorThemeId)}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            >
+              {EDITOR_THEME_OPTIONS.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-subtext mt-1">
+              Applies to the Quick Edit code editor.
+            </p>
           </div>
 
           {/* Select to Copy */}

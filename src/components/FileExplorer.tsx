@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { readDir } from "@tauri-apps/plugin-fs";
+import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
 
 interface FileExplorerProps {
   rootPath: string | null;
@@ -13,28 +13,116 @@ interface FileEntry {
   isDir: boolean;
 }
 
-type DirEntryLike = {
-  path: string;
-  name?: string;
-  children?: DirEntryLike[];
-  isDirectory?: boolean;
-  isFile?: boolean;
-  isDir?: boolean;
+const LARGE_ENTRY_LIMIT = 1000;
+const BADGE_BASE_CLASS =
+  "inline-flex items-center justify-center min-w-[22px] h-4 px-1 rounded text-[9px] font-semibold tracking-wide";
+
+type BadgeInfo = {
+  label: string;
+  className: string;
 };
 
-const LARGE_ENTRY_LIMIT = 1000;
+const FILE_BADGE_BY_NAME: Record<string, BadgeInfo> = {
+  "package.json": { label: "NPM", className: "bg-emerald-500/20 text-emerald-200" },
+  "package-lock.json": { label: "LOCK", className: "bg-emerald-500/20 text-emerald-200" },
+  "tsconfig.json": { label: "TS", className: "bg-blue-500/20 text-blue-200" },
+  "vite.config.ts": { label: "VITE", className: "bg-purple-500/20 text-purple-200" },
+  "readme.md": { label: "MD", className: "bg-sky-500/20 text-sky-200" },
+  ".env": { label: "ENV", className: "bg-amber-500/20 text-amber-200" },
+  ".gitignore": { label: "GIT", className: "bg-orange-500/20 text-orange-200" },
+  "cargo.toml": { label: "TOML", className: "bg-orange-500/20 text-orange-200" },
+  "cargo.lock": { label: "LOCK", className: "bg-orange-500/20 text-orange-200" },
+};
+
+const FILE_BADGE_BY_EXT: Record<string, BadgeInfo> = {
+  ts: { label: "TS", className: "bg-blue-500/20 text-blue-200" },
+  tsx: { label: "TSX", className: "bg-blue-500/20 text-blue-200" },
+  js: { label: "JS", className: "bg-yellow-500/20 text-yellow-200" },
+  jsx: { label: "JSX", className: "bg-yellow-500/20 text-yellow-200" },
+  json: { label: "JSON", className: "bg-amber-500/20 text-amber-200" },
+  md: { label: "MD", className: "bg-sky-500/20 text-sky-200" },
+  mdx: { label: "MDX", className: "bg-sky-500/20 text-sky-200" },
+  css: { label: "CSS", className: "bg-blue-400/20 text-blue-200" },
+  scss: { label: "SCSS", className: "bg-pink-400/20 text-pink-200" },
+  sass: { label: "SASS", className: "bg-pink-400/20 text-pink-200" },
+  less: { label: "LESS", className: "bg-indigo-400/20 text-indigo-200" },
+  html: { label: "HTML", className: "bg-orange-500/20 text-orange-200" },
+  yml: { label: "YML", className: "bg-teal-500/20 text-teal-200" },
+  yaml: { label: "YAML", className: "bg-teal-500/20 text-teal-200" },
+  toml: { label: "TOML", className: "bg-orange-400/20 text-orange-200" },
+  rs: { label: "RS", className: "bg-orange-400/20 text-orange-200" },
+  py: { label: "PY", className: "bg-green-500/20 text-green-200" },
+  sql: { label: "SQL", className: "bg-cyan-500/20 text-cyan-200" },
+  sh: { label: "SH", className: "bg-lime-500/20 text-lime-200" },
+  zsh: { label: "ZSH", className: "bg-lime-500/20 text-lime-200" },
+  env: { label: "ENV", className: "bg-amber-500/20 text-amber-200" },
+  lock: { label: "LOCK", className: "bg-slate-500/20 text-slate-200" },
+  png: { label: "IMG", className: "bg-pink-500/20 text-pink-200" },
+  jpg: { label: "IMG", className: "bg-pink-500/20 text-pink-200" },
+  jpeg: { label: "IMG", className: "bg-pink-500/20 text-pink-200" },
+  gif: { label: "IMG", className: "bg-pink-500/20 text-pink-200" },
+  svg: { label: "SVG", className: "bg-pink-500/20 text-pink-200" },
+  ico: { label: "ICO", className: "bg-pink-500/20 text-pink-200" },
+};
 
 const getBaseName = (path: string) => {
   const parts = path.split(/[/\\]/).filter(Boolean);
   return parts[parts.length - 1] ?? path;
 };
 
-const normalizeEntry = (entry: DirEntryLike): FileEntry => {
-  const isDir = Boolean(entry.isDirectory ?? entry.isDir ?? (entry.isFile === false) ?? entry.children);
+const getBadgeInfo = (name: string): BadgeInfo => {
+  const lowerName = name.toLowerCase();
+  if (lowerName.startsWith(".env")) {
+    return FILE_BADGE_BY_EXT.env;
+  }
+  const fromName = FILE_BADGE_BY_NAME[lowerName];
+  if (fromName) {
+    return fromName;
+  }
+  const ext = lowerName.includes(".") ? lowerName.split(".").pop() ?? "" : lowerName;
+  const fromExt = ext ? FILE_BADGE_BY_EXT[ext] : undefined;
+  if (fromExt) {
+    return fromExt;
+  }
+  const label = ext ? ext.slice(0, 4).toUpperCase() : "FILE";
+  return { label, className: "bg-surface text-subtext" };
+};
+
+const FileBadge = ({ name }: { name: string }) => {
+  const badge = getBadgeInfo(name);
+  return (
+    <span className={`${BADGE_BASE_CLASS} ${badge.className}`} aria-hidden="true">
+      {badge.label}
+    </span>
+  );
+};
+
+const FolderIcon = () => (
+  <svg className="w-3.5 h-3.5 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+    />
+  </svg>
+);
+
+const joinPath = (parent: string, name: string) => {
+  const cleanName = name.replace(/^[/\\]+/, "");
+  if (parent.endsWith("/") || parent.endsWith("\\")) {
+    return `${parent}${cleanName}`;
+  }
+  const separator = parent.includes("\\") ? "\\" : "/";
+  return `${parent}${separator}${cleanName}`;
+};
+
+const normalizeEntry = (parentPath: string, entry: DirEntry): FileEntry => {
+  const name = entry.name ?? getBaseName(parentPath);
   return {
-    path: entry.path,
-    name: entry.name ?? getBaseName(entry.path),
-    isDir,
+    path: joinPath(parentPath, name),
+    name,
+    isDir: Boolean(entry.isDirectory),
   };
 };
 
@@ -57,9 +145,9 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
   const loadDir = useCallback(async (path: string) => {
     setLoadingDirs(prev => new Set(prev).add(path));
     try {
-      const rawEntries = await readDir(path, { recursive: false });
+      const rawEntries = await readDir(path);
       const entries = sortEntries(
-        (rawEntries as DirEntryLike[]).map(normalizeEntry).slice(0, LARGE_ENTRY_LIMIT)
+        rawEntries.map(entry => normalizeEntry(path, entry)).slice(0, LARGE_ENTRY_LIMIT)
       );
       setEntriesByPath(prev => {
         const next = new Map(prev);
@@ -72,7 +160,13 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
         return next;
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to read directory.";
+      const message = err instanceof Error
+        ? err.message
+        : typeof err === "string"
+          ? err
+          : (err && typeof err === "object" && "message" in err)
+            ? String((err as { message?: unknown }).message)
+            : "Failed to read directory.";
       setErrorsByPath(prev => new Map(prev).set(path, message));
     } finally {
       setLoadingDirs(prev => {
@@ -155,18 +249,18 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
                 onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
               >
                 {entry.isDir ? (
-                  <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    {isExpanded ? (
-                      <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
-                    ) : (
-                      <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
-                    )}
-                  </svg>
+                  <>
+                    <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      {isExpanded ? (
+                        <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
+                      ) : (
+                        <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                      )}
+                    </svg>
+                    <FolderIcon />
+                  </>
                 ) : (
-                  <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
-                    <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M14 2v6h6" />
-                  </svg>
+                  <FileBadge name={entry.name} />
                 )}
                 <span className="truncate">{entry.name}</span>
               </button>

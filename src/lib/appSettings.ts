@@ -1,3 +1,5 @@
+import { DEFAULT_EDITOR_THEME, isEditorThemeId, type EditorThemeId } from "./editorThemes";
+
 export const SETTINGS_STORAGE_KEY = "divergence-settings";
 export const SETTINGS_UPDATED_EVENT = "divergence-settings-updated";
 export const DEFAULT_TMUX_HISTORY_LIMIT = 50000;
@@ -7,6 +9,7 @@ const MAX_TMUX_HISTORY_LIMIT = 500000;
 export interface AppSettings {
   defaultShell: string;
   theme: "dark" | "light";
+  editorTheme: EditorThemeId;
   selectToCopy: boolean;
   tmuxHistoryLimit: number;
   divergenceBasePath?: string;
@@ -15,6 +18,7 @@ export interface AppSettings {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultShell: "/bin/zsh",
   theme: "dark",
+  editorTheme: DEFAULT_EDITOR_THEME,
   selectToCopy: true,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
   divergenceBasePath: "",
@@ -37,6 +41,7 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     ...DEFAULT_APP_SETTINGS,
     ...input,
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
+    editorTheme: isEditorThemeId(input?.editorTheme) ? input.editorTheme : DEFAULT_EDITOR_THEME,
     selectToCopy: typeof input?.selectToCopy === "boolean"
       ? input.selectToCopy
       : DEFAULT_APP_SETTINGS.selectToCopy,
