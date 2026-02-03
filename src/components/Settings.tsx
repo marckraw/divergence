@@ -210,14 +210,14 @@ function Settings({ onClose }: SettingsProps) {
               onChange={(e) => updateSetting("editorThemeForLightMode", e.target.value as EditorThemeId)}
               className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
             >
-              {EDITOR_THEME_OPTIONS_DARK.map(option => (
+              {EDITOR_THEME_OPTIONS_LIGHT.map(option => (
                 <option key={option.id} value={option.id}>
                   {option.label}
                 </option>
               ))}
             </select>
             <p className="text-xs text-subtext mt-1">
-              Quick Edit uses a dark editor theme when the app is light.
+              Editor theme used when the app is in light mode.
             </p>
           </div>
           <div>
@@ -229,14 +229,14 @@ function Settings({ onClose }: SettingsProps) {
               onChange={(e) => updateSetting("editorThemeForDarkMode", e.target.value as EditorThemeId)}
               className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
             >
-              {EDITOR_THEME_OPTIONS_LIGHT.map(option => (
+              {EDITOR_THEME_OPTIONS_DARK.map(option => (
                 <option key={option.id} value={option.id}>
                   {option.label}
                 </option>
               ))}
             </select>
             <p className="text-xs text-subtext mt-1">
-              Quick Edit uses a light editor theme when the app is dark.
+              Editor theme used when the app is in dark mode.
             </p>
           </div>
 

@@ -25,8 +25,8 @@ export interface AppSettings {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultShell: "/bin/zsh",
   theme: "dark",
-  editorThemeForLightMode: DEFAULT_EDITOR_THEME_DARK,
-  editorThemeForDarkMode: DEFAULT_EDITOR_THEME_LIGHT,
+  editorThemeForLightMode: DEFAULT_EDITOR_THEME_LIGHT,
+  editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
   selectToCopy: true,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
   divergenceBasePath: "",
@@ -56,15 +56,15 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
 
   const editorThemeForLightMode =
     isEditorThemeId(input?.editorThemeForLightMode) &&
-    getEditorThemeMode(input.editorThemeForLightMode) === "dark"
+    getEditorThemeMode(input.editorThemeForLightMode) === "light"
       ? input.editorThemeForLightMode
-      : legacyDarkTheme ?? DEFAULT_EDITOR_THEME_DARK;
+      : legacyLightTheme ?? DEFAULT_EDITOR_THEME_LIGHT;
 
   const editorThemeForDarkMode =
     isEditorThemeId(input?.editorThemeForDarkMode) &&
-    getEditorThemeMode(input.editorThemeForDarkMode) === "light"
+    getEditorThemeMode(input.editorThemeForDarkMode) === "dark"
       ? input.editorThemeForDarkMode
-      : legacyLightTheme ?? DEFAULT_EDITOR_THEME_LIGHT;
+      : legacyDarkTheme ?? DEFAULT_EDITOR_THEME_DARK;
 
   return {
     ...DEFAULT_APP_SETTINGS,
