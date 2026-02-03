@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFileSync, appendFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
@@ -21,3 +21,8 @@ try {
 execSync(`git tag ${tag}`, { cwd: root, stdio: "inherit" });
 execSync(`git push origin ${tag}`, { cwd: root, stdio: "inherit" });
 console.log(`Created and pushed tag ${tag}`);
+
+// Output tag for GitHub Actions
+if (process.env.GITHUB_OUTPUT) {
+  appendFileSync(process.env.GITHUB_OUTPUT, `tag=${tag}\n`);
+}
