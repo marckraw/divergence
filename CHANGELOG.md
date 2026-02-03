@@ -1,5 +1,11 @@
 # divergence
 
+## 0.2.4
+
+### Patch Changes
+
+- e595394: code signing
+
 ## 0.2.3
 
 ### Patch Changes
