@@ -365,6 +365,15 @@ function App() {
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.defaultPrevented) {
+      return;
+    }
+    if (e.target instanceof HTMLElement) {
+      const editorHost = e.target.closest("[data-editor-root='true'], .cm-editor");
+      if (editorHost) {
+        return;
+      }
+    }
     const isMeta = e.metaKey || e.ctrlKey;
 
     // Quick Switcher - Cmd+K

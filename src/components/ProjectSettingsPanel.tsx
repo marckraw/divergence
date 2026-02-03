@@ -14,9 +14,17 @@ interface ProjectSettingsPanelProps {
   project: Project | null;
   globalTmuxHistoryLimit: number;
   onSaved?: (settings: ProjectSettings) => void;
+  contextPath?: string | null;
+  contextLabel?: string;
 }
 
-function ProjectSettingsPanel({ project, globalTmuxHistoryLimit, onSaved }: ProjectSettingsPanelProps) {
+function ProjectSettingsPanel({
+  project,
+  globalTmuxHistoryLimit,
+  onSaved,
+  contextPath,
+  contextLabel = "Project",
+}: ProjectSettingsPanelProps) {
   const projectId = project?.id ?? null;
   const { settings, loading, error, save } = useProjectSettings(projectId);
   const { data: ralphyConfig, loading: ralphyLoading, error: ralphyError } = useRalphyConfig(
@@ -155,12 +163,24 @@ function ProjectSettingsPanel({ project, globalTmuxHistoryLimit, onSaved }: Proj
     );
   }
 
+  const showContextPath = contextPath && contextPath !== project.path;
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-surface">
         <h2 className="text-sm font-semibold text-text">Project Settings</h2>
         <p className="text-xs text-subtext mt-1">{project.name}</p>
         <p className="text-xs text-subtext/70 truncate">{project.path}</p>
+        {showContextPath && (
+          <p className="text-[11px] text-subtext/70 mt-1 truncate">
+            {contextLabel} path: {contextPath}
+          </p>
+        )}
+        {contextLabel === "Divergence" && (
+          <p className="text-[11px] text-subtext/70 mt-1">
+            These settings apply to the parent project and its divergences.
+          </p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

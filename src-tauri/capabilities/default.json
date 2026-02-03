@@ -12,6 +12,31 @@
     "sql:allow-execute",
     "sql:allow-select",
     "pty:default",
-    "clipboard-manager:default"
+    "clipboard-manager:default",
+    "fs:default",
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    },
+    {
+      "identifier": "fs:allow-write-text-file",
+      "allow": [
+        {
+          "path": "$HOME/**"
+        }
+      ]
+    }
   ]
 }
