@@ -74,7 +74,7 @@ pub async fn create_divergence(
     // Generate unique path for divergence
     let short_uuid = &Uuid::new_v4().to_string()[..8];
     let safe_project_name = project_name.replace(' ', "-").to_lowercase();
-    let safe_branch_name = branch_name.replace('/', "-").replace(' ', "-");
+    let safe_branch_name = branch_name.replace(['/', ' '], "-");
     let divergence_dir_name = format!("{}-{}-{}", safe_project_name, safe_branch_name, short_uuid);
     let divergence_path = get_repos_dir().join(&divergence_dir_name);
 
@@ -204,7 +204,7 @@ pub async fn get_ralphy_config_summary(project_path: String) -> Result<RalphyCon
 
     Ok(RalphyConfigResponse::Ok {
         path: path_string,
-        summary,
+        summary: Box::new(summary),
     })
 }
 
@@ -334,7 +334,7 @@ pub struct RalphyConfigSummary {
 pub enum RalphyConfigResponse {
     Missing { path: String },
     Invalid { path: String, error: String },
-    Ok { path: String, summary: RalphyConfigSummary },
+    Ok { path: String, summary: Box<RalphyConfigSummary> },
 }
 
 #[tauri::command]
