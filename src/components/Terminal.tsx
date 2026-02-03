@@ -318,6 +318,9 @@ fi
             return;
           }
           pty.write(data);
+          if (data.includes("\r") || data.includes("\n")) {
+            updateStatus("busy");
+          }
         });
 
         // Handle terminal resize

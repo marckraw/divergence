@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import Sidebar from "./components/Sidebar";
@@ -13,11 +13,16 @@ import { useAppSettings } from "./hooks/useAppSettings";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "./types";
 import { DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "./lib/projectSettings";
 import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "./lib/tmux";
+import { notifyCommandFinished } from "./lib/notifications";
 
 interface MergeNotificationData {
   divergence: Divergence;
   projectName: string;
 }
+
+const NOTIFY_MIN_BUSY_MS = 5000;
+const NOTIFY_IDLE_DELAY_MS = 1500;
+const NOTIFY_COOLDOWN_MS = 3000;
 
 function App() {
   const { projects, addProject, removeProject } = useProjects();
@@ -31,6 +36,20 @@ function App() {
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
+  const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
+  const busySinceRef = useRef<Map<string, number>>(new Map());
+  const idleNotifyTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
   // Build projects by ID map for merge detection
   const projectsById = useMemo(() => {
@@ -45,6 +64,60 @@ function App() {
     divergencesByProject.forEach(divs => all.push(...divs));
     return all;
   }, [divergencesByProject]);
+
+  const clearIdleNotifyTimer = useCallback((sessionId: string) => {
+    const existing = idleNotifyTimersRef.current.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      idleNotifyTimersRef.current.delete(sessionId);
+    }
+  }, []);
+
+  const clearNotificationTracking = useCallback((sessionId: string) => {
+    clearIdleNotifyTimer(sessionId);
+    busySinceRef.current.delete(sessionId);
+    statusBySessionRef.current.delete(sessionId);
+    lastNotifiedAtRef.current.delete(sessionId);
+  }, [clearIdleNotifyTimer]);
+
+  const scheduleIdleNotification = useCallback((sessionId: string, startedAt: number) => {
+    clearIdleNotifyTimer(sessionId);
+
+    const timeoutId = setTimeout(async () => {
+      const currentSession = sessionsRef.current.get(sessionId);
+      if (!currentSession || currentSession.status !== "idle") {
+        return;
+      }
+
+      const now = Date.now();
+      const duration = now - startedAt;
+      if (duration < NOTIFY_MIN_BUSY_MS) {
+        return;
+      }
+
+      const lastNotifiedAt = lastNotifiedAtRef.current.get(sessionId) ?? 0;
+      if (now - lastNotifiedAt < NOTIFY_COOLDOWN_MS) {
+        return;
+      }
+
+      const isFocused = document.hasFocus();
+      const activeId = activeSessionIdRef.current;
+      if (isFocused && activeId === sessionId) {
+        return;
+      }
+
+      const projectName = projectsById.get(currentSession.projectId)?.name ?? currentSession.name;
+      const targetLabel = currentSession.type === "divergence"
+        ? `${projectName} / ${currentSession.name}`
+        : projectName;
+
+      await notifyCommandFinished("Command finished", `${targetLabel} is idle`);
+      lastNotifiedAtRef.current.set(sessionId, now);
+      busySinceRef.current.delete(sessionId);
+    }, NOTIFY_IDLE_DELAY_MS);
+
+    idleNotifyTimersRef.current.set(sessionId, timeoutId);
+  }, [clearIdleNotifyTimer, projectsById]);
 
   // Merge detection
   useMergeDetection(allDivergences, projectsById, (notification) => {
@@ -107,6 +180,7 @@ function App() {
   }, [createSession]);
 
   const handleCloseSession = useCallback((sessionId: string) => {
+    clearNotificationTracking(sessionId);
     setSessions(prev => {
       const newSessions = new Map(prev);
       newSessions.delete(sessionId);
@@ -132,7 +206,7 @@ function App() {
       const remainingSessions = Array.from(sessions.keys()).filter(id => id !== sessionId);
       setActiveSessionId(remainingSessions[0] || null);
     }
-  }, [activeSessionId, sessions]);
+  }, [activeSessionId, sessions, clearNotificationTracking]);
 
   const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
     setSplitBySessionId(prev => {
@@ -163,6 +237,21 @@ function App() {
   }, []);
 
   const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
+    const previousStatus = statusBySessionRef.current.get(sessionId) ?? "idle";
+    statusBySessionRef.current.set(sessionId, status);
+
+    if (status === "busy") {
+      busySinceRef.current.set(sessionId, Date.now());
+      clearIdleNotifyTimer(sessionId);
+    } else if (status === "active") {
+      clearIdleNotifyTimer(sessionId);
+    } else if (status === "idle" && previousStatus !== "idle") {
+      const startedAt = busySinceRef.current.get(sessionId);
+      if (startedAt) {
+        scheduleIdleNotification(sessionId, startedAt);
+      }
+    }
+
     setSessions(prev => {
       const newSessions = new Map(prev);
       const session = newSessions.get(sessionId);
@@ -174,7 +263,7 @@ function App() {
       }
       return newSessions;
     });
-  }, []);
+  }, [clearIdleNotifyTimer, scheduleIdleNotification]);
 
   const handleSessionRendererChange = useCallback((sessionId: string, renderer: "webgl" | "canvas") => {
     setSessions(prev => {
