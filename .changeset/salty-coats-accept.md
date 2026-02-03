@@ -1,0 +1,5 @@
+---
+"divergence": patch
+---
+
+code signing
