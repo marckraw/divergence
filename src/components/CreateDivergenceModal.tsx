@@ -155,6 +155,15 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
           </div>
         </div>
 
+        {isCreating && (
+          <div className="mb-4">
+            <div className="text-xs text-subtext mb-2">Creating divergence…</div>
+            <div className="h-2 bg-surface rounded-full overflow-hidden">
+              <div className="h-full w-1/3 bg-accent progress-indeterminate" />
+            </div>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 px-3 py-2 bg-red/10 border border-red/30 rounded text-red text-sm">
             {error}
