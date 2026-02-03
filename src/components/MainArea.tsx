@@ -81,6 +81,8 @@ function MainArea({
     const orientation: SplitOrientation = splitState?.orientation ?? "vertical";
     const layoutClass = orientation === "vertical" ? "flex-row" : "flex-col";
     const dividerClass = orientation === "vertical" ? "border-r border-surface" : "border-b border-surface";
+    const isActiveSession = activeSession?.id === session.id;
+    const effectiveUseWebgl = session.useWebgl && isActiveSession;
     const paneTwoTmuxName = session.useTmux
       ? buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2")
       : session.tmuxSessionName;
@@ -89,11 +91,12 @@ function MainArea({
       <div className={`flex h-full w-full ${layoutClass}`}>
         <div className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${isSplit ? dividerClass : ""}`}>
           <Terminal
+            key={`${session.id}-${effectiveUseWebgl ? "webgl" : "canvas"}`}
             cwd={session.path}
             sessionId={session.id}
             useTmux={session.useTmux}
             tmuxSessionName={session.tmuxSessionName}
-            useWebgl={session.useWebgl}
+            useWebgl={effectiveUseWebgl}
             onRendererChange={handleRendererChange(session.id)}
             onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
             onClose={() => onCloseSession(session.id)}
@@ -102,11 +105,12 @@ function MainArea({
         {isSplit && (
           <div className="flex-1 relative overflow-hidden min-w-0 min-h-0">
             <Terminal
+              key={`${session.id}-pane-2-${effectiveUseWebgl ? "webgl" : "canvas"}`}
               cwd={session.path}
               sessionId={`${session.id}-pane-2`}
               useTmux={session.useTmux}
               tmuxSessionName={paneTwoTmuxName}
-              useWebgl={session.useWebgl}
+              useWebgl={effectiveUseWebgl}
               onRendererChange={handleRendererChange(session.id)}
               onStatusChange={handleSplitStatusChange(session.id, 1)}
               onClose={() => onCloseSession(session.id)}
@@ -116,6 +120,7 @@ function MainArea({
       </div>
     );
   }, [
+    activeSession,
     handleRendererChange,
     handleSplitStatusChange,
     handleStatusChange,

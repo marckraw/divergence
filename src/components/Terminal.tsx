@@ -40,6 +40,7 @@ function Terminal({
   const ptyExitDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalResizeDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const initRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
@@ -83,10 +84,23 @@ function Terminal({
     };
 
     const initTerminal = () => {
+      if (initializedRef.current || isDisposedRef.current) {
+        return;
+      }
       const rect = container.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) {
-        setTimeout(initTerminal, 100);
+        if (!initRetryTimeoutRef.current) {
+          initRetryTimeoutRef.current = setTimeout(() => {
+            initRetryTimeoutRef.current = null;
+            initTerminal();
+          }, 100);
+        }
         return;
+      }
+
+      if (initRetryTimeoutRef.current) {
+        clearTimeout(initRetryTimeoutRef.current);
+        initRetryTimeoutRef.current = null;
       }
 
       initializedRef.current = true;
@@ -316,6 +330,10 @@ fi
         clearTimeout(activityTimeoutRef.current);
       }
       disposeWebgl();
+      if (initRetryTimeoutRef.current) {
+        clearTimeout(initRetryTimeoutRef.current);
+        initRetryTimeoutRef.current = null;
+      }
       ptyDataDisposableRef.current?.dispose();
       ptyDataDisposableRef.current = null;
       ptyExitDisposableRef.current?.dispose();
@@ -356,6 +374,7 @@ fi
       ref={containerRef}
       className="absolute inset-0 overflow-hidden p-2"
       style={{ backgroundColor: "#181825" }}
+      onMouseDown={() => terminalRef.current?.focus()}
     />
   );
 }
