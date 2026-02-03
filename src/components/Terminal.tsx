@@ -35,6 +35,11 @@ function Terminal({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const webglAddonRef = useRef<WebglAddon | null>(null);
   const ptyRef = useRef<ReturnType<typeof spawn> | null>(null);
+  const isDisposedRef = useRef(false);
+  const ptyDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const ptyExitDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const terminalResizeDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
@@ -62,15 +67,16 @@ function Terminal({
   useEffect(() => {
     const container = containerRef.current;
     if (!container || initializedRef.current) return;
+    isDisposedRef.current = false;
     let handleResize: (() => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
 
-    const disposeWebgl = () => {
-      if (webglAddonRef.current) {
-        try {
-          webglAddonRef.current.dispose();
-        } catch (err) {
-          console.warn(`[${sessionId}] Failed to dispose WebGL addon`, err);
+      const disposeWebgl = () => {
+        if (webglAddonRef.current) {
+          try {
+            webglAddonRef.current.dispose();
+          } catch (err) {
+            console.warn(`[${sessionId}] Failed to dispose WebGL addon`, err);
         }
         webglAddonRef.current = null;
       }
@@ -150,6 +156,9 @@ function Terminal({
 
       if (typeof ResizeObserver !== "undefined") {
         resizeObserver = new ResizeObserver(() => {
+          if (isDisposedRef.current) {
+            return;
+          }
           fitAddonRef.current?.fit();
           if (terminalRef.current && ptyRef.current) {
             ptyRef.current.resize(terminalRef.current.cols, terminalRef.current.rows);
@@ -229,7 +238,10 @@ fi
 
         // Handle PTY output - convert to Uint8Array as per official example
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        pty.onData((data: any) => {
+        ptyDataDisposableRef.current = pty.onData((data: any) => {
+          if (isDisposedRef.current || !terminalRef.current) {
+            return;
+          }
           terminal.write(new Uint8Array(data));
           const now = Date.now();
           if (statusRef.current !== "active" || now - lastActiveUpdateRef.current > 500) {
@@ -245,19 +257,28 @@ fi
           }, 2000);
         });
 
-        pty.onExit(({ exitCode }: { exitCode: number }) => {
+        ptyExitDisposableRef.current = pty.onExit(({ exitCode }: { exitCode: number }) => {
+          if (isDisposedRef.current || !terminalRef.current) {
+            return;
+          }
           console.log(`[${sessionId}] PTY exited: ${exitCode}`);
           terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
           updateStatus("idle");
         });
 
         // Handle terminal input
-        terminal.onData((data: string) => {
+        terminalDataDisposableRef.current = terminal.onData((data: string) => {
+          if (isDisposedRef.current) {
+            return;
+          }
           pty.write(data);
         });
 
         // Handle terminal resize
-        terminal.onResize((e: { cols: number; rows: number }) => {
+        terminalResizeDisposableRef.current = terminal.onResize((e: { cols: number; rows: number }) => {
+          if (isDisposedRef.current) {
+            return;
+          }
           pty.resize(e.cols, e.rows);
         });
 
@@ -284,6 +305,7 @@ fi
     return () => {
       console.log(`[${sessionId}] Cleanup`);
       statusRef.current = "idle";
+      isDisposedRef.current = true;
       if (handleResize) {
         window.removeEventListener("resize", handleResize);
       }
@@ -294,6 +316,14 @@ fi
         clearTimeout(activityTimeoutRef.current);
       }
       disposeWebgl();
+      ptyDataDisposableRef.current?.dispose();
+      ptyDataDisposableRef.current = null;
+      ptyExitDisposableRef.current?.dispose();
+      ptyExitDisposableRef.current = null;
+      terminalDataDisposableRef.current?.dispose();
+      terminalDataDisposableRef.current = null;
+      terminalResizeDisposableRef.current?.dispose();
+      terminalResizeDisposableRef.current = null;
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
