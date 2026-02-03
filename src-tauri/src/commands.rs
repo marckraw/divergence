@@ -1,6 +1,7 @@
 use crate::db::{get_divergence_dir, get_repos_dir};
 use crate::git;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -135,10 +136,205 @@ pub async fn delete_divergence(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub async fn get_ralphy_config_summary(project_path: String) -> Result<RalphyConfigResponse, String> {
+    let config_path = PathBuf::from(&project_path)
+        .join(".ralphy")
+        .join("config.json");
+    let path_string = config_path.to_string_lossy().to_string();
+
+    if !config_path.exists() {
+        return Ok(RalphyConfigResponse::Missing { path: path_string });
+    }
+
+    let contents = match fs::read_to_string(&config_path) {
+        Ok(value) => value,
+        Err(err) => {
+            return Ok(RalphyConfigResponse::Invalid {
+                path: path_string,
+                error: format!("Failed to read config: {}", err),
+            });
+        }
+    };
+
+    let value: Value = match serde_json::from_str(&contents) {
+        Ok(value) => value,
+        Err(err) => {
+            return Ok(RalphyConfigResponse::Invalid {
+                path: path_string,
+                error: format!("Failed to parse JSON: {}", err),
+            });
+        }
+    };
+
+    let version = number_at(&value, &["version"]);
+    let mut provider_type = None;
+    let mut project_name = None;
+    let mut project_key = None;
+    let mut project_id = None;
+    let mut team_id = None;
+    let mut labels_value: Option<&Value> = None;
+
+    if version == Some(2) || value.get("provider").is_some() {
+        provider_type = string_at(&value, &["provider", "type"]);
+        project_name = string_at(&value, &["provider", "config", "projectName"]);
+        project_key = string_at(&value, &["provider", "config", "projectKey"]);
+        project_id = string_at(&value, &["provider", "config", "projectId"]);
+        team_id = string_at(&value, &["provider", "config", "teamId"]);
+        labels_value = value.get("labels");
+    } else if version == Some(1) || value.get("linear").is_some() {
+        provider_type = Some("linear".to_string());
+        project_name = string_at(&value, &["linear", "projectName"]);
+        project_id = string_at(&value, &["linear", "projectId"]);
+        team_id = string_at(&value, &["linear", "teamId"]);
+        labels_value = value.get("linear").and_then(|linear| linear.get("labels"));
+    }
+
+    let summary = RalphyConfigSummary {
+        version,
+        provider_type,
+        project_name,
+        project_key,
+        project_id,
+        team_id,
+        labels: build_labels_summary(labels_value),
+        claude: build_claude_summary(value.get("claude")),
+        integrations: build_integrations_summary(value.get("integrations")),
+    };
+
+    Ok(RalphyConfigResponse::Ok {
+        path: path_string,
+        summary,
+    })
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BranchStatus {
     pub merged: bool,
     pub diverged: bool,
+}
+
+fn value_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    let mut current = value;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    Some(current)
+}
+
+fn string_at(value: &Value, path: &[&str]) -> Option<String> {
+    value_at(value, path)
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
+}
+
+fn number_at(value: &Value, path: &[&str]) -> Option<i64> {
+    value_at(value, path).and_then(|v| v.as_i64())
+}
+
+fn build_labels_summary(value: Option<&Value>) -> Option<RalphyLabelsSummary> {
+    let labels = value?;
+    let summary = RalphyLabelsSummary {
+        candidate: labels.get("candidate").and_then(|v| v.as_str()).map(|v| v.to_string()),
+        ready: labels.get("ready").and_then(|v| v.as_str()).map(|v| v.to_string()),
+        enriched: labels.get("enriched").and_then(|v| v.as_str()).map(|v| v.to_string()),
+        pr_feedback: labels.get("prFeedback").and_then(|v| v.as_str()).map(|v| v.to_string()),
+    };
+
+    if summary.candidate.is_none()
+        && summary.ready.is_none()
+        && summary.enriched.is_none()
+        && summary.pr_feedback.is_none()
+    {
+        None
+    } else {
+        Some(summary)
+    }
+}
+
+fn build_claude_summary(value: Option<&Value>) -> Option<RalphyClaudeSummary> {
+    let claude = value?;
+    let summary = RalphyClaudeSummary {
+        max_iterations: claude.get("maxIterations").and_then(|v| v.as_i64()),
+        timeout: claude.get("timeout").and_then(|v| v.as_i64()),
+        model: claude.get("model").and_then(|v| v.as_str()).map(|v| v.to_string()),
+    };
+
+    if summary.max_iterations.is_none() && summary.timeout.is_none() && summary.model.is_none() {
+        None
+    } else {
+        Some(summary)
+    }
+}
+
+fn build_integrations_summary(value: Option<&Value>) -> Option<RalphyIntegrationsSummary> {
+    let integrations = value?;
+    let github_value = integrations.get("github");
+    let github = github_value.and_then(|github| {
+        let summary = RalphyGithubIntegrationSummary {
+            owner: github.get("owner").and_then(|v| v.as_str()).map(|v| v.to_string()),
+            repo: github.get("repo").and_then(|v| v.as_str()).map(|v| v.to_string()),
+        };
+
+        if summary.owner.is_none() && summary.repo.is_none() {
+            None
+        } else {
+            Some(summary)
+        }
+    });
+
+    if github.is_none() {
+        None
+    } else {
+        Some(RalphyIntegrationsSummary { github })
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct RalphyLabelsSummary {
+    pub candidate: Option<String>,
+    pub ready: Option<String>,
+    pub enriched: Option<String>,
+    pub pr_feedback: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RalphyClaudeSummary {
+    pub max_iterations: Option<i64>,
+    pub timeout: Option<i64>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RalphyGithubIntegrationSummary {
+    pub owner: Option<String>,
+    pub repo: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RalphyIntegrationsSummary {
+    pub github: Option<RalphyGithubIntegrationSummary>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RalphyConfigSummary {
+    pub version: Option<i64>,
+    pub provider_type: Option<String>,
+    pub project_name: Option<String>,
+    pub project_key: Option<String>,
+    pub project_id: Option<String>,
+    pub team_id: Option<String>,
+    pub labels: Option<RalphyLabelsSummary>,
+    pub claude: Option<RalphyClaudeSummary>,
+    pub integrations: Option<RalphyIntegrationsSummary>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "status", rename_all = "lowercase")]
+pub enum RalphyConfigResponse {
+    Missing { path: String },
+    Invalid { path: String, error: String },
+    Ok { path: String, summary: RalphyConfigSummary },
 }
 
 #[tauri::command]

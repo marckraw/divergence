@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import Sidebar from "./components/Sidebar";
@@ -9,22 +9,30 @@ import MergeNotification from "./components/MergeNotification";
 import { useProjects, useAllDivergences } from "./hooks/useDatabase";
 import { useMergeDetection } from "./hooks/useMergeDetection";
 import { useProjectSettingsMap } from "./hooks/useProjectSettingsMap";
+import { useAppSettings } from "./hooks/useAppSettings";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "./types";
 import { DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "./lib/projectSettings";
 import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "./lib/tmux";
+import { notifyCommandFinished } from "./lib/notifications";
 
 interface MergeNotificationData {
   divergence: Divergence;
   projectName: string;
 }
 
+const NOTIFY_MIN_BUSY_MS = 5000;
+const NOTIFY_IDLE_DELAY_MS = 1500;
+const NOTIFY_COOLDOWN_MS = 3000;
+
 function App() {
   const { projects, addProject, removeProject } = useProjects();
   const { divergencesByProject, refresh: refreshDivergences } = useAllDivergences();
   const { settingsByProjectId, updateProjectSettings } = useProjectSettingsMap(projects);
+  const { settings: appSettings } = useAppSettings();
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [splitBySessionId, setSplitBySessionId] = useState<Map<string, { orientation: SplitOrientation }>>(new Map());
+  const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectToCopy, setSelectToCopy] = useState(() => {
@@ -38,6 +46,20 @@ function App() {
     return true;
   });
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
+  const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
+  const busySinceRef = useRef<Map<string, number>>(new Map());
+  const idleNotifyTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
   // Build projects by ID map for merge detection
   const projectsById = useMemo(() => {
@@ -52,6 +74,60 @@ function App() {
     divergencesByProject.forEach(divs => all.push(...divs));
     return all;
   }, [divergencesByProject]);
+
+  const clearIdleNotifyTimer = useCallback((sessionId: string) => {
+    const existing = idleNotifyTimersRef.current.get(sessionId);
+    if (existing) {
+      clearTimeout(existing);
+      idleNotifyTimersRef.current.delete(sessionId);
+    }
+  }, []);
+
+  const clearNotificationTracking = useCallback((sessionId: string) => {
+    clearIdleNotifyTimer(sessionId);
+    busySinceRef.current.delete(sessionId);
+    statusBySessionRef.current.delete(sessionId);
+    lastNotifiedAtRef.current.delete(sessionId);
+  }, [clearIdleNotifyTimer]);
+
+  const scheduleIdleNotification = useCallback((sessionId: string, startedAt: number) => {
+    clearIdleNotifyTimer(sessionId);
+
+    const timeoutId = setTimeout(async () => {
+      const currentSession = sessionsRef.current.get(sessionId);
+      if (!currentSession || currentSession.status !== "idle") {
+        return;
+      }
+
+      const now = Date.now();
+      const duration = now - startedAt;
+      if (duration < NOTIFY_MIN_BUSY_MS) {
+        return;
+      }
+
+      const lastNotifiedAt = lastNotifiedAtRef.current.get(sessionId) ?? 0;
+      if (now - lastNotifiedAt < NOTIFY_COOLDOWN_MS) {
+        return;
+      }
+
+      const isFocused = document.hasFocus();
+      const activeId = activeSessionIdRef.current;
+      if (isFocused && activeId === sessionId) {
+        return;
+      }
+
+      const projectName = projectsById.get(currentSession.projectId)?.name ?? currentSession.name;
+      const targetLabel = currentSession.type === "divergence"
+        ? `${projectName} / ${currentSession.name}`
+        : projectName;
+
+      await notifyCommandFinished("Command finished", `${targetLabel} is idle`);
+      lastNotifiedAtRef.current.set(sessionId, now);
+      busySinceRef.current.delete(sessionId);
+    }, NOTIFY_IDLE_DELAY_MS);
+
+    idleNotifyTimersRef.current.set(sessionId, timeoutId);
+  }, [clearIdleNotifyTimer, projectsById]);
 
   // Merge detection
   useMergeDetection(allDivergences, projectsById, (notification) => {
@@ -71,6 +147,8 @@ function App() {
     const projectId = type === "project" ? target.id : (target as Divergence).project_id;
     const useTmux = settingsByProjectId.get(projectId)?.useTmux ?? DEFAULT_USE_TMUX;
     const useWebgl = settingsByProjectId.get(projectId)?.useWebgl ?? DEFAULT_USE_WEBGL;
+    const projectHistoryLimit = settingsByProjectId.get(projectId)?.tmuxHistoryLimit ?? null;
+    const tmuxHistoryLimit = projectHistoryLimit ?? appSettings.tmuxHistoryLimit;
     const projectName = type === "project"
       ? (target as Project).name
       : projectsById.get(projectId)?.name ?? "project";
@@ -92,13 +170,14 @@ function App() {
       path: target.path,
       useTmux,
       tmuxSessionName,
+      tmuxHistoryLimit,
       useWebgl,
       status: "idle",
     };
 
     setSessions(prev => new Map(prev).set(id, session));
     return session;
-  }, [sessions, settingsByProjectId, projectsById]);
+  }, [sessions, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
 
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
@@ -111,6 +190,7 @@ function App() {
   }, [createSession]);
 
   const handleCloseSession = useCallback((sessionId: string) => {
+    clearNotificationTracking(sessionId);
     setSessions(prev => {
       const newSessions = new Map(prev);
       newSessions.delete(sessionId);
@@ -124,11 +204,19 @@ function App() {
       next.delete(sessionId);
       return next;
     });
+    setReconnectBySessionId(prev => {
+      if (!prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.delete(sessionId);
+      return next;
+    });
     if (activeSessionId === sessionId) {
       const remainingSessions = Array.from(sessions.keys()).filter(id => id !== sessionId);
       setActiveSessionId(remainingSessions[0] || null);
     }
-  }, [activeSessionId, sessions]);
+  }, [activeSessionId, sessions, clearNotificationTracking]);
 
   const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
     setSplitBySessionId(prev => {
@@ -149,7 +237,31 @@ function App() {
     });
   }, []);
 
+  const handleReconnectSession = useCallback((sessionId: string) => {
+    setReconnectBySessionId(prev => {
+      const next = new Map(prev);
+      const current = next.get(sessionId) ?? 0;
+      next.set(sessionId, current + 1);
+      return next;
+    });
+  }, []);
+
   const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
+    const previousStatus = statusBySessionRef.current.get(sessionId) ?? "idle";
+    statusBySessionRef.current.set(sessionId, status);
+
+    if (status === "busy") {
+      busySinceRef.current.set(sessionId, Date.now());
+      clearIdleNotifyTimer(sessionId);
+    } else if (status === "active") {
+      clearIdleNotifyTimer(sessionId);
+    } else if (status === "idle" && previousStatus !== "idle") {
+      const startedAt = busySinceRef.current.get(sessionId);
+      if (startedAt) {
+        scheduleIdleNotification(sessionId, startedAt);
+      }
+    }
+
     setSessions(prev => {
       const newSessions = new Map(prev);
       const session = newSessions.get(sessionId);
@@ -161,7 +273,7 @@ function App() {
       }
       return newSessions;
     });
-  }, []);
+  }, [clearIdleNotifyTimer, scheduleIdleNotification]);
 
   const handleSessionRendererChange = useCallback((sessionId: string, renderer: "webgl" | "canvas") => {
     setSessions(prev => {
@@ -176,6 +288,23 @@ function App() {
       return newSessions;
     });
   }, []);
+
+  useEffect(() => {
+    setSessions(prev => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [id, session] of next) {
+        const projectSettings = settingsByProjectId.get(session.projectId);
+        const projectHistoryLimit = projectSettings?.tmuxHistoryLimit ?? null;
+        const effectiveHistoryLimit = projectHistoryLimit ?? appSettings.tmuxHistoryLimit;
+        if (session.tmuxHistoryLimit !== effectiveHistoryLimit) {
+          next.set(id, { ...session, tmuxHistoryLimit: effectiveHistoryLimit });
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [appSettings.tmuxHistoryLimit, settingsByProjectId]);
 
   const handleAddProject = useCallback(async (name: string, path: string) => {
     await addProject(name, path);
@@ -288,6 +417,15 @@ function App() {
       return;
     }
 
+    // Reconnect terminal - Cmd+Shift+R
+    if (isMeta && e.shiftKey && e.key.toLowerCase() === "r") {
+      e.preventDefault();
+      if (activeSessionId) {
+        handleReconnectSession(activeSessionId);
+      }
+      return;
+    }
+
     // Switch tabs - Cmd+1-9
     if (isMeta && e.key >= "1" && e.key <= "9") {
       e.preventDefault();
@@ -322,7 +460,7 @@ function App() {
       }
       return;
     }
-  }, [sessions, activeSessionId, handleCloseSession, handleSplitSession]);
+  }, [sessions, activeSessionId, handleCloseSession, handleSplitSession, handleReconnectSession]);
 
   // Set up keyboard listener
   useEffect(() => {
@@ -358,6 +496,9 @@ function App() {
         splitBySessionId={splitBySessionId}
         onSplitSession={handleSplitSession}
         onResetSplitSession={handleResetSplitSession}
+        reconnectBySessionId={reconnectBySessionId}
+        onReconnectSession={handleReconnectSession}
+        globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
         selectToCopy={selectToCopy}
       />
 

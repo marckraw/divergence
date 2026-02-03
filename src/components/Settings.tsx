@@ -1,26 +1,33 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  DEFAULT_APP_SETTINGS,
+  normalizeTmuxHistoryLimit,
+  loadAppSettings,
+  saveAppSettings,
+  broadcastAppSettings,
+} from "../lib/appSettings";
 
 interface SettingsProps {
   onClose: () => void;
 }
 
-interface AppSettings {
+interface SettingsState {
   defaultShell: string;
   theme: "dark" | "light";
   selectToCopy: boolean;
   divergenceBasePath: string;
+  tmuxHistoryLimit: number;
 }
 
-const defaultSettings: AppSettings = {
-  defaultShell: "/bin/zsh",
-  theme: "dark",
+const defaultSettings: SettingsState = {
+  ...DEFAULT_APP_SETTINGS,
   selectToCopy: true,
   divergenceBasePath: "",
 };
 
 function Settings({ onClose }: SettingsProps) {
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,9 +36,7 @@ function Settings({ onClose }: SettingsProps) {
         // Get the divergence base path
         const basePath = await invoke<string>("get_divergence_base_path");
 
-        // Load settings from localStorage
-        const stored = localStorage.getItem("divergence-settings");
-        const storedSettings = stored ? JSON.parse(stored) : {};
+        const storedSettings = loadAppSettings();
 
         setSettings({
           ...defaultSettings,
@@ -49,13 +54,18 @@ function Settings({ onClose }: SettingsProps) {
   }, []);
 
   const handleSave = useCallback(() => {
-    localStorage.setItem("divergence-settings", JSON.stringify(settings));
+    const normalized = {
+      ...settings,
+      tmuxHistoryLimit: normalizeTmuxHistoryLimit(settings.tmuxHistoryLimit),
+    };
+    const saved = saveAppSettings(normalized);
+    broadcastAppSettings(saved);
     onClose();
   }, [settings, onClose]);
 
-  const updateSetting = useCallback(<K extends keyof AppSettings>(
+  const updateSetting = useCallback(<K extends keyof SettingsState>(
     key: K,
-    value: AppSettings[K]
+    value: SettingsState[K]
   ) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   }, []);
@@ -190,6 +200,24 @@ function Settings({ onClose }: SettingsProps) {
             </div>
             <p className="text-xs text-subtext mt-1">
               Cloned repositories are stored in this location
+            </p>
+          </div>
+
+          {/* tmux history limit */}
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              tmux History Limit
+            </label>
+            <input
+              type="number"
+              min={1000}
+              max={500000}
+              value={settings.tmuxHistoryLimit}
+              onChange={(e) => updateSetting("tmuxHistoryLimit", Number(e.target.value))}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            />
+            <p className="text-xs text-subtext mt-1">
+              Lines kept in tmux scrollback. Recommended: 50,000.
             </p>
           </div>
 

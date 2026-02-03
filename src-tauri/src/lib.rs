@@ -11,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_sql::Builder::new().build())
         .plugin(tauri_plugin_pty::init())
         .setup(|app| {
@@ -31,6 +32,7 @@ pub fn run() {
             commands::list_divergences,
             commands::list_remote_branches,
             commands::delete_divergence,
+            commands::get_ralphy_config_summary,
             commands::check_branch_status,
             commands::get_divergence_base_path,
             commands::kill_tmux_session,

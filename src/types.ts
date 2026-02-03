@@ -24,6 +24,7 @@ export interface TerminalSession {
   path: string;
   useTmux: boolean;
   tmuxSessionName: string;
+  tmuxHistoryLimit: number;
   useWebgl: boolean;
   rendererType?: "webgl" | "canvas";
   status: "idle" | "active" | "busy";

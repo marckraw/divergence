@@ -34,6 +34,7 @@ export async function getDb(): Promise<Database> {
         copy_ignored_skip TEXT NOT NULL,
         use_tmux INTEGER NOT NULL DEFAULT 1,
         use_webgl INTEGER NOT NULL DEFAULT 1,
+        tmux_history_limit INTEGER,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
       )
     `);
@@ -50,6 +51,7 @@ async function ensureProjectSettingsColumns(database: Database) {
     );
     const hasUseTmux = columns.some(column => column.name === "use_tmux");
     const hasUseWebgl = columns.some(column => column.name === "use_webgl");
+    const hasTmuxHistoryLimit = columns.some(column => column.name === "tmux_history_limit");
     if (!hasUseTmux) {
       await database.execute(
         "ALTER TABLE project_settings ADD COLUMN use_tmux INTEGER NOT NULL DEFAULT 1"
@@ -58,6 +60,11 @@ async function ensureProjectSettingsColumns(database: Database) {
     if (!hasUseWebgl) {
       await database.execute(
         "ALTER TABLE project_settings ADD COLUMN use_webgl INTEGER NOT NULL DEFAULT 1"
+      );
+    }
+    if (!hasTmuxHistoryLimit) {
+      await database.execute(
+        "ALTER TABLE project_settings ADD COLUMN tmux_history_limit INTEGER"
       );
     }
   } catch (err) {

@@ -18,6 +18,9 @@ interface MainAreaProps {
   onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
   onResetSplitSession: (sessionId: string) => void;
   selectToCopy: boolean;
+    reconnectBySessionId: Map<string, number>;
+    onReconnectSession: (sessionId: string) => void;
+    globalTmuxHistoryLimit: number;
 }
 
 function MainArea({
@@ -32,7 +35,10 @@ function MainArea({
   splitBySessionId,
   onSplitSession,
   onResetSplitSession,
-  selectToCopy,
+                      selectToCopy,
+  reconnectBySessionId,
+  onReconnectSession,
+  globalTmuxHistoryLimit,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -83,6 +89,8 @@ function MainArea({
     const orientation: SplitOrientation = splitState?.orientation ?? "vertical";
     const layoutClass = orientation === "vertical" ? "flex-row" : "flex-col";
     const dividerClass = orientation === "vertical" ? "border-r border-surface" : "border-b border-surface";
+    const effectiveUseWebgl = false;
+    const reconnectToken = reconnectBySessionId.get(session.id) ?? 0;
     const paneTwoTmuxName = session.useTmux
       ? buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2")
       : session.tmuxSessionName;
@@ -91,11 +99,13 @@ function MainArea({
       <div className={`flex h-full w-full ${layoutClass}`}>
         <div className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${isSplit ? dividerClass : ""}`}>
           <Terminal
+            key={`${session.id}-${effectiveUseWebgl ? "webgl" : "canvas"}-${reconnectToken}`}
             cwd={session.path}
             sessionId={session.id}
             useTmux={session.useTmux}
             tmuxSessionName={session.tmuxSessionName}
-            useWebgl={session.useWebgl}
+            tmuxHistoryLimit={session.tmuxHistoryLimit}
+            useWebgl={effectiveUseWebgl}
             selectToCopy={selectToCopy}
             onRendererChange={handleRendererChange(session.id)}
             onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
@@ -105,11 +115,13 @@ function MainArea({
         {isSplit && (
           <div className="flex-1 relative overflow-hidden min-w-0 min-h-0">
             <Terminal
+              key={`${session.id}-pane-2-${effectiveUseWebgl ? "webgl" : "canvas"}-${reconnectToken}`}
               cwd={session.path}
               sessionId={`${session.id}-pane-2`}
               useTmux={session.useTmux}
               tmuxSessionName={paneTwoTmuxName}
-              useWebgl={session.useWebgl}
+              tmuxHistoryLimit={session.tmuxHistoryLimit}
+              useWebgl={effectiveUseWebgl}
               selectToCopy={selectToCopy}
               onRendererChange={handleRendererChange(session.id)}
               onStatusChange={handleSplitStatusChange(session.id, 1)}
@@ -120,19 +132,22 @@ function MainArea({
       </div>
     );
   }, [
+    activeSession,
     handleRendererChange,
     handleSplitStatusChange,
     handleStatusChange,
     onCloseSession,
-    selectToCopy,
+    reconnectBySessionId,
+      selectToCopy,
     splitBySessionId,
   ]);
 
   return (
-    <main className="flex-1 h-full bg-main flex flex-col">
+    <main className="flex-1 min-w-0 h-full bg-main flex flex-col">
       {/* Tab bar */}
       <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
-        <div className="flex items-center gap-1 overflow-x-auto flex-1">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
           {sessionList.length === 0 ? (
             <span className="text-xs text-subtext">No terminal open</span>
           ) : (
@@ -232,6 +247,7 @@ function MainArea({
               </div>
             ))
           )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 ml-2">
@@ -259,6 +275,14 @@ function MainArea({
           >
             Single
           </button>
+          <button
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            onClick={() => activeSession && onReconnectSession(activeSession.id)}
+            disabled={!activeSession}
+            title="Reconnect tmux session (Cmd+Shift+R)"
+          >
+            Reconnect
+          </button>
         </div>
       </div>
 
@@ -267,21 +291,13 @@ function MainArea({
         {activeSession ? (
           <div className={`flex h-full w-full min-h-0 ${activeProject ? "gap-0" : ""}`}>
             <div className="flex-1 relative overflow-hidden min-h-0">
-              {sessionList.map((session) => (
-                <div
-                  key={session.id}
-                  className={`absolute inset-0 ${
-                    session.id === activeSession.id ? "visible z-10" : "invisible z-0"
-                  }`}
-                >
-                  {renderSession(session)}
-                </div>
-              ))}
+              {renderSession(activeSession)}
             </div>
             {activeProject && (
               <div className="w-96 border-l border-surface bg-sidebar">
                 <ProjectSettingsPanel
                   project={activeProject}
+                  globalTmuxHistoryLimit={globalTmuxHistoryLimit}
                   onSaved={onProjectSettingsSaved}
                 />
               </div>
