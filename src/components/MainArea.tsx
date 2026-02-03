@@ -17,6 +17,7 @@ interface MainAreaProps {
   splitBySessionId: Map<string, { orientation: SplitOrientation }>;
   onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
   onResetSplitSession: (sessionId: string) => void;
+  selectToCopy: boolean;
 }
 
 function MainArea({
@@ -31,6 +32,7 @@ function MainArea({
   splitBySessionId,
   onSplitSession,
   onResetSplitSession,
+  selectToCopy,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -94,6 +96,7 @@ function MainArea({
             useTmux={session.useTmux}
             tmuxSessionName={session.tmuxSessionName}
             useWebgl={session.useWebgl}
+            selectToCopy={selectToCopy}
             onRendererChange={handleRendererChange(session.id)}
             onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
             onClose={() => onCloseSession(session.id)}
@@ -107,6 +110,7 @@ function MainArea({
               useTmux={session.useTmux}
               tmuxSessionName={paneTwoTmuxName}
               useWebgl={session.useWebgl}
+              selectToCopy={selectToCopy}
               onRendererChange={handleRendererChange(session.id)}
               onStatusChange={handleSplitStatusChange(session.id, 1)}
               onClose={() => onCloseSession(session.id)}
@@ -120,6 +124,7 @@ function MainArea({
     handleSplitStatusChange,
     handleStatusChange,
     onCloseSession,
+    selectToCopy,
     splitBySessionId,
   ]);
 

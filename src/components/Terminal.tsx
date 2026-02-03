@@ -3,6 +3,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { spawn } from "tauri-pty";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
@@ -11,6 +12,7 @@ interface TerminalProps {
   useTmux?: boolean;
   tmuxSessionName?: string;
   useWebgl?: boolean;
+  selectToCopy?: boolean;
   onRendererChange?: (renderer: "webgl" | "canvas") => void;
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterCommand?: (sessionId: string) => void;
@@ -24,6 +26,7 @@ function Terminal({
   useTmux = false,
   tmuxSessionName,
   useWebgl = true,
+  selectToCopy = true,
   onRendererChange,
   onRegisterCommand,
   onUnregisterCommand,
@@ -40,6 +43,9 @@ function Terminal({
   const ptyExitDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalResizeDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const selectToCopyRef = useRef(selectToCopy);
+  const selectionDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const selectionDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
@@ -55,6 +61,10 @@ function Terminal({
   useEffect(() => {
     onRendererChangeRef.current = onRendererChange;
   }, [onRendererChange]);
+
+  useEffect(() => {
+    selectToCopyRef.current = selectToCopy;
+  }, [selectToCopy]);
 
   const updateStatus = useCallback((status: "idle" | "active" | "busy") => {
     if (statusRef.current === status) {
@@ -283,6 +293,21 @@ fi
         });
 
         terminal.focus();
+
+        // Select-to-copy: on selection change, debounce and copy to clipboard
+        selectionDisposableRef.current = terminal.onSelectionChange(() => {
+          if (selectionDebounceTimerRef.current) {
+            clearTimeout(selectionDebounceTimerRef.current);
+          }
+          selectionDebounceTimerRef.current = setTimeout(() => {
+            if (!selectToCopyRef.current) return;
+            const selection = terminal.getSelection();
+            if (!selection) return;
+            writeText(selection).catch((err) => {
+              console.warn(`[${sessionId}] Failed to copy selection to clipboard:`, err);
+            });
+          }, 150);
+        });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error(`[${sessionId}] PTY error:`, err);
@@ -315,6 +340,11 @@ fi
       if (activityTimeoutRef.current) {
         clearTimeout(activityTimeoutRef.current);
       }
+      if (selectionDebounceTimerRef.current) {
+        clearTimeout(selectionDebounceTimerRef.current);
+      }
+      selectionDisposableRef.current?.dispose();
+      selectionDisposableRef.current = null;
       disposeWebgl();
       ptyDataDisposableRef.current?.dispose();
       ptyDataDisposableRef.current = null;
