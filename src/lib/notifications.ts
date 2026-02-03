@@ -27,7 +27,7 @@ async function ensureNotificationPermission(): Promise<boolean> {
       }
 
       const permission = await requestPermission();
-      const granted = permission === "granted" || permission === true;
+      const granted = permission === "granted";
       permissionState = granted ? "granted" : "denied";
       return granted;
     } catch (error) {
