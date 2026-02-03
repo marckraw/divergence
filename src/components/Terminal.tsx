@@ -190,6 +190,9 @@ fi
         // Handle terminal input
         terminal.onData((data: string) => {
           pty.write(data);
+          if (data.includes("\r") || data.includes("\n")) {
+            updateStatus("busy");
+          }
         });
 
         // Handle terminal resize
