@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Divergence } from "../types";
-import { buildTmuxSessionName, buildLegacyTmuxSessionName } from "../lib/tmux";
+import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "../lib/tmux";
 
 interface MergeNotificationProps {
   divergence: Divergence;
@@ -21,14 +21,16 @@ function MergeNotification({ divergence, projectName, onClose, onDeleted }: Merg
     try {
       // Delete the directory
       await invoke("delete_divergence", { path: divergence.path });
+      const divergenceSessionName = buildTmuxSessionName({
+        type: "divergence",
+        projectName,
+        projectId: divergence.project_id,
+        divergenceId: divergence.id,
+        branch: divergence.branch,
+      });
+      await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
       await invoke("kill_tmux_session", {
-        sessionName: buildTmuxSessionName({
-          type: "divergence",
-          projectName,
-          projectId: divergence.project_id,
-          divergenceId: divergence.id,
-          branch: divergence.branch,
-        }),
+        sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
       });
       await invoke("kill_tmux_session", {
         sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),

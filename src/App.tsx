@@ -9,9 +9,10 @@ import MergeNotification from "./components/MergeNotification";
 import { useProjects, useAllDivergences } from "./hooks/useDatabase";
 import { useMergeDetection } from "./hooks/useMergeDetection";
 import { useProjectSettingsMap } from "./hooks/useProjectSettingsMap";
-import type { Project, Divergence, TerminalSession } from "./types";
-import { DEFAULT_USE_TMUX } from "./lib/projectSettings";
-import { buildTmuxSessionName, buildLegacyTmuxSessionName } from "./lib/tmux";
+import { useAppSettings } from "./hooks/useAppSettings";
+import type { Project, Divergence, TerminalSession, SplitOrientation } from "./types";
+import { DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "./lib/projectSettings";
+import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "./lib/tmux";
 import { notifyCommandFinished } from "./lib/notifications";
 
 interface MergeNotificationData {
@@ -27,8 +28,11 @@ function App() {
   const { projects, addProject, removeProject } = useProjects();
   const { divergencesByProject, refresh: refreshDivergences } = useAllDivergences();
   const { settingsByProjectId, updateProjectSettings } = useProjectSettingsMap(projects);
+  const { settings: appSettings } = useAppSettings();
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [splitBySessionId, setSplitBySessionId] = useState<Map<string, { orientation: SplitOrientation }>>(new Map());
+  const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
@@ -132,6 +136,9 @@ function App() {
 
     const projectId = type === "project" ? target.id : (target as Divergence).project_id;
     const useTmux = settingsByProjectId.get(projectId)?.useTmux ?? DEFAULT_USE_TMUX;
+    const useWebgl = settingsByProjectId.get(projectId)?.useWebgl ?? DEFAULT_USE_WEBGL;
+    const projectHistoryLimit = settingsByProjectId.get(projectId)?.tmuxHistoryLimit ?? null;
+    const tmuxHistoryLimit = projectHistoryLimit ?? appSettings.tmuxHistoryLimit;
     const projectName = type === "project"
       ? (target as Project).name
       : projectsById.get(projectId)?.name ?? "project";
@@ -153,12 +160,14 @@ function App() {
       path: target.path,
       useTmux,
       tmuxSessionName,
+      tmuxHistoryLimit,
+      useWebgl,
       status: "idle",
     };
 
     setSessions(prev => new Map(prev).set(id, session));
     return session;
-  }, [sessions, settingsByProjectId, projectsById]);
+  }, [sessions, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
 
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
@@ -177,11 +186,55 @@ function App() {
       newSessions.delete(sessionId);
       return newSessions;
     });
+    setSplitBySessionId(prev => {
+      if (!prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.delete(sessionId);
+      return next;
+    });
+    setReconnectBySessionId(prev => {
+      if (!prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.delete(sessionId);
+      return next;
+    });
     if (activeSessionId === sessionId) {
       const remainingSessions = Array.from(sessions.keys()).filter(id => id !== sessionId);
       setActiveSessionId(remainingSessions[0] || null);
     }
   }, [activeSessionId, sessions, clearNotificationTracking]);
+
+  const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
+    setSplitBySessionId(prev => {
+      const next = new Map(prev);
+      next.set(sessionId, { orientation });
+      return next;
+    });
+  }, []);
+
+  const handleResetSplitSession = useCallback((sessionId: string) => {
+    setSplitBySessionId(prev => {
+      if (!prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.delete(sessionId);
+      return next;
+    });
+  }, []);
+
+  const handleReconnectSession = useCallback((sessionId: string) => {
+    setReconnectBySessionId(prev => {
+      const next = new Map(prev);
+      const current = next.get(sessionId) ?? 0;
+      next.set(sessionId, current + 1);
+      return next;
+    });
+  }, []);
 
   const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
     const previousStatus = statusBySessionRef.current.get(sessionId) ?? "idle";
@@ -203,11 +256,45 @@ function App() {
       const newSessions = new Map(prev);
       const session = newSessions.get(sessionId);
       if (session) {
+        if (session.status === status) {
+          return prev;
+        }
         newSessions.set(sessionId, { ...session, status, lastActivity: new Date() });
       }
       return newSessions;
     });
   }, [clearIdleNotifyTimer, scheduleIdleNotification]);
+
+  const handleSessionRendererChange = useCallback((sessionId: string, renderer: "webgl" | "canvas") => {
+    setSessions(prev => {
+      const newSessions = new Map(prev);
+      const session = newSessions.get(sessionId);
+      if (session) {
+        if (session.rendererType === renderer) {
+          return prev;
+        }
+        newSessions.set(sessionId, { ...session, rendererType: renderer });
+      }
+      return newSessions;
+    });
+  }, []);
+
+  useEffect(() => {
+    setSessions(prev => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [id, session] of next) {
+        const projectSettings = settingsByProjectId.get(session.projectId);
+        const projectHistoryLimit = projectSettings?.tmuxHistoryLimit ?? null;
+        const effectiveHistoryLimit = projectHistoryLimit ?? appSettings.tmuxHistoryLimit;
+        if (session.tmuxHistoryLimit !== effectiveHistoryLimit) {
+          next.set(id, { ...session, tmuxHistoryLimit: effectiveHistoryLimit });
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [appSettings.tmuxHistoryLimit, settingsByProjectId]);
 
   const handleAddProject = useCallback(async (name: string, path: string) => {
     await addProject(name, path);
@@ -223,26 +310,30 @@ function App() {
 
     // Kill tmux sessions for this project and its divergences
     try {
+      const projectSessionName = buildTmuxSessionName({
+        type: "project",
+        projectName: projectsById.get(id)?.name ?? "project",
+        projectId: id,
+      });
+      await invoke("kill_tmux_session", { sessionName: projectSessionName });
       await invoke("kill_tmux_session", {
-        sessionName: buildTmuxSessionName({
-          type: "project",
-          projectName: projectsById.get(id)?.name ?? "project",
-          projectId: id,
-        }),
+        sessionName: buildSplitTmuxSessionName(projectSessionName, "pane-2"),
       });
       await invoke("kill_tmux_session", {
         sessionName: buildLegacyTmuxSessionName(`project-${id}`),
       });
       const divergences = divergencesByProject.get(id) || [];
       for (const divergence of divergences) {
+        const divergenceSessionName = buildTmuxSessionName({
+          type: "divergence",
+          projectName: projectsById.get(id)?.name ?? "project",
+          projectId: id,
+          divergenceId: divergence.id,
+          branch: divergence.branch,
+        });
+        await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
         await invoke("kill_tmux_session", {
-          sessionName: buildTmuxSessionName({
-            type: "divergence",
-            projectName: projectsById.get(id)?.name ?? "project",
-            projectId: id,
-            divergenceId: divergence.id,
-            branch: divergence.branch,
-          }),
+          sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
         });
         await invoke("kill_tmux_session", {
           sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
@@ -306,6 +397,25 @@ function App() {
       return;
     }
 
+    // Split terminal - Cmd+D (vertical) / Cmd+Shift+D (horizontal)
+    if (isMeta && e.key.toLowerCase() === "d") {
+      e.preventDefault();
+      if (activeSessionId) {
+        const orientation: SplitOrientation = e.shiftKey ? "horizontal" : "vertical";
+        handleSplitSession(activeSessionId, orientation);
+      }
+      return;
+    }
+
+    // Reconnect terminal - Cmd+Shift+R
+    if (isMeta && e.shiftKey && e.key.toLowerCase() === "r") {
+      e.preventDefault();
+      if (activeSessionId) {
+        handleReconnectSession(activeSessionId);
+      }
+      return;
+    }
+
     // Switch tabs - Cmd+1-9
     if (isMeta && e.key >= "1" && e.key <= "9") {
       e.preventDefault();
@@ -340,7 +450,7 @@ function App() {
       }
       return;
     }
-  }, [sessions, activeSessionId, handleCloseSession]);
+  }, [sessions, activeSessionId, handleCloseSession, handleSplitSession, handleReconnectSession]);
 
   // Set up keyboard listener
   useEffect(() => {
@@ -371,7 +481,14 @@ function App() {
         onCloseSession={handleCloseSession}
         onSelectSession={setActiveSessionId}
         onStatusChange={handleSessionStatusChange}
+        onRendererChange={handleSessionRendererChange}
         onProjectSettingsSaved={updateProjectSettings}
+        splitBySessionId={splitBySessionId}
+        onSplitSession={handleSplitSession}
+        onResetSplitSession={handleResetSplitSession}
+        reconnectBySessionId={reconnectBySessionId}
+        onReconnectSession={handleReconnectSession}
+        globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
       />
 
       {/* Quick Switcher */}

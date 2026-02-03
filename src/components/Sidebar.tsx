@@ -1,10 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import type { Project, Divergence, TerminalSession } from "../types";
 import StatusIndicator from "./StatusIndicator";
 import CreateDivergenceModal from "./CreateDivergenceModal";
-import { buildTmuxSessionName, buildLegacyTmuxSessionName } from "../lib/tmux";
+import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "../lib/tmux";
 
 interface SidebarProps {
   projects: Project[];
@@ -32,6 +32,7 @@ function Sidebar({
   onDeleteDivergence,
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
+  const hasUserToggledExpansion = useRef(false);
   const [contextMenu, setContextMenu] = useState<{
     type: "project" | "divergence";
     id: number;
@@ -40,6 +41,29 @@ function Sidebar({
     item: Project | Divergence;
   } | null>(null);
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
+
+  useEffect(() => {
+    if (hasUserToggledExpansion.current) {
+      return;
+    }
+    if (projects.length === 0) {
+      return;
+    }
+
+    const next = new Set<number>();
+    let hasExpandableProjects = false;
+    for (const project of projects) {
+      const divergences = divergencesByProject.get(project.id) || [];
+      if (divergences.length > 0) {
+        next.add(project.id);
+        hasExpandableProjects = true;
+      }
+    }
+
+    if (hasExpandableProjects) {
+      setExpandedProjects(next);
+    }
+  }, [projects, divergencesByProject]);
 
   const handleAddProject = useCallback(async () => {
     try {
@@ -59,6 +83,7 @@ function Sidebar({
   }, [onAddProject]);
 
   const toggleExpand = useCallback((projectId: number) => {
+    hasUserToggledExpansion.current = true;
     setExpandedProjects(prev => {
       const next = new Set(prev);
       if (next.has(projectId)) {
@@ -69,6 +94,28 @@ function Sidebar({
       return next;
     });
   }, []);
+
+  const expandableProjectIds = projects
+    .filter(project => (divergencesByProject.get(project.id) || []).length > 0)
+    .map(project => project.id);
+
+  const hasExpandableProjects = expandableProjectIds.length > 0;
+  const isAllExpanded = hasExpandableProjects
+    && expandableProjectIds.every(id => expandedProjects.has(id));
+
+  const toggleAllProjects = useCallback(() => {
+    hasUserToggledExpansion.current = true;
+    setExpandedProjects(prev => {
+      if (!hasExpandableProjects) {
+        return prev;
+      }
+      const allExpanded = expandableProjectIds.every(id => prev.has(id));
+      if (allExpanded) {
+        return new Set();
+      }
+      return new Set(expandableProjectIds);
+    });
+  }, [expandableProjectIds, hasExpandableProjects]);
 
   const handleContextMenu = useCallback((
     e: React.MouseEvent,
@@ -102,14 +149,16 @@ function Sidebar({
       const projectName = projects.find(project => project.id === divergence.project_id)?.name ?? "project";
       try {
         await invoke("delete_divergence", { path: divergence.path });
+        const divergenceSessionName = buildTmuxSessionName({
+          type: "divergence",
+          projectName,
+          projectId: divergence.project_id,
+          divergenceId: divergence.id,
+          branch: divergence.branch,
+        });
+        await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
         await invoke("kill_tmux_session", {
-          sessionName: buildTmuxSessionName({
-            type: "divergence",
-            projectName,
-            projectId: divergence.project_id,
-            divergenceId: divergence.id,
-            branch: divergence.branch,
-          }),
+          sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
         });
         await invoke("kill_tmux_session", {
           sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
@@ -134,7 +183,7 @@ function Sidebar({
 
   return (
     <>
-      <aside className="w-64 h-full bg-sidebar border-r border-surface flex flex-col">
+      <aside className="w-64 shrink-0 h-full bg-sidebar border-r border-surface flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-surface">
           <h1 className="text-lg font-semibold text-text flex items-center gap-2">
@@ -157,8 +206,18 @@ function Sidebar({
 
         {/* Projects List */}
         <div className="flex-1 overflow-y-auto p-2" onClick={closeContextMenu}>
-          <div className="text-xs uppercase text-subtext font-medium px-2 py-2">
-            Projects
+          <div className="flex items-center justify-between px-2 py-2">
+            <div className="text-xs uppercase text-subtext font-medium">
+              Projects
+            </div>
+            <button
+              className="text-xs text-subtext hover:text-text disabled:opacity-50 disabled:cursor-default"
+              onClick={toggleAllProjects}
+              disabled={!hasExpandableProjects}
+              title={isAllExpanded ? "Collapse all projects" : "Expand all projects"}
+            >
+              {isAllExpanded ? "Collapse all" : "Expand all"}
+            </button>
           </div>
 
           {projects.length === 0 ? (

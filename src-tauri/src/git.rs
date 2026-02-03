@@ -218,12 +218,78 @@ pub fn checkout_branch(repo_path: &Path, branch: &str, create: bool) -> Result<(
     Ok(())
 }
 
+pub fn checkout_existing_branch(repo_path: &Path, branch: &str) -> Result<(), String> {
+    fetch_origin(repo_path);
+
+    let local_ref = format!("refs/heads/{}", branch);
+    if ref_exists(repo_path, &local_ref)? {
+        return checkout_branch(repo_path, branch, false);
+    }
+
+    let remote_ref = format!("refs/remotes/origin/{}", branch);
+    if !ref_exists(repo_path, &remote_ref)? {
+        return Err(format!("Remote branch origin/{} not found", branch));
+    }
+
+    let output = Command::new("git")
+        .args(["checkout", "-b", branch, &format!("origin/{}", branch)])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git checkout: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Git checkout failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn list_remote_branches(repo_path: &Path) -> Result<Vec<String>, String> {
+    if get_remote_url(repo_path)?.is_none() {
+        return Err("Remote origin is not configured for this repository".to_string());
+    }
+
+    fetch_origin(repo_path);
+
+    let output = Command::new("git")
+        .args([
+            "for-each-ref",
+            "--format=%(refname:short)",
+            "refs/remotes/origin",
+        ])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to list remote branches: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to list remote branches: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let mut branches = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed == "origin/HEAD" {
+            continue;
+        }
+        let name = trimmed.strip_prefix("origin/").unwrap_or(trimmed);
+        branches.push(name.to_string());
+    }
+
+    branches.sort();
+    branches.dedup();
+
+    Ok(branches)
+}
+
 pub fn is_branch_merged(repo_path: &Path, branch: &str) -> Result<bool, String> {
     // First, fetch to ensure we have latest remote state
-    let _ = Command::new("git")
-        .args(["fetch", "origin"])
-        .current_dir(repo_path)
-        .output();
+    fetch_origin(repo_path);
 
     // Check if branch is merged into main or master
     for main_branch in &["main", "master"] {
@@ -247,10 +313,7 @@ pub fn is_branch_merged(repo_path: &Path, branch: &str) -> Result<bool, String> 
 
 pub fn get_branch_status(repo_path: &Path, branch: &str) -> Result<(bool, bool), String> {
     // Fetch latest remote state (best effort)
-    let _ = Command::new("git")
-        .args(["fetch", "origin"])
-        .current_dir(repo_path)
-        .output();
+    fetch_origin(repo_path);
 
     let Some(base_ref) = find_base_ref(repo_path)? else {
         return Ok((false, false));
@@ -309,6 +372,13 @@ fn get_default_remote_branch(repo_path: &Path) -> Result<Option<String>, String>
     }
 
     Ok(None)
+}
+
+fn fetch_origin(repo_path: &Path) {
+    let _ = Command::new("git")
+        .args(["fetch", "origin"])
+        .current_dir(repo_path)
+        .output();
 }
 
 fn ref_exists(repo_path: &Path, reference: &str) -> Result<bool, String> {

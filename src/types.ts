@@ -24,9 +24,14 @@ export interface TerminalSession {
   path: string;
   useTmux: boolean;
   tmuxSessionName: string;
+  tmuxHistoryLimit: number;
+  useWebgl: boolean;
+  rendererType?: "webgl" | "canvas";
   status: "idle" | "active" | "busy";
   lastActivity?: Date;
 }
+
+export type SplitOrientation = "vertical" | "horizontal";
 
 export interface AppState {
   projects: Project[];
