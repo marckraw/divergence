@@ -1,5 +1,11 @@
 # divergence
 
+## 0.2.3
+
+### Patch Changes
+
+- 86ae3a2: update deps again to release
+
 ## 0.2.2
 
 ### Patch Changes
