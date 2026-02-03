@@ -1,9 +1,9 @@
 import { useCallback, useRef } from "react";
 import Terminal from "./Terminal";
 import ProjectSettingsPanel from "./ProjectSettingsPanel";
-import type { TerminalSession } from "../types";
-import type { Project } from "../types";
+import type { TerminalSession, SplitOrientation, Project } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
+import { buildSplitTmuxSessionName } from "../lib/tmux";
 
 interface MainAreaProps {
   projects: Project[];
@@ -12,7 +12,11 @@ interface MainAreaProps {
   onCloseSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
+  onRendererChange: (sessionId: string, renderer: "webgl" | "canvas") => void;
   onProjectSettingsSaved: (settings: ProjectSettings) => void;
+  splitBySessionId: Map<string, { orientation: SplitOrientation }>;
+  onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
+  onResetSplitSession: (sessionId: string) => void;
 }
 
 function MainArea({
@@ -22,13 +26,20 @@ function MainArea({
   onCloseSession,
   onSelectSession,
   onStatusChange,
+  onRendererChange,
   onProjectSettingsSaved,
+  splitBySessionId,
+  onSplitSession,
+  onResetSplitSession,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
-  const commandMapRef = useRef<Map<string, (command: string) => void>>(new Map());
+  const paneStatusRef = useRef<
+    Map<string, { pane1: TerminalSession["status"]; pane2: TerminalSession["status"] }>
+  >(new Map());
   const activeProject = activeSession?.type === "project"
     ? projects.find(project => project.id === activeSession.targetId) ?? null
     : null;
+  const activeSplit = activeSession ? splitBySessionId.get(activeSession.id) ?? null : null;
 
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
@@ -37,21 +48,80 @@ function MainArea({
     [onStatusChange]
   );
 
-  const handleRegisterCommand = useCallback((sessionId: string, sendCommand: (command: string) => void) => {
-    commandMapRef.current.set(sessionId, sendCommand);
-  }, []);
-
-  const handleUnregisterCommand = useCallback((sessionId: string) => {
-    commandMapRef.current.delete(sessionId);
-  }, []);
-
-  const sendTmuxCommand = useCallback((command: string) => {
-    if (!activeSession?.useTmux) {
-      return;
+  const getAggregatedStatus = useCallback((entry: { pane1: TerminalSession["status"]; pane2: TerminalSession["status"] }) => {
+    if (entry.pane1 === "busy" || entry.pane2 === "busy") {
+      return "busy";
     }
-    const sender = commandMapRef.current.get(activeSession.id);
-    sender?.(command);
-  }, [activeSession]);
+    if (entry.pane1 === "active" || entry.pane2 === "active") {
+      return "active";
+    }
+    return "idle";
+  }, []);
+
+  const handleSplitStatusChange = useCallback(
+    (sessionId: string, paneIndex: 0 | 1) => (status: TerminalSession["status"]) => {
+      const existing = paneStatusRef.current.get(sessionId) ?? { pane1: "idle", pane2: "idle" };
+      const next = { ...existing, [paneIndex === 0 ? "pane1" : "pane2"]: status };
+      paneStatusRef.current.set(sessionId, next);
+      onStatusChange(sessionId, getAggregatedStatus(next));
+    },
+    [getAggregatedStatus, onStatusChange]
+  );
+
+  const handleRendererChange = useCallback(
+    (sessionId: string) => (renderer: "webgl" | "canvas") => {
+      onRendererChange(sessionId, renderer);
+    },
+    [onRendererChange]
+  );
+
+  const renderSession = useCallback((session: TerminalSession) => {
+    const splitState = splitBySessionId.get(session.id) ?? null;
+    const isSplit = Boolean(splitState);
+    const orientation: SplitOrientation = splitState?.orientation ?? "vertical";
+    const layoutClass = orientation === "vertical" ? "flex-row" : "flex-col";
+    const dividerClass = orientation === "vertical" ? "border-r border-surface" : "border-b border-surface";
+    const paneTwoTmuxName = session.useTmux
+      ? buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2")
+      : session.tmuxSessionName;
+
+    return (
+      <div className={`flex h-full w-full ${layoutClass}`}>
+        <div className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${isSplit ? dividerClass : ""}`}>
+          <Terminal
+            cwd={session.path}
+            sessionId={session.id}
+            useTmux={session.useTmux}
+            tmuxSessionName={session.tmuxSessionName}
+            useWebgl={session.useWebgl}
+            onRendererChange={handleRendererChange(session.id)}
+            onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
+            onClose={() => onCloseSession(session.id)}
+          />
+        </div>
+        {isSplit && (
+          <div className="flex-1 relative overflow-hidden min-w-0 min-h-0">
+            <Terminal
+              cwd={session.path}
+              sessionId={`${session.id}-pane-2`}
+              useTmux={session.useTmux}
+              tmuxSessionName={paneTwoTmuxName}
+              useWebgl={session.useWebgl}
+              onRendererChange={handleRendererChange(session.id)}
+              onStatusChange={handleSplitStatusChange(session.id, 1)}
+              onClose={() => onCloseSession(session.id)}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }, [
+    handleRendererChange,
+    handleSplitStatusChange,
+    handleStatusChange,
+    onCloseSession,
+    splitBySessionId,
+  ]);
 
   return (
     <main className="flex-1 h-full bg-main flex flex-col">
@@ -126,6 +196,12 @@ function MainArea({
                   </span>
                 )}
 
+                {session.rendererType && (
+                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">
+                    {session.rendererType}
+                  </span>
+                )}
+
                 {/* Close button */}
                 <button
                   className="w-4 h-4 flex items-center justify-center text-subtext hover:text-red rounded"
@@ -156,28 +232,36 @@ function MainArea({
         <div className="flex items-center gap-2 ml-2">
           <button
             className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
-            onClick={() => sendTmuxCommand('tmux split-window -h -c "#{pane_current_path}" \\; select-layout even-horizontal')}
-            disabled={!activeSession?.useTmux}
-            title="Split vertically"
+            onClick={() => activeSession && onSplitSession(activeSession.id, "vertical")}
+            disabled={!activeSession}
+            title="Split side-by-side (Cmd+D)"
+          >
+            Split V
+          </button>
+          <button
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            onClick={() => activeSession && onSplitSession(activeSession.id, "horizontal")}
+            disabled={!activeSession}
+            title="Split top/bottom (Cmd+Shift+D)"
           >
             Split H
           </button>
           <button
             className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
-            onClick={() => sendTmuxCommand('tmux split-window -v -c "#{pane_current_path}" \\; select-layout even-vertical')}
-            disabled={!activeSession?.useTmux}
-            title="Split horizontally"
+            onClick={() => activeSession && onResetSplitSession(activeSession.id)}
+            disabled={!activeSession || !activeSplit}
+            title="Close split"
           >
-            Split V
+            Single
           </button>
         </div>
       </div>
 
       {/* Terminal area */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-hidden min-h-0">
         {activeSession ? (
-          <div className={`flex h-full w-full ${activeProject ? "gap-0" : ""}`}>
-            <div className="flex-1 relative overflow-hidden">
+          <div className={`flex h-full w-full min-h-0 ${activeProject ? "gap-0" : ""}`}>
+            <div className="flex-1 relative overflow-hidden min-h-0">
               {sessionList.map((session) => (
                 <div
                   key={session.id}
@@ -185,16 +269,7 @@ function MainArea({
                     session.id === activeSession.id ? "visible z-10" : "invisible z-0"
                   }`}
                 >
-                  <Terminal
-                    cwd={session.path}
-                    sessionId={session.id}
-                    useTmux={session.useTmux}
-                    tmuxSessionName={session.tmuxSessionName}
-                    onRegisterCommand={handleRegisterCommand}
-                    onUnregisterCommand={handleUnregisterCommand}
-                    onStatusChange={handleStatusChange(session.id)}
-                    onClose={() => onCloseSession(session.id)}
-                  />
+                  {renderSession(session)}
                 </div>
               ))}
             </div>

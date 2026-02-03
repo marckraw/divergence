@@ -31,11 +31,11 @@ export function useProjectSettings(projectId: number | null) {
     refresh();
   }, [refresh]);
 
-  const save = useCallback(async (copyIgnoredSkip: string[], useTmux: boolean) => {
+  const save = useCallback(async (copyIgnoredSkip: string[], useTmux: boolean, useWebgl: boolean) => {
     if (projectId === null) {
       return;
     }
-    const saved = await saveProjectSettings(projectId, copyIgnoredSkip, useTmux);
+    const saved = await saveProjectSettings(projectId, copyIgnoredSkip, useTmux, useWebgl);
     setSettings(saved);
     return saved;
   }, [projectId]);

@@ -10,11 +10,13 @@ export const DEFAULT_COPY_IGNORED_SKIP = [
   ".cache",
 ];
 export const DEFAULT_USE_TMUX = true;
+export const DEFAULT_USE_WEBGL = true;
 
 export interface ProjectSettings {
   projectId: number;
   copyIgnoredSkip: string[];
   useTmux: boolean;
+  useWebgl: boolean;
 }
 
 function normalizeSkipList(entries: string[]): string[] {
@@ -38,8 +40,8 @@ function normalizeSkipList(entries: string[]): string[] {
 
 export async function loadProjectSettings(projectId: number): Promise<ProjectSettings> {
   const database = await getDb();
-  const rows = await database.select<{ copy_ignored_skip: string; use_tmux?: number }[]>(
-    "SELECT copy_ignored_skip, use_tmux FROM project_settings WHERE project_id = ?",
+  const rows = await database.select<{ copy_ignored_skip: string; use_tmux?: number; use_webgl?: number }[]>(
+    "SELECT copy_ignored_skip, use_tmux, use_webgl FROM project_settings WHERE project_id = ?",
     [projectId]
   );
 
@@ -48,6 +50,7 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
       projectId,
       copyIgnoredSkip: DEFAULT_COPY_IGNORED_SKIP,
       useTmux: DEFAULT_USE_TMUX,
+      useWebgl: DEFAULT_USE_WEBGL,
     };
   }
 
@@ -58,6 +61,7 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
         projectId,
         copyIgnoredSkip: normalizeSkipList(parsed.map(String)),
         useTmux: Boolean(rows[0].use_tmux ?? DEFAULT_USE_TMUX),
+        useWebgl: Boolean(rows[0].use_webgl ?? DEFAULT_USE_WEBGL),
       };
     }
   } catch {
@@ -68,30 +72,34 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
     projectId,
     copyIgnoredSkip: DEFAULT_COPY_IGNORED_SKIP,
     useTmux: DEFAULT_USE_TMUX,
+    useWebgl: DEFAULT_USE_WEBGL,
   };
 }
 
 export async function saveProjectSettings(
   projectId: number,
   copyIgnoredSkip: string[],
-  useTmux: boolean
+  useTmux: boolean,
+  useWebgl: boolean
 ): Promise<ProjectSettings> {
   const normalized = normalizeSkipList(copyIgnoredSkip);
   const database = await getDb();
   await database.execute(
     `
-      INSERT INTO project_settings (project_id, copy_ignored_skip, use_tmux)
-      VALUES (?, ?, ?)
+      INSERT INTO project_settings (project_id, copy_ignored_skip, use_tmux, use_webgl)
+      VALUES (?, ?, ?, ?)
       ON CONFLICT(project_id) DO UPDATE SET
         copy_ignored_skip = excluded.copy_ignored_skip,
-        use_tmux = excluded.use_tmux
+        use_tmux = excluded.use_tmux,
+        use_webgl = excluded.use_webgl
     `,
-    [projectId, JSON.stringify(normalized), useTmux ? 1 : 0]
+    [projectId, JSON.stringify(normalized), useTmux ? 1 : 0, useWebgl ? 1 : 0]
   );
 
   return {
     projectId,
     copyIgnoredSkip: normalized,
     useTmux,
+    useWebgl,
   };
 }

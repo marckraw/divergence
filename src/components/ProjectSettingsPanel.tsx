@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Project } from "../types";
-import { DEFAULT_COPY_IGNORED_SKIP, DEFAULT_USE_TMUX } from "../lib/projectSettings";
+import { DEFAULT_COPY_IGNORED_SKIP, DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "../lib/projectSettings";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { useProjectSettings } from "../hooks/useProjectSettings";
 
@@ -14,6 +14,7 @@ function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
   const { settings, loading, error, save } = useProjectSettings(projectId);
   const [draftSkipList, setDraftSkipList] = useState("");
   const [useTmux, setUseTmux] = useState(true);
+  const [useWebgl, setUseWebgl] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
@@ -23,10 +24,12 @@ function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
     if (!settings) {
       setDraftSkipList(defaultListText);
       setUseTmux(DEFAULT_USE_TMUX);
+      setUseWebgl(DEFAULT_USE_WEBGL);
       return;
     }
     setDraftSkipList(settings.copyIgnoredSkip.join("\n"));
     setUseTmux(settings.useTmux);
+    setUseWebgl(settings.useWebgl);
   }, [settings, defaultListText]);
 
   const parseList = (value: string) =>
@@ -39,7 +42,7 @@ function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
     if (!projectId) return;
     setIsSaving(true);
     try {
-      const saved = await save(parseList(draftSkipList), useTmux);
+      const saved = await save(parseList(draftSkipList), useTmux, useWebgl);
       if (saved) {
         onSaved?.(saved);
       }
@@ -89,6 +92,24 @@ function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
               className="accent-accent"
             />
             Use tmux
+          </label>
+        </div>
+        <div className="flex items-start justify-between gap-3 bg-main/50 border border-surface rounded p-3">
+          <div>
+            <p className="text-sm text-text">WebGL Renderer</p>
+            <p className="text-xs text-subtext/80 mt-1">
+              Faster rendering; falls back to Canvas if unavailable.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-subtext">
+            <input
+              type="checkbox"
+              checked={useWebgl}
+              onChange={(e) => setUseWebgl(e.target.checked)}
+              disabled={loading}
+              className="accent-accent"
+            />
+            Use WebGL
           </label>
         </div>
         <div>

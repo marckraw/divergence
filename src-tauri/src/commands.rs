@@ -61,6 +61,7 @@ pub async fn create_divergence(
     project_path: String,
     branch_name: String,
     copy_ignored_skip: Vec<String>,
+    use_existing_branch: bool,
 ) -> Result<Divergence, String> {
     let source_path = PathBuf::from(&project_path);
 
@@ -82,8 +83,12 @@ pub async fn create_divergence(
     // Update origin to the original remote (if present)
     git::set_origin_to_source_remote(&source_path, &divergence_path)?;
 
-    // Checkout or create branch
-    git::checkout_branch(&divergence_path, &branch_name, true)?;
+    // Checkout branch (existing or new)
+    if use_existing_branch {
+        git::checkout_existing_branch(&divergence_path, &branch_name)?;
+    } else {
+        git::checkout_branch(&divergence_path, &branch_name, true)?;
+    }
 
     // Copy ignored files (e.g., .env) from source into the divergence clone
     git::copy_ignored_paths(&source_path, &divergence_path, &copy_ignored_skip)?;
@@ -103,6 +108,12 @@ pub async fn create_divergence(
 pub async fn list_divergences(_project_id: i64) -> Result<Vec<Divergence>, String> {
     // Database query handled by frontend
     Ok(vec![])
+}
+
+#[tauri::command]
+pub async fn list_remote_branches(path: String) -> Result<Vec<String>, String> {
+    let repo_path = PathBuf::from(&path);
+    git::list_remote_branches(&repo_path)
 }
 
 #[tauri::command]

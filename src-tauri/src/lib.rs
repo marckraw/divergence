@@ -28,6 +28,7 @@ pub fn run() {
             commands::list_projects,
             commands::create_divergence,
             commands::list_divergences,
+            commands::list_remote_branches,
             commands::delete_divergence,
             commands::check_branch_status,
             commands::get_divergence_base_path,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { spawn } from "tauri-pty";
 import "@xterm/xterm/css/xterm.css";
 
@@ -9,6 +10,8 @@ interface TerminalProps {
   sessionId: string;
   useTmux?: boolean;
   tmuxSessionName?: string;
+  useWebgl?: boolean;
+  onRendererChange?: (renderer: "webgl" | "canvas") => void;
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterCommand?: (sessionId: string) => void;
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
@@ -20,6 +23,8 @@ function Terminal({
   sessionId,
   useTmux = false,
   tmuxSessionName,
+  useWebgl = true,
+  onRendererChange,
   onRegisterCommand,
   onUnregisterCommand,
   onStatusChange,
@@ -28,17 +33,29 @@ function Terminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const webglAddonRef = useRef<WebglAddon | null>(null);
   const ptyRef = useRef<ReturnType<typeof spawn> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
   const onStatusChangeRef = useRef<TerminalProps["onStatusChange"]>(onStatusChange);
+  const onRendererChangeRef = useRef<TerminalProps["onRendererChange"]>(onRendererChange);
+  const statusRef = useRef<"idle" | "active" | "busy">("idle");
+  const lastActiveUpdateRef = useRef(0);
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
 
+  useEffect(() => {
+    onRendererChangeRef.current = onRendererChange;
+  }, [onRendererChange]);
+
   const updateStatus = useCallback((status: "idle" | "active" | "busy") => {
+    if (statusRef.current === status) {
+      return;
+    }
+    statusRef.current = status;
     onStatusChangeRef.current?.(status);
   }, []);
 
@@ -46,6 +63,18 @@ function Terminal({
     const container = containerRef.current;
     if (!container || initializedRef.current) return;
     let handleResize: (() => void) | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+
+    const disposeWebgl = () => {
+      if (webglAddonRef.current) {
+        try {
+          webglAddonRef.current.dispose();
+        } catch (err) {
+          console.warn(`[${sessionId}] Failed to dispose WebGL addon`, err);
+        }
+        webglAddonRef.current = null;
+      }
+    };
 
     const initTerminal = () => {
       const rect = container.getBoundingClientRect();
@@ -92,11 +121,42 @@ function Terminal({
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
 
+      if (useWebgl) {
+        try {
+          const webglAddon = new WebglAddon();
+          webglAddon.onContextLoss(() => {
+            console.warn(`[${sessionId}] WebGL context lost, falling back to Canvas`);
+            disposeWebgl();
+            onRendererChangeRef.current?.("canvas");
+          });
+          terminal.loadAddon(webglAddon);
+          webglAddonRef.current = webglAddon;
+          onRendererChangeRef.current?.("webgl");
+        } catch (err) {
+          console.warn(`[${sessionId}] WebGL init failed, using Canvas renderer`, err);
+          disposeWebgl();
+          onRendererChangeRef.current?.("canvas");
+        }
+      } else {
+        disposeWebgl();
+        onRendererChangeRef.current?.("canvas");
+      }
+
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
       terminal.open(container);
       fitAddon.fit();
+
+      if (typeof ResizeObserver !== "undefined") {
+        resizeObserver = new ResizeObserver(() => {
+          fitAddonRef.current?.fit();
+          if (terminalRef.current && ptyRef.current) {
+            ptyRef.current.resize(terminalRef.current.cols, terminalRef.current.rows);
+          }
+        });
+        resizeObserver.observe(container);
+      }
 
       if (!useTmux) {
         // Ensure scrollback works reliably when not in tmux
@@ -171,7 +231,11 @@ fi
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pty.onData((data: any) => {
           terminal.write(new Uint8Array(data));
-          updateStatus("active");
+          const now = Date.now();
+          if (statusRef.current !== "active" || now - lastActiveUpdateRef.current > 500) {
+            lastActiveUpdateRef.current = now;
+            updateStatus("active");
+          }
 
           if (activityTimeoutRef.current) {
             clearTimeout(activityTimeoutRef.current);
@@ -219,12 +283,17 @@ fi
 
     return () => {
       console.log(`[${sessionId}] Cleanup`);
+      statusRef.current = "idle";
       if (handleResize) {
         window.removeEventListener("resize", handleResize);
+      }
+      if (resizeObserver) {
+        resizeObserver.disconnect();
       }
       if (activityTimeoutRef.current) {
         clearTimeout(activityTimeoutRef.current);
       }
+      disposeWebgl();
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
@@ -233,7 +302,7 @@ fi
       fitAddonRef.current = null;
       initializedRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, onRegisterCommand, onUnregisterCommand]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand]);
 
   if (error) {
     return (

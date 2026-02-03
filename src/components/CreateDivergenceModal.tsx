@@ -12,8 +12,26 @@ interface CreateDivergenceModalProps {
 
 function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergenceModalProps) {
   const [branchName, setBranchName] = useState("");
+  const [useExistingBranch, setUseExistingBranch] = useState(false);
+  const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadRemoteBranches = useCallback(async () => {
+    if (loadingBranches) return;
+    setLoadingBranches(true);
+    try {
+      const branches = await invoke<string[]>("list_remote_branches", {
+        path: project.path,
+      });
+      setRemoteBranches(branches);
+    } catch (err) {
+      console.warn("Failed to load remote branches:", err);
+    } finally {
+      setLoadingBranches(false);
+    }
+  }, [loadingBranches, project.path]);
 
   const handleCreate = useCallback(async () => {
     if (!branchName.trim()) {
@@ -34,6 +52,7 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
         projectPath: project.path,
         branchName: branchName.trim(),
         copyIgnoredSkip: settings.copyIgnoredSkip,
+        useExistingBranch,
       });
 
       // Save to database
@@ -61,7 +80,7 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
     } finally {
       setIsCreating(false);
     }
-  }, [branchName, project, onCreated, onClose]);
+  }, [branchName, project, onCreated, onClose, useExistingBranch]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isCreating) {
@@ -97,10 +116,43 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
             onChange={(e) => setBranchName(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="feature/my-feature"
+            list={useExistingBranch ? "remote-branches" : undefined}
             className="w-full px-3 py-2 bg-main border border-surface rounded text-text placeholder-subtext focus:outline-none focus:border-accent"
             autoFocus
             disabled={isCreating}
           />
+          {useExistingBranch && (
+            <datalist id="remote-branches">
+              {remoteBranches.map((branch) => (
+                <option value={branch} key={branch} />
+              ))}
+            </datalist>
+          )}
+        </div>
+
+        <div className="mb-4 flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={useExistingBranch}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setUseExistingBranch(next);
+              if (next && remoteBranches.length === 0) {
+                loadRemoteBranches();
+              }
+            }}
+            className="mt-1 accent-accent"
+            disabled={isCreating}
+          />
+          <div>
+            <p className="text-sm text-text">Use existing branch from origin</p>
+            <p className="text-xs text-subtext">
+              When enabled, Divergence checks out the remote branch instead of creating a new one.
+            </p>
+            {useExistingBranch && loadingBranches && (
+              <p className="text-xs text-subtext mt-1">Loading remote branches…</p>
+            )}
+          </div>
         </div>
 
         {error && (

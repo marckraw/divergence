@@ -50,3 +50,19 @@ export function buildTmuxSessionName(input: TmuxSessionNameInput): string {
 export function buildLegacyTmuxSessionName(sessionId: string): string {
   return `divergence-${sessionId}`;
 }
+
+export function buildSplitTmuxSessionName(baseName: string, suffix: string): string {
+  const sanitizedSuffix = sanitizeTmuxLabel(suffix);
+  if (!sanitizedSuffix) {
+    return baseName;
+  }
+
+  const suffixPart = `-${sanitizedSuffix}`;
+  if (baseName.length + suffixPart.length <= MAX_SESSION_NAME_LENGTH) {
+    return `${baseName}${suffixPart}`;
+  }
+
+  const trimmedBaseLength = Math.max(1, MAX_SESSION_NAME_LENGTH - suffixPart.length);
+  const trimmedBase = baseName.slice(0, trimmedBaseLength).replace(/[-_]+$/g, "");
+  return `${trimmedBase}${suffixPart}`;
+}
