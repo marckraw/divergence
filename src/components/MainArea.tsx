@@ -1,9 +1,15 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import Terminal from "./Terminal";
 import ProjectSettingsPanel from "./ProjectSettingsPanel";
+import FileExplorer from "./FileExplorer";
+import QuickEditDrawer from "./QuickEditDrawer";
 import type { TerminalSession, SplitOrientation, Project } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { buildSplitTmuxSessionName } from "../lib/tmux";
+import type { EditorThemeId } from "../lib/editorThemes";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../lib/motion";
 
 interface MainAreaProps {
   projects: Project[];
@@ -18,9 +24,10 @@ interface MainAreaProps {
   onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
   onResetSplitSession: (sessionId: string) => void;
   selectToCopy: boolean;
-    reconnectBySessionId: Map<string, number>;
-    onReconnectSession: (sessionId: string) => void;
-    globalTmuxHistoryLimit: number;
+  reconnectBySessionId: Map<string, number>;
+  onReconnectSession: (sessionId: string) => void;
+  globalTmuxHistoryLimit: number;
+  editorTheme: EditorThemeId;
 }
 
 function MainArea({
@@ -35,19 +42,136 @@ function MainArea({
   splitBySessionId,
   onSplitSession,
   onResetSplitSession,
-                      selectToCopy,
+  selectToCopy,
   reconnectBySessionId,
   onReconnectSession,
   globalTmuxHistoryLimit,
+  editorTheme,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
     Map<string, { pane1: TerminalSession["status"]; pane2: TerminalSession["status"] }>
   >(new Map());
-  const activeProject = activeSession?.type === "project"
-    ? projects.find(project => project.id === activeSession.targetId) ?? null
+  const shouldReduceMotion = useReducedMotion();
+  const tabTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
+  const panelVariants = useMemo(
+    () => getContentSwapVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const panelTransition = shouldReduceMotion
+    ? FAST_EASE_OUT
+    : { type: "spring", stiffness: 240, damping: 28, mass: 0.9 };
+  const activeProject = activeSession
+    ? projects.find(project => project.id === activeSession.projectId) ?? null
     : null;
   const activeSplit = activeSession ? splitBySessionId.get(activeSession.id) ?? null : null;
+  const activeRootPath = activeSession?.path ?? null;
+  const [rightPanelTab, setRightPanelTab] = useState<"settings" | "files">("settings");
+  const [openFilePath, setOpenFilePath] = useState<string | null>(null);
+  const [openFileContent, setOpenFileContent] = useState("");
+  const [openFileInitial, setOpenFileInitial] = useState("");
+  const [fileLoadError, setFileLoadError] = useState<string | null>(null);
+  const [fileSaveError, setFileSaveError] = useState<string | null>(null);
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
+  const [isSavingFile, setIsSavingFile] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [largeFileWarning, setLargeFileWarning] = useState<string | null>(null);
+
+  const isDrawerOpen = Boolean(openFilePath);
+  const isDirty = openFileContent !== openFileInitial;
+
+  useEffect(() => {
+    setOpenFilePath(null);
+    setOpenFileContent("");
+    setOpenFileInitial("");
+    setFileLoadError(null);
+    setFileSaveError(null);
+    setIsLoadingFile(false);
+    setIsSavingFile(false);
+    setIsReadOnly(false);
+    setLargeFileWarning(null);
+  }, [activeSession?.id]);
+
+  const formatBytes = useCallback((bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
+  }, []);
+
+  const handleOpenFile = useCallback(async (path: string) => {
+    setOpenFilePath(path);
+    setOpenFileContent("");
+    setOpenFileInitial("");
+    setFileLoadError(null);
+    setFileSaveError(null);
+    setIsReadOnly(false);
+    setLargeFileWarning(null);
+    setIsLoadingFile(true);
+
+    try {
+      const content = await readTextFile(path);
+      setOpenFileContent(content);
+      setOpenFileInitial(content);
+
+      if (content.includes("\0")) {
+        setIsReadOnly(true);
+      }
+
+      const contentBytes = content.length;
+      if (contentBytes > 2_000_000) {
+        setLargeFileWarning(
+          `Large file (${formatBytes(contentBytes)}). Editing may be slow.`
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to read file.";
+      setFileLoadError(message);
+    } finally {
+      setIsLoadingFile(false);
+    }
+  }, [formatBytes]);
+
+  const handleCloseDrawer = useCallback(() => {
+    if (isDirty) {
+      const confirmClose = window.confirm("Discard unsaved changes?");
+      if (!confirmClose) {
+        return;
+      }
+    }
+    setOpenFilePath(null);
+    setOpenFileContent("");
+    setOpenFileInitial("");
+    setFileLoadError(null);
+    setFileSaveError(null);
+    setIsReadOnly(false);
+    setLargeFileWarning(null);
+  }, [isDirty]);
+
+  const handleSaveFile = useCallback(async () => {
+    if (!openFilePath || isReadOnly || isSavingFile) {
+      return;
+    }
+    setIsSavingFile(true);
+    setFileSaveError(null);
+    try {
+      await writeTextFile(openFilePath, openFileContent);
+      setOpenFileInitial(openFileContent);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save file.";
+      setFileSaveError(message);
+    } finally {
+      setIsSavingFile(false);
+    }
+  }, [isReadOnly, isSavingFile, openFileContent, openFilePath]);
+
+  const handleChangeContent = useCallback((next: string) => {
+    setOpenFileContent(next);
+    if (fileSaveError) {
+      setFileSaveError(null);
+    }
+  }, [fileSaveError]);
 
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
@@ -132,18 +256,17 @@ function MainArea({
       </div>
     );
   }, [
-    activeSession,
     handleRendererChange,
     handleSplitStatusChange,
     handleStatusChange,
     onCloseSession,
     reconnectBySessionId,
-      selectToCopy,
+    selectToCopy,
     splitBySessionId,
   ]);
 
   return (
-    <main className="flex-1 min-w-0 h-full bg-main flex flex-col">
+    <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
       {/* Tab bar */}
       <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
         <div className="flex-1 min-w-0">
@@ -152,21 +275,23 @@ function MainArea({
             <span className="text-xs text-subtext">No terminal open</span>
           ) : (
             sessionList.map((session, index) => (
-              <div
+              <motion.div
                 key={session.id}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer text-sm ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer text-sm transition-colors ${
                   session.id === activeSession?.id
                     ? "bg-main text-text"
                     : "text-subtext hover:text-text hover:bg-surface/50"
                 }`}
                 onClick={() => onSelectSession(session.id)}
+                layout={shouldReduceMotion ? undefined : "position"}
+                transition={tabTransition}
               >
                 {/* Tab number */}
                 <span className="text-xs text-subtext">{index + 1}</span>
 
                 {/* Status dot */}
                 <div
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-2 h-2 rounded-full transition-colors ${
                     session.status === "busy"
                       ? "bg-yellow animate-pulse"
                       : session.status === "active"
@@ -244,7 +369,7 @@ function MainArea({
                     />
                   </svg>
                 </button>
-              </div>
+              </motion.div>
             ))
           )}
           </div>
@@ -252,7 +377,7 @@ function MainArea({
 
         <div className="flex items-center gap-2 ml-2">
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onSplitSession(activeSession.id, "vertical")}
             disabled={!activeSession}
             title="Split side-by-side (Cmd+D)"
@@ -260,7 +385,7 @@ function MainArea({
             Split V
           </button>
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onSplitSession(activeSession.id, "horizontal")}
             disabled={!activeSession}
             title="Split top/bottom (Cmd+Shift+D)"
@@ -268,7 +393,7 @@ function MainArea({
             Split H
           </button>
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onResetSplitSession(activeSession.id)}
             disabled={!activeSession || !activeSplit}
             title="Close split"
@@ -276,7 +401,7 @@ function MainArea({
             Single
           </button>
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onReconnectSession(activeSession.id)}
             disabled={!activeSession}
             title="Reconnect tmux session (Cmd+Shift+R)"
@@ -289,19 +414,75 @@ function MainArea({
       {/* Terminal area */}
       <div className="flex-1 relative overflow-hidden min-h-0">
         {activeSession ? (
-          <div className={`flex h-full w-full min-h-0 ${activeProject ? "gap-0" : ""}`}>
+          <div className="flex h-full w-full min-h-0">
             <div className="flex-1 relative overflow-hidden min-h-0">
               {renderSession(activeSession)}
             </div>
-            {activeProject && (
-              <div className="w-96 border-l border-surface bg-sidebar">
-                <ProjectSettingsPanel
-                  project={activeProject}
-                  globalTmuxHistoryLimit={globalTmuxHistoryLimit}
-                  onSaved={onProjectSettingsSaved}
-                />
+            <div className="w-96 border-l border-surface bg-sidebar flex flex-col">
+              <div className="flex items-center border-b border-surface">
+                <button
+                  type="button"
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    rightPanelTab === "settings"
+                      ? "text-text border-b-2 border-accent"
+                      : "text-subtext hover:text-text"
+                  }`}
+                  onClick={() => setRightPanelTab("settings")}
+                >
+                  Settings
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    rightPanelTab === "files"
+                      ? "text-text border-b-2 border-accent"
+                      : "text-subtext hover:text-text"
+                  }`}
+                  onClick={() => setRightPanelTab("files")}
+                >
+                  Files
+                </button>
               </div>
-            )}
+              <div className="flex-1 min-h-0 overflow-hidden">
+                <AnimatePresence mode="wait" initial={false}>
+                  {rightPanelTab === "settings" ? (
+                    <motion.div
+                      key="settings"
+                      className="h-full"
+                      variants={panelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      transition={panelTransition}
+                    >
+                      <ProjectSettingsPanel
+                        project={activeProject}
+                        globalTmuxHistoryLimit={globalTmuxHistoryLimit}
+                        onSaved={onProjectSettingsSaved}
+                        contextPath={activeRootPath}
+                        contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="files"
+                      className="h-full"
+                      variants={panelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      transition={panelTransition}
+                    >
+                      <FileExplorer
+                        rootPath={activeRootPath}
+                        activeFilePath={openFilePath}
+                        onOpenFile={handleOpenFile}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="flex-1 h-full flex items-center justify-center">
@@ -330,6 +511,22 @@ function MainArea({
           </div>
         )}
       </div>
+      <QuickEditDrawer
+        isOpen={isDrawerOpen}
+        filePath={openFilePath}
+        content={openFileContent}
+        editorTheme={editorTheme}
+        isDirty={isDirty}
+        isSaving={isSavingFile}
+        isLoading={isLoadingFile}
+        isReadOnly={isReadOnly}
+        loadError={fileLoadError}
+        saveError={fileSaveError}
+        largeFileWarning={largeFileWarning}
+        onChange={handleChangeContent}
+        onSave={handleSaveFile}
+        onClose={handleCloseDrawer}
+      />
     </main>
   );
 }

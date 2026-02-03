@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
+import { AnimatePresence } from "framer-motion";
 import Sidebar from "./components/Sidebar";
 import MainArea from "./components/MainArea";
 import QuickSwitcher from "./components/QuickSwitcher";
@@ -365,6 +366,15 @@ function App() {
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.defaultPrevented) {
+      return;
+    }
+    if (e.target instanceof HTMLElement) {
+      const editorHost = e.target.closest("[data-editor-root='true'], .cm-editor");
+      if (editorHost) {
+        return;
+      }
+    }
     const isMeta = e.metaKey || e.ctrlKey;
 
     // Quick Switcher - Cmd+K
@@ -458,7 +468,17 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    const theme = appSettings.theme ?? "dark";
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark";
+  }, [appSettings.theme]);
+
   const selectToCopy = appSettings.selectToCopy ?? true;
+  const editorTheme =
+    appSettings.theme === "light"
+      ? appSettings.editorThemeForLightMode
+      : appSettings.editorThemeForDarkMode;
   const activeSession = activeSessionId ? sessions.get(activeSessionId) ?? null : null;
 
   return (
@@ -491,44 +511,51 @@ function App() {
         onReconnectSession={handleReconnectSession}
         globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
         selectToCopy={selectToCopy}
+        editorTheme={editorTheme}
       />
 
       {/* Quick Switcher */}
-      {showQuickSwitcher && (
-        <QuickSwitcher
-          projects={projects}
-          divergencesByProject={divergencesByProject}
-          onSelect={(type, item) => {
-            if (type === "project") {
-              handleSelectProject(item as Project);
-            } else {
-              handleSelectDivergence(item as Divergence);
-            }
-            setShowQuickSwitcher(false);
-          }}
-          onClose={() => setShowQuickSwitcher(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showQuickSwitcher && (
+          <QuickSwitcher
+            projects={projects}
+            divergencesByProject={divergencesByProject}
+            onSelect={(type, item) => {
+              if (type === "project") {
+                handleSelectProject(item as Project);
+              } else {
+                handleSelectDivergence(item as Divergence);
+              }
+              setShowQuickSwitcher(false);
+            }}
+            onClose={() => setShowQuickSwitcher(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Settings */}
-      {showSettings && (
-        <Settings onClose={() => {
-          setShowSettings(false);
-        }} />
-      )}
+      <AnimatePresence>
+        {showSettings && (
+          <Settings onClose={() => {
+            setShowSettings(false);
+          }} />
+        )}
+      </AnimatePresence>
 
       {/* Merge Notification */}
-      {mergeNotification && (
-        <MergeNotification
-          divergence={mergeNotification.divergence}
-          projectName={mergeNotification.projectName}
-          onClose={() => setMergeNotification(null)}
-          onDeleted={() => {
-            handleDeleteDivergence(mergeNotification.divergence.id);
-            setMergeNotification(null);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {mergeNotification && (
+          <MergeNotification
+            divergence={mergeNotification.divergence}
+            projectName={mergeNotification.projectName}
+            onClose={() => setMergeNotification(null)}
+            onDeleted={() => {
+              handleDeleteDivergence(mergeNotification.divergence.id);
+              setMergeNotification(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

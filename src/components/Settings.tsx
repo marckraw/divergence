@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   DEFAULT_APP_SETTINGS,
   normalizeTmuxHistoryLimit,
@@ -7,6 +8,12 @@ import {
   saveAppSettings,
   broadcastAppSettings,
 } from "../lib/appSettings";
+import {
+  EDITOR_THEME_OPTIONS_DARK,
+  EDITOR_THEME_OPTIONS_LIGHT,
+  type EditorThemeId,
+} from "../lib/editorThemes";
+import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
 
 interface SettingsProps {
   onClose: () => void;
@@ -15,6 +22,8 @@ interface SettingsProps {
 interface SettingsState {
   defaultShell: string;
   theme: "dark" | "light";
+  editorThemeForLightMode: EditorThemeId;
+  editorThemeForDarkMode: EditorThemeId;
   selectToCopy: boolean;
   divergenceBasePath: string;
   tmuxHistoryLimit: number;
@@ -28,6 +37,12 @@ const defaultSettings: SettingsState = {
 function Settings({ onClose }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [loading, setLoading] = useState(true);
+  const shouldReduceMotion = useReducedMotion();
+  const panelVariants = useMemo(
+    () => getPopVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const panelTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
 
   useEffect(() => {
     async function loadSettings() {
@@ -71,22 +86,46 @@ function Settings({ onClose }: SettingsProps) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-sidebar border border-surface rounded-lg p-8">
+      <motion.div
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        variants={OVERLAY_FADE}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={FAST_EASE_OUT}
+      >
+        <motion.div
+          className="bg-sidebar border border-surface rounded-lg p-8"
+          variants={panelVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          transition={panelTransition}
+        >
           <p className="text-subtext">Loading settings...</p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     );
   }
 
   return (
-    <div
+    <motion.div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       onClick={onClose}
+      variants={OVERLAY_FADE}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={FAST_EASE_OUT}
     >
-      <div
+      <motion.div
         className="bg-sidebar border border-surface rounded-lg shadow-xl w-[500px] max-h-[80vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
+        variants={panelVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={panelTransition}
       >
         {/* Header */}
         <div className="p-4 border-b border-surface flex items-center justify-between">
@@ -155,12 +194,50 @@ function Settings({ onClose }: SettingsProps) {
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-surface text-subtext hover:text-text"
                 }`}
-                disabled
-                title="Light theme coming soon"
               >
                 Light
               </button>
             </div>
+          </div>
+
+          {/* Editor Themes */}
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Editor Theme (When App is Light)
+            </label>
+            <select
+              value={settings.editorThemeForLightMode}
+              onChange={(e) => updateSetting("editorThemeForLightMode", e.target.value as EditorThemeId)}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            >
+              {EDITOR_THEME_OPTIONS_DARK.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-subtext mt-1">
+              Quick Edit uses a dark editor theme when the app is light.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Editor Theme (When App is Dark)
+            </label>
+            <select
+              value={settings.editorThemeForDarkMode}
+              onChange={(e) => updateSetting("editorThemeForDarkMode", e.target.value as EditorThemeId)}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            >
+              {EDITOR_THEME_OPTIONS_LIGHT.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-subtext mt-1">
+              Quick Edit uses a light editor theme when the app is dark.
+            </p>
           </div>
 
           {/* Select to Copy */}
@@ -265,8 +342,8 @@ function Settings({ onClose }: SettingsProps) {
             Save
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
