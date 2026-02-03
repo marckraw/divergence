@@ -1,20 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Project } from "../types";
-import { DEFAULT_COPY_IGNORED_SKIP, DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "../lib/projectSettings";
+import {
+  DEFAULT_COPY_IGNORED_SKIP,
+  DEFAULT_USE_TMUX,
+  DEFAULT_USE_WEBGL,
+} from "../lib/projectSettings";
+import { normalizeTmuxHistoryLimit } from "../lib/appSettings";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { useProjectSettings } from "../hooks/useProjectSettings";
 
 interface ProjectSettingsPanelProps {
   project: Project | null;
+  globalTmuxHistoryLimit: number;
   onSaved?: (settings: ProjectSettings) => void;
 }
 
-function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
+function ProjectSettingsPanel({ project, globalTmuxHistoryLimit, onSaved }: ProjectSettingsPanelProps) {
   const projectId = project?.id ?? null;
   const { settings, loading, error, save } = useProjectSettings(projectId);
   const [draftSkipList, setDraftSkipList] = useState("");
   const [useTmux, setUseTmux] = useState(true);
   const [useWebgl, setUseWebgl] = useState(true);
+  const [useCustomHistoryLimit, setUseCustomHistoryLimit] = useState(false);
+  const [tmuxHistoryLimit, setTmuxHistoryLimit] = useState(globalTmuxHistoryLimit);
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
@@ -25,12 +33,16 @@ function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
       setDraftSkipList(defaultListText);
       setUseTmux(DEFAULT_USE_TMUX);
       setUseWebgl(DEFAULT_USE_WEBGL);
+      setUseCustomHistoryLimit(false);
+      setTmuxHistoryLimit(globalTmuxHistoryLimit);
       return;
     }
     setDraftSkipList(settings.copyIgnoredSkip.join("\n"));
     setUseTmux(settings.useTmux);
     setUseWebgl(settings.useWebgl);
-  }, [settings, defaultListText]);
+    setUseCustomHistoryLimit(settings.tmuxHistoryLimit !== null);
+    setTmuxHistoryLimit(settings.tmuxHistoryLimit ?? globalTmuxHistoryLimit);
+  }, [settings, defaultListText, globalTmuxHistoryLimit]);
 
   const parseList = (value: string) =>
     value
@@ -42,7 +54,10 @@ function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
     if (!projectId) return;
     setIsSaving(true);
     try {
-      const saved = await save(parseList(draftSkipList), useTmux, useWebgl);
+      const historyLimit = useCustomHistoryLimit
+        ? normalizeTmuxHistoryLimit(tmuxHistoryLimit, globalTmuxHistoryLimit)
+        : null;
+      const saved = await save(parseList(draftSkipList), useTmux, useWebgl, historyLimit);
       if (saved) {
         onSaved?.(saved);
       }
@@ -111,6 +126,38 @@ function ProjectSettingsPanel({ project, onSaved }: ProjectSettingsPanelProps) {
             />
             Use WebGL
           </label>
+        </div>
+        <div className="flex items-start justify-between gap-3 bg-main/50 border border-surface rounded p-3">
+          <div>
+            <p className="text-sm text-text">tmux History Limit</p>
+            <p className="text-xs text-subtext/80 mt-1">
+              Lines kept in tmux scrollback for this project.
+            </p>
+            <p className="text-xs text-subtext/60 mt-1">
+              Global default: {globalTmuxHistoryLimit.toLocaleString()} lines.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2 text-xs text-subtext">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={useCustomHistoryLimit}
+                onChange={(e) => setUseCustomHistoryLimit(e.target.checked)}
+                disabled={loading}
+                className="accent-accent"
+              />
+              Override
+            </label>
+            <input
+              type="number"
+              min={1000}
+              max={500000}
+              value={tmuxHistoryLimit}
+              onChange={(e) => setTmuxHistoryLimit(Number(e.target.value))}
+              disabled={loading || !useCustomHistoryLimit}
+              className="w-24 px-2 py-1 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent text-right"
+            />
+          </div>
         </div>
         <div>
           <label className="block text-xs uppercase text-subtext mb-2">

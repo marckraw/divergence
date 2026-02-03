@@ -17,6 +17,9 @@ interface MainAreaProps {
   splitBySessionId: Map<string, { orientation: SplitOrientation }>;
   onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
   onResetSplitSession: (sessionId: string) => void;
+  reconnectBySessionId: Map<string, number>;
+  onReconnectSession: (sessionId: string) => void;
+  globalTmuxHistoryLimit: number;
 }
 
 function MainArea({
@@ -31,6 +34,9 @@ function MainArea({
   splitBySessionId,
   onSplitSession,
   onResetSplitSession,
+  reconnectBySessionId,
+  onReconnectSession,
+  globalTmuxHistoryLimit,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -81,8 +87,8 @@ function MainArea({
     const orientation: SplitOrientation = splitState?.orientation ?? "vertical";
     const layoutClass = orientation === "vertical" ? "flex-row" : "flex-col";
     const dividerClass = orientation === "vertical" ? "border-r border-surface" : "border-b border-surface";
-    const isActiveSession = activeSession?.id === session.id;
-    const effectiveUseWebgl = session.useWebgl && isActiveSession;
+    const effectiveUseWebgl = false;
+    const reconnectToken = reconnectBySessionId.get(session.id) ?? 0;
     const paneTwoTmuxName = session.useTmux
       ? buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2")
       : session.tmuxSessionName;
@@ -91,11 +97,12 @@ function MainArea({
       <div className={`flex h-full w-full ${layoutClass}`}>
         <div className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${isSplit ? dividerClass : ""}`}>
           <Terminal
-            key={`${session.id}-${effectiveUseWebgl ? "webgl" : "canvas"}`}
+            key={`${session.id}-${effectiveUseWebgl ? "webgl" : "canvas"}-${reconnectToken}`}
             cwd={session.path}
             sessionId={session.id}
             useTmux={session.useTmux}
             tmuxSessionName={session.tmuxSessionName}
+            tmuxHistoryLimit={session.tmuxHistoryLimit}
             useWebgl={effectiveUseWebgl}
             onRendererChange={handleRendererChange(session.id)}
             onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
@@ -105,11 +112,12 @@ function MainArea({
         {isSplit && (
           <div className="flex-1 relative overflow-hidden min-w-0 min-h-0">
             <Terminal
-              key={`${session.id}-pane-2-${effectiveUseWebgl ? "webgl" : "canvas"}`}
+              key={`${session.id}-pane-2-${effectiveUseWebgl ? "webgl" : "canvas"}-${reconnectToken}`}
               cwd={session.path}
               sessionId={`${session.id}-pane-2`}
               useTmux={session.useTmux}
               tmuxSessionName={paneTwoTmuxName}
+              tmuxHistoryLimit={session.tmuxHistoryLimit}
               useWebgl={effectiveUseWebgl}
               onRendererChange={handleRendererChange(session.id)}
               onStatusChange={handleSplitStatusChange(session.id, 1)}
@@ -125,6 +133,7 @@ function MainArea({
     handleSplitStatusChange,
     handleStatusChange,
     onCloseSession,
+    reconnectBySessionId,
     splitBySessionId,
   ]);
 
@@ -259,6 +268,14 @@ function MainArea({
           >
             Single
           </button>
+          <button
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            onClick={() => activeSession && onReconnectSession(activeSession.id)}
+            disabled={!activeSession}
+            title="Reconnect tmux session (Cmd+Shift+R)"
+          >
+            Reconnect
+          </button>
         </div>
       </div>
 
@@ -267,21 +284,13 @@ function MainArea({
         {activeSession ? (
           <div className={`flex h-full w-full min-h-0 ${activeProject ? "gap-0" : ""}`}>
             <div className="flex-1 relative overflow-hidden min-h-0">
-              {sessionList.map((session) => (
-                <div
-                  key={session.id}
-                  className={`absolute inset-0 ${
-                    session.id === activeSession.id ? "visible z-10" : "invisible z-0"
-                  }`}
-                >
-                  {renderSession(session)}
-                </div>
-              ))}
+              {renderSession(activeSession)}
             </div>
             {activeProject && (
               <div className="w-96 border-l border-surface bg-sidebar">
                 <ProjectSettingsPanel
                   project={activeProject}
+                  globalTmuxHistoryLimit={globalTmuxHistoryLimit}
                   onSaved={onProjectSettingsSaved}
                 />
               </div>

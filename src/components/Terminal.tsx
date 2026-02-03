@@ -3,6 +3,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { spawn } from "tauri-pty";
+import { DEFAULT_TMUX_HISTORY_LIMIT } from "../lib/appSettings";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalProps {
@@ -10,6 +11,7 @@ interface TerminalProps {
   sessionId: string;
   useTmux?: boolean;
   tmuxSessionName?: string;
+  tmuxHistoryLimit?: number;
   useWebgl?: boolean;
   onRendererChange?: (renderer: "webgl" | "canvas") => void;
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
@@ -23,6 +25,7 @@ function Terminal({
   sessionId,
   useTmux = false,
   tmuxSessionName,
+  tmuxHistoryLimit,
   useWebgl = true,
   onRendererChange,
   onRegisterCommand,
@@ -40,7 +43,9 @@ function Terminal({
   const ptyExitDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalResizeDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const terminalFocusDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const initRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resumeDisabledRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
@@ -64,6 +69,23 @@ function Terminal({
     statusRef.current = status;
     onStatusChangeRef.current?.(status);
   }, []);
+
+  const tryResumePty = useCallback(() => {
+    if (resumeDisabledRef.current) {
+      return;
+    }
+    const pty = ptyRef.current;
+    if (!pty || typeof pty.resume !== "function") {
+      resumeDisabledRef.current = true;
+      return;
+    }
+    try {
+      pty.resume();
+    } catch (err) {
+      resumeDisabledRef.current = true;
+      console.warn(`[${sessionId}] PTY resume not available`, err);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -167,6 +189,15 @@ function Terminal({
 
       terminal.open(container);
       fitAddon.fit();
+      if (terminal.element) {
+        const handleFocus = () => {
+          tryResumePty();
+        };
+        terminal.element.addEventListener("focusin", handleFocus);
+        terminalFocusDisposableRef.current = {
+          dispose: () => terminal.element?.removeEventListener("focusin", handleFocus),
+        };
+      }
 
       if (typeof ResizeObserver !== "undefined") {
         resizeObserver = new ResizeObserver(() => {
@@ -214,7 +245,7 @@ function Terminal({
         .replace(/[^a-zA-Z0-9_-]/g, "_");
       const tmuxCommand = `
 if command -v tmux >/dev/null 2>&1; then
-  exec tmux new-session -A -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD" \\; set -g mouse on
+  exec tmux new-session -A -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD" \\; set -g mouse on \\; set -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
 else
   echo "tmux not found, starting zsh"
   exec /bin/zsh -l -i
@@ -234,6 +265,7 @@ fi
                 SHELL: "/bin/zsh",
                 DIVERGENCE_TMUX_SESSION: safeSessionName,
                 DIVERGENCE_TMUX_CWD: cwd,
+                DIVERGENCE_TMUX_HISTORY_LIMIT: String(tmuxHistoryLimit ?? DEFAULT_TMUX_HISTORY_LIMIT),
               },
             })
           : spawnShell();
@@ -342,6 +374,8 @@ fi
       terminalDataDisposableRef.current = null;
       terminalResizeDisposableRef.current?.dispose();
       terminalResizeDisposableRef.current = null;
+      terminalFocusDisposableRef.current?.dispose();
+      terminalFocusDisposableRef.current = null;
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
@@ -349,8 +383,9 @@ fi
       terminalRef.current = null;
       fitAddonRef.current = null;
       initializedRef.current = false;
+      resumeDisabledRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty]);
 
   if (error) {
     return (
@@ -374,7 +409,10 @@ fi
       ref={containerRef}
       className="absolute inset-0 overflow-hidden p-2"
       style={{ backgroundColor: "#181825" }}
-      onMouseDown={() => terminalRef.current?.focus()}
+      onMouseDown={() => {
+        terminalRef.current?.focus();
+        tryResumePty();
+      }}
     />
   );
 }
