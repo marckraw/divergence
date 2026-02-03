@@ -35,6 +35,16 @@ function App() {
   const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectToCopy, setSelectToCopy] = useState(() => {
+    const stored = localStorage.getItem("divergence-settings");
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        return parsed.selectToCopy ?? true;
+      } catch { /* ignore */ }
+    }
+    return true;
+  });
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
@@ -489,6 +499,7 @@ function App() {
         reconnectBySessionId={reconnectBySessionId}
         onReconnectSession={handleReconnectSession}
         globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
+        selectToCopy={selectToCopy}
       />
 
       {/* Quick Switcher */}
@@ -510,7 +521,16 @@ function App() {
 
       {/* Settings */}
       {showSettings && (
-        <Settings onClose={() => setShowSettings(false)} />
+        <Settings onClose={() => {
+          setShowSettings(false);
+          const stored = localStorage.getItem("divergence-settings");
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              setSelectToCopy(parsed.selectToCopy ?? true);
+            } catch { /* ignore */ }
+          }
+        }} />
       )}
 
       {/* Merge Notification */}

@@ -15,12 +15,14 @@ interface SettingsProps {
 interface SettingsState {
   defaultShell: string;
   theme: "dark" | "light";
+  selectToCopy: boolean;
   divergenceBasePath: string;
   tmuxHistoryLimit: number;
 }
 
 const defaultSettings: SettingsState = {
   ...DEFAULT_APP_SETTINGS,
+  selectToCopy: true,
   divergenceBasePath: "",
 };
 
@@ -158,6 +160,32 @@ function Settings({ onClose }: SettingsProps) {
                 title="Light theme coming soon"
               >
                 Light
+              </button>
+            </div>
+          </div>
+
+          {/* Select to Copy */}
+          <div>
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="block text-sm font-medium text-text">
+                  Select to Copy
+                </label>
+                <p className="text-xs text-subtext mt-1">
+                  Automatically copy selected text to clipboard
+                </p>
+              </div>
+              <button
+                onClick={() => updateSetting("selectToCopy", !settings.selectToCopy)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  settings.selectToCopy ? "bg-accent" : "bg-surface"
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    settings.selectToCopy ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
               </button>
             </div>
           </div>
