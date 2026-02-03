@@ -1,8 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
+import { motion, useReducedMotion } from "framer-motion";
 import type { Project, Divergence } from "../types";
 import { loadProjectSettings } from "../lib/projectSettings";
+import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
 
 interface CreateDivergenceModalProps {
   project: Project;
@@ -17,6 +19,12 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
   const [loadingBranches, setLoadingBranches] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const panelVariants = useMemo(
+    () => getPopVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const panelTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
 
   const loadRemoteBranches = useCallback(async () => {
     if (loadingBranches) return;
@@ -92,13 +100,23 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
   }, [handleCreate, isCreating, onClose]);
 
   return (
-    <div
+    <motion.div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       onClick={onClose}
+      variants={OVERLAY_FADE}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={FAST_EASE_OUT}
     >
-      <div
+      <motion.div
         className="bg-sidebar border border-surface rounded-lg shadow-xl w-96 p-4"
         onClick={(e) => e.stopPropagation()}
+        variants={panelVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={panelTransition}
       >
         <h2 className="text-lg font-semibold text-text mb-4">Create Divergence</h2>
 
@@ -186,8 +204,8 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
             {isCreating ? "Creating..." : "Create"}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

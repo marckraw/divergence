@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants } from "../lib/motion";
 
 interface FileExplorerProps {
   rootPath: string | null;
@@ -14,6 +16,7 @@ interface FileEntry {
 }
 
 const LARGE_ENTRY_LIMIT = 1000;
+const MOTION_ENTRY_LIMIT = 200;
 const BADGE_BASE_CLASS =
   "inline-flex items-center justify-center min-w-[22px] h-4 px-1 rounded text-[9px] font-semibold tracking-wide";
 
@@ -139,6 +142,12 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [loadingDirs, setLoadingDirs] = useState<Set<string>>(new Set());
   const [errorsByPath, setErrorsByPath] = useState<Map<string, string>>(new Map());
+  const shouldReduceMotion = useReducedMotion();
+  const collapseVariants = useMemo(
+    () => getCollapseVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const layoutTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
 
   const rootName = useMemo(() => (rootPath ? getBaseName(rootPath) : ""), [rootPath]);
 
@@ -219,6 +228,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
     const entries = entriesByPath.get(path) ?? [];
     const error = errorsByPath.get(path);
     const isLoading = loadingDirs.has(path);
+    const enableMotion = !shouldReduceMotion && entries.length <= MOTION_ENTRY_LIMIT;
 
     return (
       <div className="space-y-0.5">
@@ -233,41 +243,100 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
             {error}
           </div>
         )}
-        {entries.map(entry => {
-          const isExpanded = expandedDirs.has(entry.path);
-          const isActive = activeFilePath === entry.path;
-          return (
-            <div key={entry.path}>
-              <button
-                type="button"
-                className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs ${
-                  isActive
-                    ? "bg-accent/20 text-text"
-                    : "text-subtext hover:text-text hover:bg-surface/60"
-                }`}
-                style={{ paddingLeft: `${depth * 12 + 8}px` }}
-                onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
-              >
-                {entry.isDir ? (
-                  <>
-                    <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      {isExpanded ? (
-                        <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
-                      ) : (
-                        <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+        {enableMotion ? (
+          <AnimatePresence initial={false}>
+            {entries.map(entry => {
+              const isExpanded = expandedDirs.has(entry.path);
+              const isActive = activeFilePath === entry.path;
+              return (
+                <motion.div
+                  key={entry.path}
+                  layout="position"
+                  transition={layoutTransition}
+                >
+                  <button
+                    type="button"
+                    className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                      isActive
+                        ? "bg-accent/20 text-text"
+                        : "text-subtext hover:text-text hover:bg-surface/60"
+                    }`}
+                    style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                    onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
+                  >
+                    {entry.isDir ? (
+                      <>
+                        <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          {isExpanded ? (
+                            <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
+                          ) : (
+                            <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                          )}
+                        </svg>
+                        <FolderIcon />
+                      </>
+                    ) : (
+                      <FileBadge name={entry.name} />
+                    )}
+                    <span className="truncate">{entry.name}</span>
+                  </button>
+                  {entry.isDir && (
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (
+                        <motion.div
+                          className="overflow-hidden"
+                          variants={collapseVariants}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                          transition={layoutTransition}
+                        >
+                          {renderEntries(entry.path, depth + 1)}
+                        </motion.div>
                       )}
-                    </svg>
-                    <FolderIcon />
-                  </>
-                ) : (
-                  <FileBadge name={entry.name} />
-                )}
-                <span className="truncate">{entry.name}</span>
-              </button>
-              {entry.isDir && isExpanded && renderEntries(entry.path, depth + 1)}
-            </div>
-          );
-        })}
+                    </AnimatePresence>
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        ) : (
+          entries.map(entry => {
+            const isExpanded = expandedDirs.has(entry.path);
+            const isActive = activeFilePath === entry.path;
+            return (
+              <div key={entry.path}>
+                <button
+                  type="button"
+                  className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                    isActive
+                      ? "bg-accent/20 text-text"
+                      : "text-subtext hover:text-text hover:bg-surface/60"
+                  }`}
+                  style={{ paddingLeft: `${depth * 12 + 8}px` }}
+                  onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
+                >
+                  {entry.isDir ? (
+                    <>
+                      <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        {isExpanded ? (
+                          <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
+                        ) : (
+                          <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+                        )}
+                      </svg>
+                      <FolderIcon />
+                    </>
+                  ) : (
+                    <FileBadge name={entry.name} />
+                  )}
+                  <span className="truncate">{entry.name}</span>
+                </button>
+                {entry.isDir && isExpanded && renderEntries(entry.path, depth + 1)}
+              </div>
+            );
+          })
+        )}
         {entries.length >= LARGE_ENTRY_LIMIT && (
           <div className="text-[10px] text-subtext/70 pl-2">
             Showing first {LARGE_ENTRY_LIMIT} items.

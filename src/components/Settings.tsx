@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   DEFAULT_APP_SETTINGS,
   normalizeTmuxHistoryLimit,
@@ -8,6 +9,7 @@ import {
   broadcastAppSettings,
 } from "../lib/appSettings";
 import { EDITOR_THEME_OPTIONS, type EditorThemeId } from "../lib/editorThemes";
+import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
 
 interface SettingsProps {
   onClose: () => void;
@@ -30,6 +32,12 @@ const defaultSettings: SettingsState = {
 function Settings({ onClose }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [loading, setLoading] = useState(true);
+  const shouldReduceMotion = useReducedMotion();
+  const panelVariants = useMemo(
+    () => getPopVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const panelTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
 
   useEffect(() => {
     async function loadSettings() {
@@ -73,22 +81,46 @@ function Settings({ onClose }: SettingsProps) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-sidebar border border-surface rounded-lg p-8">
+      <motion.div
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        variants={OVERLAY_FADE}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={FAST_EASE_OUT}
+      >
+        <motion.div
+          className="bg-sidebar border border-surface rounded-lg p-8"
+          variants={panelVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          transition={panelTransition}
+        >
           <p className="text-subtext">Loading settings...</p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     );
   }
 
   return (
-    <div
+    <motion.div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       onClick={onClose}
+      variants={OVERLAY_FADE}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={FAST_EASE_OUT}
     >
-      <div
+      <motion.div
         className="bg-sidebar border border-surface rounded-lg shadow-xl w-[500px] max-h-[80vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
+        variants={panelVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={panelTransition}
       >
         {/* Header */}
         <div className="p-4 border-b border-surface flex items-center justify-between">
@@ -288,8 +320,8 @@ function Settings({ onClose }: SettingsProps) {
             Save
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

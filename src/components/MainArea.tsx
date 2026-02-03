@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import Terminal from "./Terminal";
 import ProjectSettingsPanel from "./ProjectSettingsPanel";
@@ -8,6 +8,8 @@ import type { TerminalSession, SplitOrientation, Project } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { buildSplitTmuxSessionName } from "../lib/tmux";
 import type { EditorThemeId } from "../lib/editorThemes";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../lib/motion";
 
 interface MainAreaProps {
   projects: Project[];
@@ -50,6 +52,15 @@ function MainArea({
   const paneStatusRef = useRef<
     Map<string, { pane1: TerminalSession["status"]; pane2: TerminalSession["status"] }>
   >(new Map());
+  const shouldReduceMotion = useReducedMotion();
+  const tabTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
+  const panelVariants = useMemo(
+    () => getContentSwapVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const panelTransition = shouldReduceMotion
+    ? FAST_EASE_OUT
+    : { type: "spring", stiffness: 240, damping: 28, mass: 0.9 };
   const activeProject = activeSession
     ? projects.find(project => project.id === activeSession.projectId) ?? null
     : null;
@@ -264,21 +275,23 @@ function MainArea({
             <span className="text-xs text-subtext">No terminal open</span>
           ) : (
             sessionList.map((session, index) => (
-              <div
+              <motion.div
                 key={session.id}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer text-sm ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer text-sm transition-colors ${
                   session.id === activeSession?.id
                     ? "bg-main text-text"
                     : "text-subtext hover:text-text hover:bg-surface/50"
                 }`}
                 onClick={() => onSelectSession(session.id)}
+                layout={shouldReduceMotion ? undefined : "position"}
+                transition={tabTransition}
               >
                 {/* Tab number */}
                 <span className="text-xs text-subtext">{index + 1}</span>
 
                 {/* Status dot */}
                 <div
-                  className={`w-2 h-2 rounded-full ${
+                  className={`w-2 h-2 rounded-full transition-colors ${
                     session.status === "busy"
                       ? "bg-yellow animate-pulse"
                       : session.status === "active"
@@ -356,7 +369,7 @@ function MainArea({
                     />
                   </svg>
                 </button>
-              </div>
+              </motion.div>
             ))
           )}
           </div>
@@ -364,7 +377,7 @@ function MainArea({
 
         <div className="flex items-center gap-2 ml-2">
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onSplitSession(activeSession.id, "vertical")}
             disabled={!activeSession}
             title="Split side-by-side (Cmd+D)"
@@ -372,7 +385,7 @@ function MainArea({
             Split V
           </button>
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onSplitSession(activeSession.id, "horizontal")}
             disabled={!activeSession}
             title="Split top/bottom (Cmd+Shift+D)"
@@ -380,7 +393,7 @@ function MainArea({
             Split H
           </button>
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onResetSplitSession(activeSession.id)}
             disabled={!activeSession || !activeSplit}
             title="Close split"
@@ -388,7 +401,7 @@ function MainArea({
             Single
           </button>
           <button
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40 transition-colors"
             onClick={() => activeSession && onReconnectSession(activeSession.id)}
             disabled={!activeSession}
             title="Reconnect tmux session (Cmd+Shift+R)"
@@ -409,7 +422,7 @@ function MainArea({
               <div className="flex items-center border-b border-surface">
                 <button
                   type="button"
-                  className={`flex-1 px-3 py-2 text-xs font-medium ${
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
                     rightPanelTab === "settings"
                       ? "text-text border-b-2 border-accent"
                       : "text-subtext hover:text-text"
@@ -420,7 +433,7 @@ function MainArea({
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 px-3 py-2 text-xs font-medium ${
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
                     rightPanelTab === "files"
                       ? "text-text border-b-2 border-accent"
                       : "text-subtext hover:text-text"
@@ -431,21 +444,43 @@ function MainArea({
                 </button>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden">
-                {rightPanelTab === "settings" ? (
-                  <ProjectSettingsPanel
-                    project={activeProject}
-                    globalTmuxHistoryLimit={globalTmuxHistoryLimit}
-                    onSaved={onProjectSettingsSaved}
-                    contextPath={activeRootPath}
-                    contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
-                  />
-                ) : (
-                  <FileExplorer
-                    rootPath={activeRootPath}
-                    activeFilePath={openFilePath}
-                    onOpenFile={handleOpenFile}
-                  />
-                )}
+                <AnimatePresence mode="wait" initial={false}>
+                  {rightPanelTab === "settings" ? (
+                    <motion.div
+                      key="settings"
+                      className="h-full"
+                      variants={panelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      transition={panelTransition}
+                    >
+                      <ProjectSettingsPanel
+                        project={activeProject}
+                        globalTmuxHistoryLimit={globalTmuxHistoryLimit}
+                        onSaved={onProjectSettingsSaved}
+                        contextPath={activeRootPath}
+                        contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="files"
+                      className="h-full"
+                      variants={panelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      transition={panelTransition}
+                    >
+                      <FileExplorer
+                        rootPath={activeRootPath}
+                        activeFilePath={openFilePath}
+                        onOpenFile={handleOpenFile}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           </div>

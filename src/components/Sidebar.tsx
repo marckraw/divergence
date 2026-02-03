@@ -1,10 +1,17 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Project, Divergence, TerminalSession } from "../types";
 import StatusIndicator from "./StatusIndicator";
 import CreateDivergenceModal from "./CreateDivergenceModal";
 import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "../lib/tmux";
+import {
+  FAST_EASE_OUT,
+  SOFT_SPRING,
+  getCollapseVariants,
+  getPopVariants,
+} from "../lib/motion";
 
 interface SidebarProps {
   projects: Project[];
@@ -41,6 +48,16 @@ function Sidebar({
     item: Project | Divergence;
   } | null>(null);
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const contextMenuVariants = useMemo(
+    () => getPopVariants(shouldReduceMotion, 8, 0.98),
+    [shouldReduceMotion]
+  );
+  const collapseVariants = useMemo(
+    () => getCollapseVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const layoutTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
 
   useEffect(() => {
     if (hasUserToggledExpansion.current) {
@@ -236,13 +253,15 @@ function Sidebar({
                 return (
                   <div key={project.id}>
                     {/* Project Item */}
-                    <div
-                      className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group ${
-                        projectActive ? "bg-surface" : "hover:bg-surface/50"
-                      }`}
-                      onClick={() => onSelectProject(project)}
-                      onContextMenu={(e) => handleContextMenu(e, "project", project)}
-                    >
+                  <motion.div
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group ${
+                      projectActive ? "bg-surface" : "hover:bg-surface/50"
+                    } transition-colors`}
+                    onClick={() => onSelectProject(project)}
+                    onContextMenu={(e) => handleContextMenu(e, "project", project)}
+                    layout={shouldReduceMotion ? undefined : "position"}
+                    transition={layoutTransition}
+                  >
                       {/* Expand/Collapse */}
                       {divergences.length > 0 && (
                         <button
@@ -253,11 +272,11 @@ function Sidebar({
                           className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
                         >
                           <svg
-                            className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
+                          className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
                             <path
                               strokeLinecap="round"
                               strokeLinejoin="round"
@@ -300,52 +319,69 @@ function Sidebar({
                           />
                         </svg>
                       </button>
-                    </div>
+                  </motion.div>
 
-                    {/* Divergences */}
+                  {/* Divergences */}
+                  <AnimatePresence initial={false}>
                     {isExpanded && divergences.length > 0 && (
-                      <div className="ml-4 mt-1 space-y-1">
-                        {divergences.map(divergence => {
-                          const divStatus = getSessionStatus("divergence", divergence.id);
-                          const divActive = isActive("divergence", divergence.id);
+                      <motion.div
+                        className="overflow-hidden"
+                        variants={collapseVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={layoutTransition}
+                      >
+                        <motion.div
+                          className="ml-4 mt-1 space-y-1"
+                          layout={shouldReduceMotion ? undefined : "position"}
+                          transition={layoutTransition}
+                        >
+                          {divergences.map(divergence => {
+                            const divStatus = getSessionStatus("divergence", divergence.id);
+                            const divActive = isActive("divergence", divergence.id);
 
-                          return (
-                            <div
-                              key={divergence.id}
-                              className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer ${
-                                divActive ? "bg-surface" : "hover:bg-surface/50"
-                              }`}
-                              onClick={() => onSelectDivergence(divergence)}
-                              onContextMenu={(e) => handleContextMenu(e, "divergence", divergence)}
-                            >
-                              <div className="w-4" />
-                              <StatusIndicator status={divStatus} />
-                              <svg
-                                className="w-4 h-4 text-accent"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                            return (
+                              <motion.div
+                                key={divergence.id}
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                                  divActive ? "bg-surface" : "hover:bg-surface/50"
+                                }`}
+                                onClick={() => onSelectDivergence(divergence)}
+                                onContextMenu={(e) => handleContextMenu(e, "divergence", divergence)}
+                                layout={shouldReduceMotion ? undefined : "position"}
+                                transition={layoutTransition}
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                                />
-                              </svg>
-                              <span className="flex-1 truncate text-sm text-text">
-                                {divergence.branch}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                                <div className="w-4" />
+                                <StatusIndicator status={divStatus} />
+                                <svg
+                                  className="w-4 h-4 text-accent"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                                  />
+                                </svg>
+                                <span className="flex-1 truncate text-sm text-text">
+                                  {divergence.branch}
+                                </span>
+                              </motion.div>
+                            );
+                          })}
+                        </motion.div>
+                      </motion.div>
                     )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
+          </div>
+        )}
         </div>
 
         {/* Add Project Button */}
@@ -373,52 +409,61 @@ function Sidebar({
       </aside>
 
       {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className="fixed bg-surface border border-surface rounded-md shadow-lg py-1 z-50"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          {contextMenu.type === "project" && (
-            <>
+      <AnimatePresence>
+        {contextMenu && (
+          <motion.div
+            className="fixed bg-surface border border-surface rounded-md shadow-lg py-1 z-50"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            variants={contextMenuVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={layoutTransition}
+          >
+            {contextMenu.type === "project" && (
+              <>
+                <button
+                  className="w-full px-4 py-2 text-sm text-left text-text hover:bg-sidebar transition-colors"
+                  onClick={() => {
+                    setCreateDivergenceFor(contextMenu.item as Project);
+                    closeContextMenu();
+                  }}
+                >
+                  Create Divergence
+                </button>
+                <button
+                  className="w-full px-4 py-2 text-sm text-left text-red hover:bg-sidebar transition-colors"
+                  onClick={handleRemoveProject}
+                >
+                  Remove Project
+                </button>
+              </>
+            )}
+            {contextMenu.type === "divergence" && (
               <button
-                className="w-full px-4 py-2 text-sm text-left text-text hover:bg-sidebar"
-                onClick={() => {
-                  setCreateDivergenceFor(contextMenu.item as Project);
-                  closeContextMenu();
-                }}
+                className="w-full px-4 py-2 text-sm text-left text-red hover:bg-sidebar transition-colors"
+                onClick={handleDeleteDivergence}
               >
-                Create Divergence
+                Delete Divergence
               </button>
-              <button
-                className="w-full px-4 py-2 text-sm text-left text-red hover:bg-sidebar"
-                onClick={handleRemoveProject}
-              >
-                Remove Project
-              </button>
-            </>
-          )}
-          {contextMenu.type === "divergence" && (
-            <button
-              className="w-full px-4 py-2 text-sm text-left text-red hover:bg-sidebar"
-              onClick={handleDeleteDivergence}
-            >
-              Delete Divergence
-            </button>
-          )}
-        </div>
-      )}
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Create Divergence Modal */}
-      {createDivergenceFor && (
-        <CreateDivergenceModal
-          project={createDivergenceFor}
-          onClose={() => setCreateDivergenceFor(null)}
-          onCreated={(divergence) => {
-            onDivergenceCreated();
-            onSelectDivergence(divergence);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {createDivergenceFor && (
+          <CreateDivergenceModal
+            project={createDivergenceFor}
+            onClose={() => setCreateDivergenceFor(null)}
+            onCreated={(divergence) => {
+              onDivergenceCreated();
+              onSelectDivergence(divergence);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 }

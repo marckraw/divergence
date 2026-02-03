@@ -1,7 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { motion, useReducedMotion } from "framer-motion";
 import type { Divergence } from "../types";
 import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "../lib/tmux";
+import { FAST_EASE_OUT, SOFT_SPRING, getSlideInRightVariants } from "../lib/motion";
 
 interface MergeNotificationProps {
   divergence: Divergence;
@@ -13,6 +15,12 @@ interface MergeNotificationProps {
 function MergeNotification({ divergence, projectName, onClose, onDeleted }: MergeNotificationProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const toastVariants = useMemo(
+    () => getSlideInRightVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const toastTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
 
   const handleDelete = useCallback(async () => {
     setIsDeleting(true);
@@ -45,7 +53,14 @@ function MergeNotification({ divergence, projectName, onClose, onDeleted }: Merg
   }, [divergence, projectName, onDeleted, onClose]);
 
   return (
-    <div className="fixed bottom-4 right-4 bg-sidebar border border-surface rounded-lg shadow-xl max-w-md animate-slide-in z-50">
+    <motion.div
+      className="fixed bottom-4 right-4 bg-sidebar border border-surface rounded-lg shadow-xl max-w-md z-50"
+      variants={toastVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={toastTransition}
+    >
       <div className="p-4">
         <div className="flex items-start gap-3">
           {/* Success icon */}
@@ -119,7 +134,7 @@ function MergeNotification({ divergence, projectName, onClose, onDeleted }: Merg
           </button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

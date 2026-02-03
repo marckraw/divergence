@@ -1,5 +1,13 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Project, Divergence } from "../types";
+import {
+  FAST_EASE_OUT,
+  OVERLAY_FADE,
+  SOFT_SPRING,
+  getPopVariants,
+  getContentSwapVariants,
+} from "../lib/motion";
 
 interface QuickSwitcherProps {
   projects: Project[];
@@ -19,6 +27,19 @@ function QuickSwitcher({ projects, divergencesByProject, onSelect, onClose }: Qu
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const panelVariants = useMemo(
+    () => getPopVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const itemVariants = useMemo(
+    () => getContentSwapVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const panelTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
+  const itemTransition = shouldReduceMotion
+    ? FAST_EASE_OUT
+    : { type: "spring", stiffness: 300, damping: 32, mass: 0.8 };
 
   // Build searchable list
   const allItems = useMemo((): SearchResult[] => {
@@ -110,13 +131,23 @@ function QuickSwitcher({ projects, divergencesByProject, onSelect, onClose }: Qu
   );
 
   return (
-    <div
+    <motion.div
       className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[20vh] z-50"
       onClick={onClose}
+      variants={OVERLAY_FADE}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={FAST_EASE_OUT}
     >
-      <div
+      <motion.div
         className="bg-sidebar border border-surface rounded-lg shadow-xl w-[500px] max-h-[400px] flex flex-col"
         onClick={(e) => e.stopPropagation()}
+        variants={panelVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        transition={panelTransition}
       >
         {/* Search Input */}
         <div className="p-3 border-b border-surface">
@@ -156,74 +187,82 @@ function QuickSwitcher({ projects, divergencesByProject, onSelect, onClose }: Qu
               No results found
             </div>
           ) : (
-            filteredItems.map((result, index) => (
-              <div
-                key={`${result.type}-${result.item.id}`}
-                className={`flex items-center gap-3 px-3 py-2 rounded cursor-pointer ${
-                  index === selectedIndex
-                    ? "bg-surface"
-                    : "hover:bg-surface/50"
-                }`}
-                onClick={() => onSelect(result.type, result.item)}
-                onMouseEnter={() => setSelectedIndex(index)}
-              >
-                {/* Icon */}
-                {result.type === "divergence" ? (
-                  <svg
-                    className="w-5 h-5 text-accent"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
-                ) : (
-                  <svg
-                    className="w-5 h-5 text-text"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                    />
-                  </svg>
-                )}
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-text truncate">
-                    {result.type === "divergence"
-                      ? (result.item as Divergence).branch
-                      : result.item.name}
-                  </div>
-                  {result.type === "divergence" && result.projectName && (
-                    <div className="text-xs text-subtext truncate">
-                      {result.projectName}
-                    </div>
-                  )}
-                </div>
-
-                {/* Type badge */}
-                <span
-                  className={`text-xs px-2 py-0.5 rounded ${
-                    result.type === "divergence"
-                      ? "bg-accent/20 text-accent"
-                      : "bg-surface text-subtext"
+            <AnimatePresence initial={false}>
+              {filteredItems.map((result, index) => (
+                <motion.div
+                  key={`${result.type}-${result.item.id}`}
+                  layout={shouldReduceMotion ? undefined : "position"}
+                  variants={itemVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={itemTransition}
+                  className={`flex items-center gap-3 px-3 py-2 rounded cursor-pointer transition-colors ${
+                    index === selectedIndex
+                      ? "bg-surface"
+                      : "hover:bg-surface/50"
                   }`}
+                  onClick={() => onSelect(result.type, result.item)}
+                  onMouseEnter={() => setSelectedIndex(index)}
                 >
-                  {result.type}
-                </span>
-              </div>
-            ))
+                  {/* Icon */}
+                  {result.type === "divergence" ? (
+                    <svg
+                      className="w-5 h-5 text-accent"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="w-5 h-5 text-text"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      />
+                    </svg>
+                  )}
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-text truncate">
+                      {result.type === "divergence"
+                        ? (result.item as Divergence).branch
+                        : result.item.name}
+                    </div>
+                    {result.type === "divergence" && result.projectName && (
+                      <div className="text-xs text-subtext truncate">
+                        {result.projectName}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Type badge */}
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded ${
+                      result.type === "divergence"
+                        ? "bg-accent/20 text-accent"
+                        : "bg-surface text-subtext"
+                    }`}
+                  >
+                    {result.type}
+                  </span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           )}
         </div>
 
@@ -239,8 +278,8 @@ function QuickSwitcher({ projects, divergencesByProject, onSelect, onClose }: Qu
             <kbd className="px-1 py-0.5 bg-surface rounded">esc</kbd> close
           </span>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
@@ -16,7 +16,14 @@ import { githubDark } from "@uiw/codemirror-theme-github";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DEFAULT_EDITOR_THEME, type EditorThemeId } from "../lib/editorThemes";
+import {
+  FAST_EASE_OUT,
+  SOFT_SPRING,
+  getContentSwapVariants,
+  getSlideUpVariants,
+} from "../lib/motion";
 
 interface QuickEditDrawerProps {
   isOpen: boolean;
@@ -240,7 +247,7 @@ function CodeEditor({
       viewRef.current?.destroy();
       viewRef.current = null;
     };
-  }, [filePath, isReadOnly, languageExtensions]);
+  }, [filePath, isReadOnly, languageExtensions, themeExtensions]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -274,109 +281,124 @@ function QuickEditDrawer({
   onSave,
   onClose,
 }: QuickEditDrawerProps) {
-  const [isMounted, setIsMounted] = useState(isOpen);
-  const [isVisible, setIsVisible] = useState(isOpen);
-
-  useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    if (isOpen) {
-      setIsMounted(true);
-      requestAnimationFrame(() => {
-        setIsVisible(true);
-      });
-    } else {
-      setIsVisible(false);
-      timeoutId = setTimeout(() => {
-        setIsMounted(false);
-      }, 200);
-    }
-
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [isOpen]);
-
-  if (!isMounted) {
-    return null;
-  }
+  const shouldReduceMotion = useReducedMotion();
+  const drawerVariants = useMemo(
+    () => getSlideUpVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const contentVariants = useMemo(
+    () => getContentSwapVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const drawerTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
+  const contentTransition = shouldReduceMotion
+    ? FAST_EASE_OUT
+    : { type: "spring", stiffness: 240, damping: 30, mass: 0.8 };
+  const contentKey = filePath ?? "empty";
 
   return (
-    <div
-      className={`absolute inset-x-0 bottom-0 h-[45%] bg-main border-t border-surface shadow-xl flex flex-col transform-gpu transition duration-200 ease-out ${
-        isVisible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 pointer-events-none"
-      }`}
-      data-editor-root="true"
-      aria-hidden={!isVisible}
-    >
-      <div className="flex items-center justify-between gap-4 px-4 py-2 border-b border-surface">
-        <div className="min-w-0">
-          <p className="text-xs text-subtext/70">Quick Edit</p>
-          <p className="text-sm text-text truncate">
-            {filePath ?? "No file selected"}
-            {isDirty ? <span className="text-accent"> *</span> : null}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {isReadOnly && (
-            <span className="text-[10px] px-2 py-1 rounded bg-surface text-subtext">
-              Read-only
-            </span>
-          )}
-          <button
-            type="button"
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
-            onClick={onSave}
-            disabled={isSaving || isLoading || isReadOnly || !filePath}
-          >
-            {isSaving ? "Saving..." : "Save"}
-          </button>
-          <button
-            type="button"
-            className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-      </div>
-      {largeFileWarning && (
-        <div className="px-4 py-2 text-[11px] text-yellow-200/90 bg-yellow-400/10 border-b border-yellow-400/20">
-          {largeFileWarning}
-        </div>
-      )}
-      {loadError && (
-        <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
-          {loadError}
-        </div>
-      )}
-      {saveError && (
-        <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
-          {saveError}
-        </div>
-      )}
-      <div className="flex-1 min-h-0">
-        {isLoading ? (
-          <div className="h-full flex items-center justify-center text-sm text-subtext">
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="absolute inset-x-0 bottom-0 h-[45%] bg-main border-t border-surface shadow-xl flex flex-col"
+          data-editor-root="true"
+          aria-hidden={!isOpen}
+          style={{ pointerEvents: isOpen ? "auto" : "none" }}
+          variants={drawerVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          transition={drawerTransition}
+        >
+          <div className="flex items-center justify-between gap-4 px-4 py-2 border-b border-surface">
+            <div className="min-w-0">
+              <p className="text-xs text-subtext/70">Quick Edit</p>
+              <p className="text-sm text-text truncate">
+                {filePath ?? "No file selected"}
+                {isDirty ? <span className="text-accent"> *</span> : null}
+              </p>
+            </div>
             <div className="flex items-center gap-2">
-              <span className="spinner" />
-              Loading file...
+              {isReadOnly && (
+                <span className="text-[10px] px-2 py-1 rounded bg-surface text-subtext">
+                  Read-only
+                </span>
+              )}
+              <button
+                type="button"
+                className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+                onClick={onSave}
+                disabled={isSaving || isLoading || isReadOnly || !filePath}
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50"
+                onClick={onClose}
+              >
+                Close
+              </button>
             </div>
           </div>
-        ) : (
-          <CodeEditor
-            filePath={filePath}
-            content={content}
-            editorTheme={editorTheme}
-            isReadOnly={isReadOnly}
-            onChange={onChange}
-            onSave={onSave}
-            onClose={onClose}
-          />
-        )}
-      </div>
-    </div>
+          {largeFileWarning && (
+            <div className="px-4 py-2 text-[11px] text-yellow-200/90 bg-yellow-400/10 border-b border-yellow-400/20">
+              {largeFileWarning}
+            </div>
+          )}
+          {loadError && (
+            <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
+              {loadError}
+            </div>
+          )}
+          {saveError && (
+            <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
+              {saveError}
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
+            <AnimatePresence mode="wait" initial={false}>
+              {isLoading ? (
+                <motion.div
+                  key="loading"
+                  className="h-full flex items-center justify-center text-sm text-subtext"
+                  variants={contentVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={contentTransition}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="spinner" />
+                    Loading file...
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={contentKey}
+                  className="h-full w-full"
+                  variants={contentVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={contentTransition}
+                >
+                  <CodeEditor
+                    filePath={filePath}
+                    content={content}
+                    editorTheme={editorTheme}
+                    isReadOnly={isReadOnly}
+                    onChange={onChange}
+                    onSave={onSave}
+                    onClose={onClose}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

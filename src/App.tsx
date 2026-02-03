@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
+import { AnimatePresence } from "framer-motion";
 import Sidebar from "./components/Sidebar";
 import MainArea from "./components/MainArea";
 import QuickSwitcher from "./components/QuickSwitcher";
@@ -504,41 +505,47 @@ function App() {
       />
 
       {/* Quick Switcher */}
-      {showQuickSwitcher && (
-        <QuickSwitcher
-          projects={projects}
-          divergencesByProject={divergencesByProject}
-          onSelect={(type, item) => {
-            if (type === "project") {
-              handleSelectProject(item as Project);
-            } else {
-              handleSelectDivergence(item as Divergence);
-            }
-            setShowQuickSwitcher(false);
-          }}
-          onClose={() => setShowQuickSwitcher(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showQuickSwitcher && (
+          <QuickSwitcher
+            projects={projects}
+            divergencesByProject={divergencesByProject}
+            onSelect={(type, item) => {
+              if (type === "project") {
+                handleSelectProject(item as Project);
+              } else {
+                handleSelectDivergence(item as Divergence);
+              }
+              setShowQuickSwitcher(false);
+            }}
+            onClose={() => setShowQuickSwitcher(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Settings */}
-      {showSettings && (
-        <Settings onClose={() => {
-          setShowSettings(false);
-        }} />
-      )}
+      <AnimatePresence>
+        {showSettings && (
+          <Settings onClose={() => {
+            setShowSettings(false);
+          }} />
+        )}
+      </AnimatePresence>
 
       {/* Merge Notification */}
-      {mergeNotification && (
-        <MergeNotification
-          divergence={mergeNotification.divergence}
-          projectName={mergeNotification.projectName}
-          onClose={() => setMergeNotification(null)}
-          onDeleted={() => {
-            handleDeleteDivergence(mergeNotification.divergence.id);
-            setMergeNotification(null);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {mergeNotification && (
+          <MergeNotification
+            divergence={mergeNotification.divergence}
+            projectName={mergeNotification.projectName}
+            onClose={() => setMergeNotification(null)}
+            onDeleted={() => {
+              handleDeleteDivergence(mergeNotification.divergence.id);
+              setMergeNotification(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
