@@ -292,6 +292,7 @@ function Terminal({
         env: {
           TERM: "xterm-256color",
           COLORTERM: "truecolor",
+          DIVERGENCE_APP: "1",
         },
       });
 
@@ -317,6 +318,7 @@ if command -v tmux >/dev/null 2>&1; then
     tmux set -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
   fi
 
+  tmux set-environment -t "$DIVERGENCE_TMUX_SESSION" DIVERGENCE_APP 1
   tmux set -g mouse on
 
   if [ -n "$COPY_CMD" ]; then
@@ -345,6 +347,7 @@ fi
                 TERM: "xterm-256color",
                 COLORTERM: "truecolor",
                 SHELL: "/bin/zsh",
+                DIVERGENCE_APP: "1",
                 DIVERGENCE_TMUX_SESSION: safeSessionName,
                 DIVERGENCE_TMUX_CWD: cwd,
                 DIVERGENCE_TMUX_HISTORY_LIMIT: String(tmuxHistoryLimit ?? DEFAULT_TMUX_HISTORY_LIMIT),
