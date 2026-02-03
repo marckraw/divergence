@@ -1,11 +1,12 @@
 import { useEffect, useRef, useCallback, useState } from "react";
-import { Terminal as XTerm } from "@xterm/xterm";
+import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { spawn } from "tauri-pty";
 import { DEFAULT_TMUX_HISTORY_LIMIT } from "../lib/appSettings";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
+import { useAppSettings } from "../hooks/useAppSettings";
 
 interface TerminalProps {
   cwd: string;
@@ -22,6 +23,57 @@ interface TerminalProps {
   onClose?: () => void;
 }
 
+const TERMINAL_THEME_DARK: ITheme = {
+  background: "#181825",
+  foreground: "#cdd6f4",
+  cursor: "#f5e0dc",
+  cursorAccent: "#181825",
+  selectionBackground: "rgba(88, 91, 112, 0.4)",
+  black: "#45475a",
+  red: "#f38ba8",
+  green: "#a6e3a1",
+  yellow: "#f9e2af",
+  blue: "#89b4fa",
+  magenta: "#cba6f7",
+  cyan: "#94e2d5",
+  white: "#bac2de",
+  brightBlack: "#585b70",
+  brightRed: "#f38ba8",
+  brightGreen: "#a6e3a1",
+  brightYellow: "#f9e2af",
+  brightBlue: "#89b4fa",
+  brightMagenta: "#cba6f7",
+  brightCyan: "#94e2d5",
+  brightWhite: "#a6adc8",
+};
+
+const TERMINAL_THEME_LIGHT: ITheme = {
+  background: "#f8f9fc",
+  foreground: "#4c4f69",
+  cursor: "#2d6cdf",
+  cursorAccent: "#f8f9fc",
+  selectionBackground: "rgba(45, 108, 223, 0.18)",
+  black: "#5c5f77",
+  red: "#d20f39",
+  green: "#40a02b",
+  yellow: "#df8e1d",
+  blue: "#1e66f5",
+  magenta: "#8839ef",
+  cyan: "#179299",
+  white: "#bcc0cc",
+  brightBlack: "#6c6f85",
+  brightRed: "#d20f39",
+  brightGreen: "#40a02b",
+  brightYellow: "#df8e1d",
+  brightBlue: "#1e66f5",
+  brightMagenta: "#8839ef",
+  brightCyan: "#179299",
+  brightWhite: "#4c4f69",
+};
+
+const getTerminalTheme = (mode: "dark" | "light") =>
+  mode === "light" ? TERMINAL_THEME_LIGHT : TERMINAL_THEME_DARK;
+
 function Terminal({
   cwd,
   sessionId,
@@ -36,6 +88,8 @@ function Terminal({
   onStatusChange,
   onClose,
 }: TerminalProps) {
+  const { settings: appSettings } = useAppSettings();
+  const themeMode = appSettings.theme === "light" ? "light" : "dark";
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -174,29 +228,7 @@ function Terminal({
         cursorBlink: true,
         fontSize: 14,
         fontFamily: '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
-        theme: {
-          background: "#181825",
-          foreground: "#cdd6f4",
-          cursor: "#f5e0dc",
-          cursorAccent: "#181825",
-          selectionBackground: "#585b7066",
-          black: "#45475a",
-          red: "#f38ba8",
-          green: "#a6e3a1",
-          yellow: "#f9e2af",
-          blue: "#89b4fa",
-          magenta: "#cba6f7",
-          cyan: "#94e2d5",
-          white: "#bac2de",
-          brightBlack: "#585b70",
-          brightRed: "#f38ba8",
-          brightGreen: "#a6e3a1",
-          brightYellow: "#f9e2af",
-          brightBlue: "#89b4fa",
-          brightMagenta: "#cba6f7",
-          brightCyan: "#94e2d5",
-          brightWhite: "#a6adc8",
-        },
+        theme: getTerminalTheme(themeMode),
         scrollback: 10000,
       });
 
@@ -513,7 +545,18 @@ fi
       initializedRef.current = false;
       resumeDisabledRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, copySelection]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, copySelection, themeMode, tmuxHistoryLimit]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
+      return;
+    }
+    terminal.setOption("theme", getTerminalTheme(themeMode));
+    if (terminal.rows > 0) {
+      terminal.refresh(0, terminal.rows - 1);
+    }
+  }, [themeMode]);
 
   if (error) {
     return (
@@ -535,8 +578,7 @@ fi
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 overflow-hidden p-2"
-      style={{ backgroundColor: "#181825" }}
+      className="absolute inset-0 overflow-hidden p-2 bg-main"
       onMouseDown={() => {
         terminalRef.current?.focus();
         tryResumePty();

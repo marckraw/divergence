@@ -189,8 +189,6 @@ function Settings({ onClose }: SettingsProps) {
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-surface text-subtext hover:text-text"
                 }`}
-                disabled
-                title="Light theme coming soon"
               >
                 Light
               </button>

@@ -468,6 +468,12 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    const theme = appSettings.theme ?? "dark";
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark";
+  }, [appSettings.theme]);
+
   const selectToCopy = appSettings.selectToCopy ?? true;
   const activeSession = activeSessionId ? sessions.get(activeSessionId) ?? null : null;
 
