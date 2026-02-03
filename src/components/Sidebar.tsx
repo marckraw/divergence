@@ -183,7 +183,7 @@ function Sidebar({
 
   return (
     <>
-      <aside className="w-64 h-full bg-sidebar border-r border-surface flex flex-col">
+      <aside className="w-64 shrink-0 h-full bg-sidebar border-r border-surface flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-surface">
           <h1 className="text-lg font-semibold text-text flex items-center gap-2">

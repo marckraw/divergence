@@ -138,10 +138,11 @@ function MainArea({
   ]);
 
   return (
-    <main className="flex-1 h-full bg-main flex flex-col">
+    <main className="flex-1 min-w-0 h-full bg-main flex flex-col">
       {/* Tab bar */}
       <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
-        <div className="flex items-center gap-1 overflow-x-auto flex-1">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
           {sessionList.length === 0 ? (
             <span className="text-xs text-subtext">No terminal open</span>
           ) : (
@@ -241,6 +242,7 @@ function MainArea({
               </div>
             ))
           )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 ml-2">

@@ -8,6 +8,7 @@ import {
 import { normalizeTmuxHistoryLimit } from "../lib/appSettings";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { useProjectSettings } from "../hooks/useProjectSettings";
+import { useRalphyConfig, type RalphyConfigSummary } from "../hooks/useRalphyConfig";
 
 interface ProjectSettingsPanelProps {
   project: Project | null;
@@ -18,6 +19,9 @@ interface ProjectSettingsPanelProps {
 function ProjectSettingsPanel({ project, globalTmuxHistoryLimit, onSaved }: ProjectSettingsPanelProps) {
   const projectId = project?.id ?? null;
   const { settings, loading, error, save } = useProjectSettings(projectId);
+  const { data: ralphyConfig, loading: ralphyLoading, error: ralphyError } = useRalphyConfig(
+    project?.path ?? null
+  );
   const [draftSkipList, setDraftSkipList] = useState("");
   const [useTmux, setUseTmux] = useState(true);
   const [useWebgl, setUseWebgl] = useState(true);
@@ -49,6 +53,78 @@ function ProjectSettingsPanel({ project, globalTmuxHistoryLimit, onSaved }: Proj
       .split("\n")
       .map(line => line.trim())
       .filter(Boolean);
+
+  const formatProvider = (providerType?: string) => {
+    if (!providerType) return "Unknown";
+    return `${providerType.charAt(0).toUpperCase()}${providerType.slice(1)}`;
+  };
+
+  const formatProject = (summary: RalphyConfigSummary) => {
+    const parts: string[] = [];
+    if (summary.project_name) {
+      parts.push(summary.project_name);
+    }
+    if (summary.project_key) {
+      parts.push(summary.project_key);
+    }
+    if (summary.project_id) {
+      parts.push(summary.project_id);
+    }
+    if (summary.team_id) {
+      parts.push(`team ${summary.team_id}`);
+    }
+    return parts.join(" · ");
+  };
+
+  const formatLabels = (summary: RalphyConfigSummary) => {
+    const labels = summary.labels;
+    if (!labels) {
+      return "";
+    }
+    const parts: string[] = [];
+    if (labels.candidate) {
+      parts.push(`candidate: ${labels.candidate}`);
+    }
+    if (labels.ready) {
+      parts.push(`ready: ${labels.ready}`);
+    }
+    if (labels.enriched) {
+      parts.push(`enriched: ${labels.enriched}`);
+    }
+    if (labels.pr_feedback) {
+      parts.push(`pr: ${labels.pr_feedback}`);
+    }
+    return parts.join(" · ");
+  };
+
+  const formatClaude = (summary: RalphyConfigSummary) => {
+    const claude = summary.claude;
+    if (!claude) {
+      return "";
+    }
+    const parts: string[] = [];
+    if (claude.model) {
+      parts.push(claude.model);
+    }
+    if (claude.max_iterations) {
+      parts.push(`${claude.max_iterations} iterations`);
+    }
+    return parts.join(" · ");
+  };
+
+  const formatGithub = (summary: RalphyConfigSummary) => {
+    const github = summary.integrations?.github;
+    if (!github?.owner || !github.repo) {
+      return "";
+    }
+    return `${github.owner}/${github.repo}`;
+  };
+
+  const ralphySummary = ralphyConfig?.status === "ok" ? ralphyConfig.summary : null;
+  const ralphyProject = ralphySummary ? formatProject(ralphySummary) : "";
+  const ralphyLabels = ralphySummary ? formatLabels(ralphySummary) : "";
+  const ralphyClaude = ralphySummary ? formatClaude(ralphySummary) : "";
+  const ralphyGithub = ralphySummary ? formatGithub(ralphySummary) : "";
 
   const handleSave = async () => {
     if (!projectId) return;
@@ -158,6 +234,73 @@ function ProjectSettingsPanel({ project, globalTmuxHistoryLimit, onSaved }: Proj
               className="w-24 px-2 py-1 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent text-right"
             />
           </div>
+        </div>
+        <div className="bg-main/50 border border-surface rounded p-3">
+          <p className="text-sm text-text">Ralphy</p>
+          <p className="text-xs text-subtext/80 mt-1">
+            Looks for <span className="font-mono">.ralphy/config.json</span> in this project.
+          </p>
+
+          {ralphyLoading && (
+            <p className="text-xs text-subtext mt-2">Checking configuration...</p>
+          )}
+
+          {!ralphyLoading && ralphyError && (
+            <p className="text-xs text-red mt-2">
+              Failed to load Ralphy configuration: {ralphyError}
+            </p>
+          )}
+
+          {!ralphyLoading && !ralphyError && ralphyConfig?.status === "missing" && (
+            <>
+              <p className="text-xs text-subtext mt-2">No Ralphy config found.</p>
+              <p className="text-xs text-subtext/70 mt-1">
+                Run <span className="font-mono">ralphy init</span> in the project root to create one.
+              </p>
+            </>
+          )}
+
+          {!ralphyLoading && !ralphyError && ralphyConfig?.status === "invalid" && (
+            <>
+              <p className="text-xs text-red mt-2">Ralphy config found but could not be parsed.</p>
+              <p className="text-xs text-subtext/70 mt-1 truncate">{ralphyConfig.path}</p>
+              <p className="text-xs text-subtext/70 mt-1">{ralphyConfig.error}</p>
+            </>
+          )}
+
+          {!ralphyLoading && !ralphyError && ralphySummary && (
+            <div className="mt-2 space-y-1 text-xs text-subtext">
+              <div>
+                Configured:{" "}
+                <span className="text-text">
+                  Yes{ralphySummary.version ? ` (v${ralphySummary.version})` : ""}
+                </span>
+              </div>
+              <div>
+                Provider: <span className="text-text">{formatProvider(ralphySummary.provider_type)}</span>
+              </div>
+              {ralphyProject && (
+                <div>
+                  Project: <span className="text-text">{ralphyProject}</span>
+                </div>
+              )}
+              {ralphyLabels && (
+                <div>
+                  Labels: <span className="text-text">{ralphyLabels}</span>
+                </div>
+              )}
+              {ralphyClaude && (
+                <div>
+                  Claude: <span className="text-text">{ralphyClaude}</span>
+                </div>
+              )}
+              {ralphyGithub && (
+                <div>
+                  GitHub: <span className="text-text">{ralphyGithub}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-xs uppercase text-subtext mb-2">

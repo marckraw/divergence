@@ -30,6 +30,7 @@ pub fn run() {
             commands::list_divergences,
             commands::list_remote_branches,
             commands::delete_divergence,
+            commands::get_ralphy_config_summary,
             commands::check_branch_status,
             commands::get_divergence_base_path,
             commands::kill_tmux_session,
