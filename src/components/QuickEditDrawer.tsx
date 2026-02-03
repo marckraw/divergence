@@ -12,8 +12,8 @@ import { markdown } from "@codemirror/lang-markdown";
 import { yaml } from "@codemirror/lang-yaml";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { dracula } from "@uiw/codemirror-theme-dracula";
-import { githubDark } from "@uiw/codemirror-theme-github";
-import { vscodeDark } from "@uiw/codemirror-theme-vscode";
+import { githubDark, githubLight } from "@uiw/codemirror-theme-github";
+import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -113,12 +113,76 @@ const divergenceTheme = EditorView.theme(
 
 const divergenceHighlight = syntaxHighlighting(syntaxTheme, { fallback: true });
 
+const syntaxThemeLight = HighlightStyle.define([
+  { tag: t.keyword, color: "#7c3aed", fontWeight: "600" },
+  { tag: [t.name, t.deleted, t.character, t.macroName, t.variableName], color: "#1f2937" },
+  { tag: t.propertyName, color: "#b45309" },
+  { tag: [t.function(t.variableName), t.labelName], color: "#1d4ed8" },
+  { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: "#9333ea" },
+  { tag: [t.definition(t.name), t.separator, t.punctuation], color: "#475569" },
+  { tag: [t.typeName, t.className], color: "#c2410c" },
+  { tag: [t.number, t.bool, t.null, t.atom, t.literal, t.unit], color: "#a16207" },
+  { tag: [t.operator], color: "#0f766e" },
+  { tag: [t.string, t.special(t.string)], color: "#15803d" },
+  { tag: [t.regexp, t.escape, t.link], color: "#0e7490" },
+  { tag: [t.meta, t.comment], color: "#6b7280", fontStyle: "italic" },
+  { tag: t.tagName, color: "#dc2626" },
+  { tag: t.attributeName, color: "#a16207" },
+  { tag: t.heading, color: "#1d4ed8", fontWeight: "600" },
+  { tag: t.emphasis, fontStyle: "italic" },
+  { tag: t.strong, fontWeight: "700" },
+  { tag: t.strikethrough, textDecoration: "line-through" },
+  { tag: t.invalid, color: "#dc2626", backgroundColor: "#fee2e2" },
+]);
+
+const divergenceLightTheme = EditorView.theme(
+  {
+    "&": {
+      height: "100%",
+      backgroundColor: "#f8f9fc",
+      color: "#1f2937",
+      fontSize: "13px",
+      fontFamily:
+        '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
+    },
+    ".cm-scroller": { overflow: "auto" },
+    ".cm-content": { caretColor: "#2d6cdf" },
+    ".cm-cursor, .cm-dropCursor": { borderLeft: "2px solid #2d6cdf" },
+    "&.cm-focused .cm-cursor": { borderLeftColor: "#2d6cdf" },
+    ".cm-selectionBackground": { backgroundColor: "#d7deef" },
+    "&.cm-focused .cm-selectionBackground": { backgroundColor: "#d7deef" },
+    ".cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#d7deef" },
+    ".cm-gutters": {
+      backgroundColor: "#eef0f6",
+      color: "#8a94b3",
+      border: "none",
+    },
+    ".cm-lineNumbers": { color: "#8a94b3" },
+    ".cm-activeLine": { backgroundColor: "#eef0f6" },
+    ".cm-activeLineGutter": { backgroundColor: "#eef0f6" },
+    ".cm-matchingBracket": {
+      backgroundColor: "#d7deef",
+      color: "#1f2937",
+    },
+    ".cm-nonmatchingBracket": {
+      backgroundColor: "#fee2e2",
+      color: "#dc2626",
+    },
+  },
+  { dark: false }
+);
+
+const divergenceHighlightLight = syntaxHighlighting(syntaxThemeLight, { fallback: true });
+
 const themeExtensionsById: Record<EditorThemeId, Extension[]> = {
   divergence: [divergenceTheme, divergenceHighlight],
+  "divergence-light": [divergenceLightTheme, divergenceHighlightLight],
   "one-dark": [oneDark],
   dracula: [dracula],
   "github-dark": [githubDark],
+  "github-light": [githubLight],
   "vscode-dark": [vscodeDark],
+  "vscode-light": [vscodeLight],
 };
 
 const getLanguageExtension = (filePath: string | null) => {

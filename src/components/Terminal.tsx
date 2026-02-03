@@ -552,11 +552,25 @@ fi
     if (!terminal) {
       return;
     }
-    terminal.setOption("theme", getTerminalTheme(themeMode));
+    const theme = getTerminalTheme(themeMode);
+    const maybeSetOption = (terminal as unknown as { setOption?: (key: string, value: unknown) => void })
+      .setOption;
+    if (typeof maybeSetOption === "function") {
+      maybeSetOption("theme", theme);
+    } else {
+      terminal.options.theme = theme;
+    }
+    if (webglAddonRef.current) {
+      try {
+        webglAddonRef.current.clearTextureAtlas();
+      } catch (err) {
+        console.warn(`[${sessionId}] Failed to refresh WebGL atlas`, err);
+      }
+    }
     if (terminal.rows > 0) {
       terminal.refresh(0, terminal.rows - 1);
     }
-  }, [themeMode]);
+  }, [themeMode, sessionId]);
 
   if (error) {
     return (

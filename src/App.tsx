@@ -475,6 +475,10 @@ function App() {
   }, [appSettings.theme]);
 
   const selectToCopy = appSettings.selectToCopy ?? true;
+  const editorTheme =
+    appSettings.theme === "light"
+      ? appSettings.editorThemeForLightMode
+      : appSettings.editorThemeForDarkMode;
   const activeSession = activeSessionId ? sessions.get(activeSessionId) ?? null : null;
 
   return (
@@ -507,7 +511,7 @@ function App() {
         onReconnectSession={handleReconnectSession}
         globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
         selectToCopy={selectToCopy}
-        editorTheme={appSettings.editorTheme}
+        editorTheme={editorTheme}
       />
 
       {/* Quick Switcher */}

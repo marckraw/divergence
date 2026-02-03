@@ -1,4 +1,10 @@
-import { DEFAULT_EDITOR_THEME, isEditorThemeId, type EditorThemeId } from "./editorThemes";
+import {
+  DEFAULT_EDITOR_THEME_DARK,
+  DEFAULT_EDITOR_THEME_LIGHT,
+  getEditorThemeMode,
+  isEditorThemeId,
+  type EditorThemeId,
+} from "./editorThemes";
 
 export const SETTINGS_STORAGE_KEY = "divergence-settings";
 export const SETTINGS_UPDATED_EVENT = "divergence-settings-updated";
@@ -9,7 +15,8 @@ const MAX_TMUX_HISTORY_LIMIT = 500000;
 export interface AppSettings {
   defaultShell: string;
   theme: "dark" | "light";
-  editorTheme: EditorThemeId;
+  editorThemeForLightMode: EditorThemeId;
+  editorThemeForDarkMode: EditorThemeId;
   selectToCopy: boolean;
   tmuxHistoryLimit: number;
   divergenceBasePath?: string;
@@ -18,7 +25,8 @@ export interface AppSettings {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultShell: "/bin/zsh",
   theme: "dark",
-  editorTheme: DEFAULT_EDITOR_THEME,
+  editorThemeForLightMode: DEFAULT_EDITOR_THEME_DARK,
+  editorThemeForDarkMode: DEFAULT_EDITOR_THEME_LIGHT,
   selectToCopy: true,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
   divergenceBasePath: "",
@@ -37,11 +45,33 @@ export function normalizeTmuxHistoryLimit(
 }
 
 export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSettings {
+  const legacyEditorTheme = (input as { editorTheme?: unknown } | null)?.editorTheme;
+  const legacyThemeId = isEditorThemeId(legacyEditorTheme) ? legacyEditorTheme : null;
+  const legacyDarkTheme = legacyThemeId && getEditorThemeMode(legacyThemeId) === "dark"
+    ? legacyThemeId
+    : null;
+  const legacyLightTheme = legacyThemeId && getEditorThemeMode(legacyThemeId) === "light"
+    ? legacyThemeId
+    : null;
+
+  const editorThemeForLightMode =
+    isEditorThemeId(input?.editorThemeForLightMode) &&
+    getEditorThemeMode(input.editorThemeForLightMode) === "dark"
+      ? input.editorThemeForLightMode
+      : legacyDarkTheme ?? DEFAULT_EDITOR_THEME_DARK;
+
+  const editorThemeForDarkMode =
+    isEditorThemeId(input?.editorThemeForDarkMode) &&
+    getEditorThemeMode(input.editorThemeForDarkMode) === "light"
+      ? input.editorThemeForDarkMode
+      : legacyLightTheme ?? DEFAULT_EDITOR_THEME_LIGHT;
+
   return {
     ...DEFAULT_APP_SETTINGS,
     ...input,
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
-    editorTheme: isEditorThemeId(input?.editorTheme) ? input.editorTheme : DEFAULT_EDITOR_THEME,
+    editorThemeForLightMode,
+    editorThemeForDarkMode,
     selectToCopy: typeof input?.selectToCopy === "boolean"
       ? input.selectToCopy
       : DEFAULT_APP_SETTINGS.selectToCopy,

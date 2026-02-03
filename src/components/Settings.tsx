@@ -8,7 +8,11 @@ import {
   saveAppSettings,
   broadcastAppSettings,
 } from "../lib/appSettings";
-import { EDITOR_THEME_OPTIONS, type EditorThemeId } from "../lib/editorThemes";
+import {
+  EDITOR_THEME_OPTIONS_DARK,
+  EDITOR_THEME_OPTIONS_LIGHT,
+  type EditorThemeId,
+} from "../lib/editorThemes";
 import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
 
 interface SettingsProps {
@@ -18,7 +22,8 @@ interface SettingsProps {
 interface SettingsState {
   defaultShell: string;
   theme: "dark" | "light";
-  editorTheme: EditorThemeId;
+  editorThemeForLightMode: EditorThemeId;
+  editorThemeForDarkMode: EditorThemeId;
   selectToCopy: boolean;
   divergenceBasePath: string;
   tmuxHistoryLimit: number;
@@ -195,24 +200,43 @@ function Settings({ onClose }: SettingsProps) {
             </div>
           </div>
 
-          {/* Editor Theme */}
+          {/* Editor Themes */}
           <div>
             <label className="block text-sm font-medium text-text mb-2">
-              Editor Theme
+              Editor Theme (When App is Light)
             </label>
             <select
-              value={settings.editorTheme}
-              onChange={(e) => updateSetting("editorTheme", e.target.value as EditorThemeId)}
+              value={settings.editorThemeForLightMode}
+              onChange={(e) => updateSetting("editorThemeForLightMode", e.target.value as EditorThemeId)}
               className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
             >
-              {EDITOR_THEME_OPTIONS.map(option => (
+              {EDITOR_THEME_OPTIONS_DARK.map(option => (
                 <option key={option.id} value={option.id}>
                   {option.label}
                 </option>
               ))}
             </select>
             <p className="text-xs text-subtext mt-1">
-              Applies to the Quick Edit code editor.
+              Quick Edit uses a dark editor theme when the app is light.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Editor Theme (When App is Dark)
+            </label>
+            <select
+              value={settings.editorThemeForDarkMode}
+              onChange={(e) => updateSetting("editorThemeForDarkMode", e.target.value as EditorThemeId)}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            >
+              {EDITOR_THEME_OPTIONS_LIGHT.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-subtext mt-1">
+              Quick Edit uses a light editor theme when the app is dark.
             </p>
           </div>
 
