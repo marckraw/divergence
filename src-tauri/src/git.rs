@@ -287,6 +287,7 @@ pub fn list_remote_branches(repo_path: &Path) -> Result<Vec<String>, String> {
     Ok(branches)
 }
 
+#[allow(dead_code)]
 pub fn is_branch_merged(repo_path: &Path, branch: &str) -> Result<bool, String> {
     // First, fetch to ensure we have latest remote state
     fetch_origin(repo_path);

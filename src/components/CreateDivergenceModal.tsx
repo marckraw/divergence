@@ -78,7 +78,7 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
       );
 
       // Get the ID of the inserted row so we can open it immediately
-      const rows = await db.select<{ id: number }>("SELECT last_insert_rowid() as id");
+      const rows = await db.select<{ id: number }[]>("SELECT last_insert_rowid() as id");
       const insertedId = rows[0]?.id ?? 0;
 
       onCreated({ ...divergence, id: insertedId });

@@ -18,7 +18,7 @@ export const OVERLAY_FADE: Variants = {
   exit: { opacity: 0 },
 };
 
-export const getPopVariants = (reduced: boolean, offset = 12, scale = 0.98): Variants => ({
+export const getPopVariants = (reduced: boolean | null, offset = 12, scale = 0.98): Variants => ({
   hidden: {
     opacity: 0,
     y: reduced ? 0 : offset,
@@ -36,7 +36,7 @@ export const getPopVariants = (reduced: boolean, offset = 12, scale = 0.98): Var
   },
 });
 
-export const getSlideUpVariants = (reduced: boolean): Variants => ({
+export const getSlideUpVariants = (reduced: boolean | null): Variants => ({
   hidden: {
     opacity: 0,
     y: reduced ? 0 : "100%",
@@ -51,7 +51,7 @@ export const getSlideUpVariants = (reduced: boolean): Variants => ({
   },
 });
 
-export const getSlideInRightVariants = (reduced: boolean, offset = 40): Variants => ({
+export const getSlideInRightVariants = (reduced: boolean | null, offset = 40): Variants => ({
   hidden: {
     opacity: 0,
     x: reduced ? 0 : offset,
@@ -66,7 +66,7 @@ export const getSlideInRightVariants = (reduced: boolean, offset = 40): Variants
   },
 });
 
-export const getContentSwapVariants = (reduced: boolean): Variants => ({
+export const getContentSwapVariants = (reduced: boolean | null): Variants => ({
   hidden: {
     opacity: 0,
     y: reduced ? 0 : 6,
@@ -81,7 +81,7 @@ export const getContentSwapVariants = (reduced: boolean): Variants => ({
   },
 });
 
-export const getCollapseVariants = (reduced: boolean): Variants => ({
+export const getCollapseVariants = (reduced: boolean | null): Variants => ({
   hidden: {
     height: reduced ? "auto" : 0,
     opacity: 0,

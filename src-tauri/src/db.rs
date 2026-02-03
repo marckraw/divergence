@@ -11,6 +11,7 @@ pub fn get_repos_dir() -> PathBuf {
     get_divergence_dir().join("repos")
 }
 
+#[allow(dead_code)]
 pub fn get_database_path() -> PathBuf {
     get_divergence_dir().join("divergence.db")
 }
