@@ -1,5 +1,0 @@
----
-"divergence": patch
----
-
-fix publishing
