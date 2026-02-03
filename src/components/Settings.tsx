@@ -22,7 +22,6 @@ interface SettingsState {
 
 const defaultSettings: SettingsState = {
   ...DEFAULT_APP_SETTINGS,
-  selectToCopy: true,
   divergenceBasePath: "",
 };
 

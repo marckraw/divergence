@@ -49,9 +49,12 @@ function Terminal({
   const terminalFocusDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const initRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeDisabledRef = useRef(false);
-    const selectToCopyRef = useRef(selectToCopy);
-    const selectionDisposableRef = useRef<{ dispose: () => void } | null>(null);
-    const selectionDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectToCopyRef = useRef(selectToCopy);
+  const selectionDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const selectionDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSelectionRef = useRef<string>("");
+  const lastCopiedSelectionRef = useRef<string>("");
+  const terminalMouseUpDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
@@ -97,6 +100,33 @@ function Terminal({
     }
   }, [sessionId]);
 
+  const copySelection = useCallback(async (selection: string, force: boolean = false) => {
+    if (!selection) {
+      return;
+    }
+    if (!force && selection === lastCopiedSelectionRef.current) {
+      return;
+    }
+
+    try {
+      await writeText(selection);
+      lastCopiedSelectionRef.current = selection;
+      return;
+    } catch (err) {
+      console.warn(`[${sessionId}] Clipboard plugin copy failed, trying browser clipboard`, err);
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(selection);
+        lastCopiedSelectionRef.current = selection;
+        return;
+      } catch (err) {
+        console.warn(`[${sessionId}] Browser clipboard copy failed`, err);
+      }
+    }
+  }, [sessionId]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container || initializedRef.current) return;
@@ -104,12 +134,12 @@ function Terminal({
     let handleResize: (() => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
 
-      const disposeWebgl = () => {
-        if (webglAddonRef.current) {
-          try {
-            webglAddonRef.current.dispose();
-          } catch (err) {
-            console.warn(`[${sessionId}] Failed to dispose WebGL addon`, err);
+    const disposeWebgl = () => {
+      if (webglAddonRef.current) {
+        try {
+          webglAddonRef.current.dispose();
+        } catch (err) {
+          console.warn(`[${sessionId}] Failed to dispose WebGL addon`, err);
         }
         webglAddonRef.current = null;
       }
@@ -203,9 +233,23 @@ function Terminal({
         const handleFocus = () => {
           tryResumePty();
         };
+        const handleMouseUp = () => {
+          if (!selectToCopyRef.current) {
+            return;
+          }
+          const selection = terminal.getSelection();
+          if (!selection) {
+            return;
+          }
+          void copySelection(selection, true);
+        };
         terminal.element.addEventListener("focusin", handleFocus);
+        terminal.element.addEventListener("mouseup", handleMouseUp);
         terminalFocusDisposableRef.current = {
           dispose: () => terminal.element?.removeEventListener("focusin", handleFocus),
+        };
+        terminalMouseUpDisposableRef.current = {
+          dispose: () => terminal.element?.removeEventListener("mouseup", handleMouseUp),
         };
       }
 
@@ -255,7 +299,35 @@ function Terminal({
         .replace(/[^a-zA-Z0-9_-]/g, "_");
       const tmuxCommand = `
 if command -v tmux >/dev/null 2>&1; then
-  exec tmux new-session -A -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD" \\; set -g mouse on \\; set -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
+  COPY_CMD=""
+  if command -v pbcopy >/dev/null 2>&1; then
+    COPY_CMD="pbcopy"
+  elif command -v wl-copy >/dev/null 2>&1; then
+    COPY_CMD="wl-copy"
+  elif command -v xclip >/dev/null 2>&1; then
+    COPY_CMD="xclip -selection clipboard"
+  elif command -v xsel >/dev/null 2>&1; then
+    COPY_CMD="xsel --clipboard --input"
+  fi
+
+  if tmux has-session -t "$DIVERGENCE_TMUX_SESSION" 2>/dev/null; then
+    tmux set -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
+  else
+    tmux new-session -d -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD"
+    tmux set -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
+  fi
+
+  tmux set -g mouse on
+
+  if [ -n "$COPY_CMD" ]; then
+    tmux set -g set-clipboard on
+    tmux bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "$COPY_CMD"
+    tmux bind -T copy-mode MouseDragEnd1Pane send -X copy-pipe-and-cancel "$COPY_CMD"
+    tmux bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel "$COPY_CMD"
+    tmux bind -T copy-mode Enter send -X copy-pipe-and-cancel "$COPY_CMD"
+  fi
+
+  exec tmux attach -t "$DIVERGENCE_TMUX_SESSION"
 else
   echo "tmux not found, starting zsh"
   exec /bin/zsh -l -i
@@ -341,21 +413,39 @@ fi
           pty.resize(e.cols, e.rows);
         });
 
+        terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          const isCopy = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c";
+          if (!isCopy) {
+            return true;
+          }
+          const selection = terminal.getSelection();
+          if (!selection) {
+            return true;
+          }
+          void copySelection(selection, true);
+          return false;
+        });
+
         terminal.focus();
 
         // Select-to-copy: on selection change, debounce and copy to clipboard
         selectionDisposableRef.current = terminal.onSelectionChange(() => {
+          const selection = terminal.getSelection();
+          if (selection) {
+            pendingSelectionRef.current = selection;
+          }
           if (selectionDebounceTimerRef.current) {
             clearTimeout(selectionDebounceTimerRef.current);
           }
           selectionDebounceTimerRef.current = setTimeout(() => {
-            if (!selectToCopyRef.current) return;
-            const selection = terminal.getSelection();
-            if (!selection) return;
-            writeText(selection).catch((err) => {
-              console.warn(`[${sessionId}] Failed to copy selection to clipboard:`, err);
-            });
-          }, 150);
+            if (!selectToCopyRef.current) {
+              return;
+            }
+            if (!pendingSelectionRef.current) {
+              return;
+            }
+            void copySelection(pendingSelectionRef.current);
+          }, 50);
         });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -409,6 +499,8 @@ fi
       terminalResizeDisposableRef.current = null;
       terminalFocusDisposableRef.current?.dispose();
       terminalFocusDisposableRef.current = null;
+      terminalMouseUpDisposableRef.current?.dispose();
+      terminalMouseUpDisposableRef.current = null;
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
@@ -418,7 +510,7 @@ fi
       initializedRef.current = false;
       resumeDisabledRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, copySelection]);
 
   if (error) {
     return (

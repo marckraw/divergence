@@ -7,6 +7,7 @@ const MAX_TMUX_HISTORY_LIMIT = 500000;
 export interface AppSettings {
   defaultShell: string;
   theme: "dark" | "light";
+  selectToCopy: boolean;
   tmuxHistoryLimit: number;
   divergenceBasePath?: string;
 }
@@ -14,6 +15,7 @@ export interface AppSettings {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultShell: "/bin/zsh",
   theme: "dark",
+  selectToCopy: true,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
   divergenceBasePath: "",
 };
@@ -35,6 +37,9 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     ...DEFAULT_APP_SETTINGS,
     ...input,
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
+    selectToCopy: typeof input?.selectToCopy === "boolean"
+      ? input.selectToCopy
+      : DEFAULT_APP_SETTINGS.selectToCopy,
   };
 }
 

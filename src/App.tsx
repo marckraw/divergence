@@ -35,16 +35,6 @@ function App() {
   const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [selectToCopy, setSelectToCopy] = useState(() => {
-    const stored = localStorage.getItem("divergence-settings");
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        return parsed.selectToCopy ?? true;
-      } catch { /* ignore */ }
-    }
-    return true;
-  });
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
@@ -468,6 +458,7 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  const selectToCopy = appSettings.selectToCopy ?? true;
   const activeSession = activeSessionId ? sessions.get(activeSessionId) ?? null : null;
 
   return (
@@ -523,13 +514,6 @@ function App() {
       {showSettings && (
         <Settings onClose={() => {
           setShowSettings(false);
-          const stored = localStorage.getItem("divergence-settings");
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              setSelectToCopy(parsed.selectToCopy ?? true);
-            } catch { /* ignore */ }
-          }
         }} />
       )}
 
