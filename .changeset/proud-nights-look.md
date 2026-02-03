@@ -1,5 +1,0 @@
----
-"divergence": minor
----
-
-first release
