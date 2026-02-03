@@ -11,6 +11,7 @@ import { useProjects, useAllDivergences } from "./hooks/useDatabase";
 import { useMergeDetection } from "./hooks/useMergeDetection";
 import { useProjectSettingsMap } from "./hooks/useProjectSettingsMap";
 import { useAppSettings } from "./hooks/useAppSettings";
+import { useUpdater } from "./hooks/useUpdater";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "./types";
 import { DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "./lib/projectSettings";
 import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "./lib/tmux";
@@ -26,6 +27,7 @@ const NOTIFY_IDLE_DELAY_MS = 1500;
 const NOTIFY_COOLDOWN_MS = 3000;
 
 function App() {
+  const updater = useUpdater(true);
   const { projects, addProject, removeProject } = useProjects();
   const { divergencesByProject, refresh: refreshDivergences } = useAllDivergences();
   const { settingsByProjectId, updateProjectSettings } = useProjectSettingsMap(projects);
@@ -556,6 +558,34 @@ function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* Update Banner */}
+      {(updater.status === "available" || updater.status === "downloading") && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white shadow-lg">
+          {updater.status === "available" && (
+            <div className="flex items-center gap-3">
+              <span>Update {updater.version} available</span>
+              <button
+                onClick={updater.downloadAndInstall}
+                className="rounded bg-white px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+              >
+                Install & Restart
+              </button>
+            </div>
+          )}
+          {updater.status === "downloading" && (
+            <div className="flex items-center gap-3">
+              <span>Downloading update... {updater.progress}%</span>
+              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-blue-400">
+                <div
+                  className="h-full rounded-full bg-white transition-all"
+                  style={{ width: `${updater.progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
