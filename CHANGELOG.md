@@ -1,5 +1,11 @@
 # divergence
 
+## 0.4.1
+
+### Patch Changes
+
+- 8cf766b: Harden tmux panel ownership handling and prevent killing non-Divergence sessions.
+
 ## 0.4.0
 
 ### Minor Changes
