@@ -38,6 +38,7 @@ function App() {
   const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
@@ -366,6 +367,24 @@ function App() {
     await refreshDivergences();
   }, [sessions, handleCloseSession, refreshDivergences]);
 
+  const resolveProjectForNewDivergence = useCallback((): Project | null => {
+    if (activeSessionId) {
+      const session = sessions.get(activeSessionId);
+      if (session) {
+        const project = projects.find((item) => item.id === session.projectId);
+        if (project) {
+          return project;
+        }
+      }
+    }
+
+    if (projects.length === 1) {
+      return projects[0];
+    }
+
+    return null;
+  }, [activeSessionId, sessions, projects]);
+
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.defaultPrevented) {
@@ -405,6 +424,21 @@ function App() {
       e.preventDefault();
       if (activeSessionId) {
         handleCloseSession(activeSessionId);
+      }
+      return;
+    }
+
+    // New divergence - Cmd+T
+    if (isMeta && e.key.toLowerCase() === "t") {
+      e.preventDefault();
+      if (createDivergenceFor) {
+        return;
+      }
+      const project = resolveProjectForNewDivergence();
+      if (project) {
+        setShowQuickSwitcher(false);
+        setShowSettings(false);
+        setCreateDivergenceFor(project);
       }
       return;
     }
@@ -462,7 +496,15 @@ function App() {
       }
       return;
     }
-  }, [sessions, activeSessionId, handleCloseSession, handleSplitSession, handleReconnectSession]);
+  }, [
+    sessions,
+    activeSessionId,
+    createDivergenceFor,
+    resolveProjectForNewDivergence,
+    handleCloseSession,
+    handleSplitSession,
+    handleReconnectSession,
+  ]);
 
   // Set up keyboard listener
   useEffect(() => {
@@ -490,6 +532,8 @@ function App() {
         divergencesByProject={divergencesByProject}
         sessions={sessions}
         activeSessionId={activeSessionId}
+        createDivergenceFor={createDivergenceFor}
+        onCreateDivergenceForChange={setCreateDivergenceFor}
         onSelectProject={handleSelectProject}
         onSelectDivergence={handleSelectDivergence}
         onAddProject={handleAddProject}
