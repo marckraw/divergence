@@ -1,5 +1,11 @@
 # divergence
 
+## 0.3.0
+
+### Minor Changes
+
+- e9c417f: Add a Changes panel with git diff viewing and quick edit flow.
+
 ## 0.2.6
 
 ### Patch Changes
