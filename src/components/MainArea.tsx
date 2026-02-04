@@ -638,6 +638,7 @@ function MainArea({
       <QuickEditDrawer
         isOpen={isDrawerOpen}
         filePath={openFilePath}
+        projectRootPath={activeRootPath}
         content={openFileContent}
         editorTheme={editorTheme}
         diff={openDiff}

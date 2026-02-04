@@ -1,4 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  autocompletion,
+  completeAnyWord,
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+} from "@codemirror/autocomplete";
 import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
@@ -16,6 +23,7 @@ import { githubDark, githubLight } from "@uiw/codemirror-theme-github";
 import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
+import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { DEFAULT_EDITOR_THEME, type EditorThemeId } from "../lib/editorThemes";
 import {
@@ -28,6 +36,7 @@ import {
 interface QuickEditDrawerProps {
   isOpen: boolean;
   filePath: string | null;
+  projectRootPath?: string | null;
   content: string;
   editorTheme?: EditorThemeId;
   diff?: { text: string; isBinary: boolean } | null;
@@ -225,10 +234,304 @@ const getLanguageExtension = (filePath: string | null) => {
   return [];
 };
 
+const IMPORT_COMPLETION_EXTENSIONS = new Set([
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".d.ts",
+]);
+
+const OMIT_EXTENSION_FOR_IMPORT = new Set([
+  "ts",
+  "tsx",
+  "mts",
+  "cts",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "d.ts",
+]);
+
+const IMPORT_PATH_MATCHERS = [
+  /(?:import|export)\s+[^'"]*from\s+["']([^"']*)$/,
+  /import\s+["']([^"']*)$/,
+  /(?:import|require)\(\s*["']([^"']*)$/,
+];
+
+const DIR_CACHE_TTL_MS = 10_000;
+const PACKAGE_CACHE_TTL_MS = 60_000;
+const dirCache = new Map<string, { at: number; entries: { name: string; isDir: boolean }[] }>();
+const packageCache = new Map<string, { at: number; names: string[] }>();
+
+const normalizePath = (value: string) => value.replace(/\\/g, "/");
+
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/g, "");
+
+const getDirname = (value: string) => {
+  const normalized = normalizePath(value);
+  const trimmed = trimTrailingSlash(normalized);
+  const lastSlash = trimmed.lastIndexOf("/");
+  if (lastSlash < 0) {
+    return trimmed;
+  }
+  if (lastSlash === 0) {
+    return "/";
+  }
+  return trimmed.slice(0, lastSlash);
+};
+
+const joinPath = (base: string, segment: string) => {
+  if (!segment) {
+    return base;
+  }
+  const normalizedBase = normalizePath(base);
+  const normalizedSegment = normalizePath(segment);
+  if (normalizedSegment.startsWith("/") || /^[A-Za-z]:\//.test(normalizedSegment)) {
+    return normalizedSegment;
+  }
+  if (normalizedBase.endsWith("/")) {
+    return `${normalizedBase}${normalizedSegment}`;
+  }
+  return `${normalizedBase}/${normalizedSegment}`;
+};
+
+const resolvePath = (base: string, relative: string) => {
+  const normalizedRelative = normalizePath(relative);
+  if (normalizedRelative.startsWith("/") || /^[A-Za-z]:\//.test(normalizedRelative)) {
+    return normalizedRelative;
+  }
+
+  const normalizedBase = normalizePath(base);
+  const hasLeadingSlash = normalizedBase.startsWith("/");
+  let baseParts = normalizedBase.split("/").filter(Boolean);
+  let prefix = hasLeadingSlash ? "/" : "";
+
+  if (baseParts[0]?.endsWith(":")) {
+    prefix = `${baseParts[0]}/`;
+    baseParts = baseParts.slice(1);
+  }
+
+  const relParts = normalizedRelative.split("/").filter(Boolean);
+  const parts = [...baseParts];
+  for (const part of relParts) {
+    if (part === ".") {
+      continue;
+    }
+    if (part === "..") {
+      if (parts.length > 0) {
+        parts.pop();
+      }
+      continue;
+    }
+    parts.push(part);
+  }
+
+  return `${prefix}${parts.join("/")}`;
+};
+
+const isImportCompletionEnabled = (filePath: string | null) => {
+  if (!filePath) {
+    return false;
+  }
+  const lower = filePath.toLowerCase();
+  return Array.from(IMPORT_COMPLETION_EXTENSIONS).some(ext => lower.endsWith(ext));
+};
+
+const buildImportLabel = (name: string) => {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".d.ts")) {
+    return name.slice(0, -5);
+  }
+  const lastDot = lower.lastIndexOf(".");
+  if (lastDot <= 0) {
+    return name;
+  }
+  const ext = lower.slice(lastDot + 1);
+  if (OMIT_EXTENSION_FOR_IMPORT.has(ext)) {
+    return name.slice(0, lastDot);
+  }
+  return name;
+};
+
+const getImportPathMatch = (context: CompletionContext) => {
+  const line = context.state.doc.lineAt(context.pos);
+  const before = line.text.slice(0, context.pos - line.from);
+  for (const matcher of IMPORT_PATH_MATCHERS) {
+    const match = before.match(matcher);
+    if (match) {
+      return {
+        value: match[1],
+        from: context.pos - match[1].length,
+      };
+    }
+  }
+  return null;
+};
+
+const readDirCached = async (path: string) => {
+  const now = Date.now();
+  const cached = dirCache.get(path);
+  if (cached && now - cached.at < DIR_CACHE_TTL_MS) {
+    return cached.entries;
+  }
+
+  try {
+    const entries = await readDir(path);
+    const normalized = entries
+      .map(entry => ({
+        name: entry.name ?? "",
+        isDir: Boolean(entry.isDirectory),
+      }))
+      .filter(entry => entry.name.length > 0)
+      .sort((a, b) => {
+        if (a.isDir !== b.isDir) {
+          return a.isDir ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+    dirCache.set(path, { at: now, entries: normalized });
+    return normalized;
+  } catch {
+    return [];
+  }
+};
+
+const readPackageNamesCached = async (rootPath: string) => {
+  const now = Date.now();
+  const cached = packageCache.get(rootPath);
+  if (cached && now - cached.at < PACKAGE_CACHE_TTL_MS) {
+    return cached.names;
+  }
+
+  try {
+    const packagePath = joinPath(rootPath, "package.json");
+    const raw = await readTextFile(packagePath);
+    const parsed = JSON.parse(raw);
+    const names = new Set<string>();
+    const buckets = [
+      parsed?.dependencies,
+      parsed?.devDependencies,
+      parsed?.peerDependencies,
+      parsed?.optionalDependencies,
+    ];
+    for (const bucket of buckets) {
+      if (!bucket || typeof bucket !== "object") {
+        continue;
+      }
+      for (const name of Object.keys(bucket)) {
+        names.add(name);
+      }
+    }
+    const list = Array.from(names).sort();
+    packageCache.set(rootPath, { at: now, names: list });
+    return list;
+  } catch {
+    packageCache.set(rootPath, { at: now, names: [] });
+    return [];
+  }
+};
+
+const getRelativePathCompletions = async (
+  filePath: string,
+  typed: string
+): Promise<Completion[]> => {
+  const normalizedTyped = normalizePath(typed);
+  const lastSlash = normalizedTyped.lastIndexOf("/");
+  const prefixDir = lastSlash >= 0 ? normalizedTyped.slice(0, lastSlash + 1) : "";
+  const partial = lastSlash >= 0 ? normalizedTyped.slice(lastSlash + 1) : normalizedTyped;
+  const baseDir = getDirname(filePath);
+  const targetDir = resolvePath(baseDir, prefixDir || ".");
+  const entries = await readDirCached(targetDir);
+
+  return entries
+    .filter(entry => (partial ? entry.name.startsWith(partial) : true))
+    .map(entry => {
+      if (entry.isDir) {
+        const label = `${prefixDir}${entry.name}/`;
+        return { label, apply: label, type: "folder" } satisfies Completion;
+      }
+      const labelName = buildImportLabel(entry.name);
+      const label = `${prefixDir}${labelName}`;
+      return { label, apply: label, type: "file" } satisfies Completion;
+    });
+};
+
+const getPackageCompletions = async (
+  rootPath: string,
+  typed: string
+): Promise<Completion[]> => {
+  const names = await readPackageNamesCached(rootPath);
+  return names
+    .filter(name => (typed ? name.startsWith(typed) : true))
+    .map(name => ({ label: name, type: "module" } satisfies Completion));
+};
+
+const createImportPathCompletionSource = (
+  filePath: string | null,
+  projectRootPath: string | null
+) => {
+  if (!filePath || !isImportCompletionEnabled(filePath)) {
+    return null;
+  }
+
+  return async (context: CompletionContext): Promise<CompletionResult | null> => {
+    const match = getImportPathMatch(context);
+    if (!match) {
+      return null;
+    }
+
+    const { value, from } = match;
+    const isRelative = value.startsWith(".") || value.startsWith("/");
+
+    if (isRelative) {
+      const options = await getRelativePathCompletions(filePath, value);
+      if (options.length === 0) {
+        return null;
+      }
+      return {
+        from,
+        options,
+        validFor: /^[^"'`]*$/,
+      };
+    }
+
+    if (!projectRootPath) {
+      return null;
+    }
+
+    const options = await getPackageCompletions(projectRootPath, value);
+    if (options.length === 0) {
+      return null;
+    }
+
+    return {
+      from,
+      options,
+      validFor: /^[^"'`]*$/,
+    };
+  };
+};
+
+const buildCompletionExtensions = (filePath: string | null, projectRootPath: string | null) => {
+  const sources = [completeAnyWord];
+  const importSource = createImportPathCompletionSource(filePath, projectRootPath);
+  if (importSource) {
+    sources.unshift(importSource);
+  }
+  return [autocompletion({ override: sources })];
+};
+
 function CodeEditor({
   filePath,
   content,
   editorTheme,
+  projectRootPath,
   isReadOnly,
   onChange,
   onSave,
@@ -237,6 +540,7 @@ function CodeEditor({
   filePath: string | null;
   content: string;
   editorTheme: EditorThemeId;
+  projectRootPath: string | null;
   isReadOnly: boolean;
   onChange: (next: string) => void;
   onSave: () => void;
@@ -251,6 +555,10 @@ function CodeEditor({
   const themeExtensions = useMemo(
     () => themeExtensionsById[editorTheme] ?? themeExtensionsById[DEFAULT_EDITOR_THEME],
     [editorTheme]
+  );
+  const completionExtensions = useMemo(
+    () => buildCompletionExtensions(filePath, projectRootPath),
+    [filePath, projectRootPath]
   );
 
   useEffect(() => {
@@ -282,6 +590,7 @@ function CodeEditor({
         baseTheme,
         ...themeExtensions,
         ...languageExtensions,
+        ...completionExtensions,
         ...(isReadOnly ? [EditorView.editable.of(false)] : []),
         EditorView.updateListener.of(update => {
           if (update.docChanged) {
@@ -316,7 +625,7 @@ function CodeEditor({
       viewRef.current?.destroy();
       viewRef.current = null;
     };
-  }, [filePath, isReadOnly, languageExtensions, themeExtensions]);
+  }, [filePath, isReadOnly, languageExtensions, themeExtensions, completionExtensions]);
 
   useEffect(() => {
     const view = viewRef.current;
@@ -423,6 +732,7 @@ function DiffViewer({
 function QuickEditDrawer({
   isOpen,
   filePath,
+  projectRootPath = null,
   content,
   editorTheme = DEFAULT_EDITOR_THEME,
   diff = null,
@@ -606,6 +916,7 @@ function QuickEditDrawer({
                     filePath={filePath}
                     content={content}
                     editorTheme={editorTheme}
+                    projectRootPath={projectRootPath}
                     isReadOnly={!canEdit}
                     onChange={onChange}
                     onSave={onSave}

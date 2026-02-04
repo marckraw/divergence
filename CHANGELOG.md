@@ -1,5 +1,35 @@
 # divergence
 
+## 0.2.6
+
+### Patch Changes
+
+- 5d45394: Add quick editor autocomplete for words and import paths.
+
+## 0.2.5
+
+### Patch Changes
+
+- 40e7a5e: Fix Cmd+T to open the New Divergence modal for the active project.
+
+## 0.2.4
+
+### Patch Changes
+
+- e595394: code signing
+
+## 0.2.3
+
+### Patch Changes
+
+- 86ae3a2: update deps again to release
+
+## 0.2.2
+
+### Patch Changes
+
+- 159bc1d: fix release again
+
 ## 0.2.1
 
 ### Patch Changes
