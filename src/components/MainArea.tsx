@@ -7,6 +7,7 @@ import FileExplorer from "./FileExplorer";
 import ChangesPanel from "./ChangesPanel";
 import TmuxPanel from "./TmuxPanel";
 import QuickEditDrawer from "./QuickEditDrawer";
+import FileQuickSwitcher from "./FileQuickSwitcher";
 import type { TerminalSession, SplitOrientation, Project, Divergence, GitChangeEntry, ChangesMode } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { buildSplitTmuxSessionName } from "../lib/tmux";
@@ -34,6 +35,8 @@ interface MainAreaProps {
   divergencesByProject: Map<number, Divergence[]>;
   projectsLoading: boolean;
   divergencesLoading: boolean;
+  showFileQuickSwitcher: boolean;
+  onCloseFileQuickSwitcher: () => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
 }
@@ -58,6 +61,8 @@ function MainArea({
   divergencesByProject,
   projectsLoading,
   divergencesLoading,
+  showFileQuickSwitcher,
+  onCloseFileQuickSwitcher,
   isSidebarOpen,
   onToggleSidebar,
 }: MainAreaProps) {
@@ -739,6 +744,18 @@ function MainArea({
         onSave={handleSaveFile}
         onClose={handleCloseDrawer}
       />
+      <AnimatePresence>
+        {showFileQuickSwitcher && activeRootPath && (
+          <FileQuickSwitcher
+            rootPath={activeRootPath}
+            onSelect={(path) => {
+              handleOpenFile(path);
+              onCloseFileQuickSwitcher();
+            }}
+            onClose={onCloseFileQuickSwitcher}
+          />
+        )}
+      </AnimatePresence>
     </main>
   );
 }
