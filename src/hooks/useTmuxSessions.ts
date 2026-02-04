@@ -113,6 +113,7 @@ export function useTmuxSessions(
 
   const killSession = useCallback(
     async (name: string) => {
+      setLoading(true);
       setError(null);
       try {
         await invoke("kill_tmux_session", { sessionName: name });
@@ -135,6 +136,7 @@ export function useTmuxSessions(
       .filter((s) => s.ownership.kind === "orphan")
       .map((s) => s.name);
     if (orphanNames.length === 0) return;
+    setLoading(true);
     setError(null);
     try {
       await invoke("kill_all_tmux_sessions", { sessionNames: orphanNames });
@@ -150,6 +152,7 @@ export function useTmuxSessions(
   const killAll = useCallback(async () => {
     const allNames = sessions.map((s) => s.name);
     if (allNames.length === 0) return;
+    setLoading(true);
     setError(null);
     try {
       await invoke("kill_all_tmux_sessions", { sessionNames: allNames });
