@@ -1,5 +1,23 @@
 # divergence
 
+## 0.5.0
+
+### Minor Changes
+
+- e1b4d75: Add Branch Changes mode to the Changes Panel that compares the current branch against its base branch (e.g., origin/main), showing all files changed by the branch.
+
+## 0.4.3
+
+### Patch Changes
+
+- 9ba508d: Add a toggleable sidebar with Cmd+B shortcut and UI controls.
+
+## 0.4.2
+
+### Patch Changes
+
+- b9b7ae5: Fix tmux session discovery in release builds by using a login-shell PATH.
+
 ## 0.4.1
 
 ### Patch Changes

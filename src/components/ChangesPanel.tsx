@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { GitChangeEntry, GitChangeStatus } from "../types";
+import type { ChangesMode, GitChangeEntry, GitChangeStatus } from "../types";
+
+interface BranchChangesResponse {
+  base_ref: string | null;
+  changes: GitChangeEntry[];
+}
 
 interface ChangesPanelProps {
   rootPath: string | null;
   activeFilePath?: string | null;
+  mode: ChangesMode;
+  onModeChange: (mode: ChangesMode) => void;
   onOpenChange: (entry: GitChangeEntry) => void;
 }
 
@@ -32,10 +39,11 @@ function getRelativePath(rootPath: string, absolutePath: string) {
   return relative;
 }
 
-function ChangesPanel({ rootPath, activeFilePath, onOpenChange }: ChangesPanelProps) {
+function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChange }: ChangesPanelProps) {
   const [changes, setChanges] = useState<GitChangeEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [baseRef, setBaseRef] = useState<string | null>(null);
 
   const activeRelative = useMemo(() => {
     if (!rootPath || !activeFilePath) return null;
@@ -46,14 +54,23 @@ function ChangesPanel({ rootPath, activeFilePath, onOpenChange }: ChangesPanelPr
     if (!rootPath) {
       setChanges([]);
       setError(null);
+      setBaseRef(null);
       return;
     }
 
     try {
       setLoading(true);
-      const result = await invoke<GitChangeEntry[]>("list_git_changes", { path: rootPath });
-      const sorted = [...result].sort((a, b) => a.path.localeCompare(b.path));
-      setChanges(sorted);
+      if (mode === "branch") {
+        const result = await invoke<BranchChangesResponse>("list_branch_changes", { path: rootPath });
+        const sorted = [...result.changes].sort((a, b) => a.path.localeCompare(b.path));
+        setChanges(sorted);
+        setBaseRef(result.base_ref);
+      } else {
+        const result = await invoke<GitChangeEntry[]>("list_git_changes", { path: rootPath });
+        const sorted = [...result].sort((a, b) => a.path.localeCompare(b.path));
+        setChanges(sorted);
+        setBaseRef(null);
+      }
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load changes.";
@@ -61,7 +78,7 @@ function ChangesPanel({ rootPath, activeFilePath, onOpenChange }: ChangesPanelPr
     } finally {
       setLoading(false);
     }
-  }, [rootPath]);
+  }, [rootPath, mode]);
 
   useEffect(() => {
     loadChanges();
@@ -86,7 +103,32 @@ function ChangesPanel({ rootPath, activeFilePath, onOpenChange }: ChangesPanelPr
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center justify-between px-3 py-2 border-b border-surface">
-        <div className="text-xs uppercase text-subtext font-medium">Changes</div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded bg-surface text-xs">
+            <button
+              type="button"
+              className={`px-2 py-1 rounded transition-colors ${
+                mode === "working"
+                  ? "bg-accent text-white"
+                  : "text-subtext hover:text-text"
+              }`}
+              onClick={() => onModeChange("working")}
+            >
+              Working
+            </button>
+            <button
+              type="button"
+              className={`px-2 py-1 rounded transition-colors ${
+                mode === "branch"
+                  ? "bg-accent text-white"
+                  : "text-subtext hover:text-text"
+              }`}
+              onClick={() => onModeChange("branch")}
+            >
+              Branch
+            </button>
+          </div>
+        </div>
         <button
           type="button"
           className="text-xs text-subtext hover:text-text"
@@ -96,6 +138,17 @@ function ChangesPanel({ rootPath, activeFilePath, onOpenChange }: ChangesPanelPr
           {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
+      {mode === "branch" && (
+        <div className="px-3 py-1.5 border-b border-surface">
+          {baseRef ? (
+            <span className="text-[10px] text-subtext">
+              vs <span className="text-text font-medium">{baseRef}</span>
+            </span>
+          ) : (
+            <span className="text-[10px] text-subtext">No base branch detected</span>
+          )}
+        </div>
+      )}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
         {error && (
           <div className="px-2 py-2 text-xs text-red bg-red/10 border border-red/30 rounded">
@@ -104,7 +157,9 @@ function ChangesPanel({ rootPath, activeFilePath, onOpenChange }: ChangesPanelPr
         )}
         {!error && !loading && changes.length === 0 && (
           <div className="px-2 py-8 text-center text-xs text-subtext">
-            No changes yet.
+            {mode === "branch" && !baseRef
+              ? "No base branch detected."
+              : "No changes yet."}
           </div>
         )}
         {changes.map((entry) => {
@@ -132,11 +187,13 @@ function ChangesPanel({ rootPath, activeFilePath, onOpenChange }: ChangesPanelPr
                 ) : (
                   <div className="text-xs text-text truncate">{entry.path}</div>
                 )}
-                <div className="text-[10px] text-subtext/70 mt-0.5 flex items-center gap-1">
-                  {entry.staged && <span className="px-1 rounded bg-surface">staged</span>}
-                  {entry.unstaged && <span className="px-1 rounded bg-surface">unstaged</span>}
-                  {entry.untracked && <span className="px-1 rounded bg-surface">untracked</span>}
-                </div>
+                {mode === "working" && (
+                  <div className="text-[10px] text-subtext/70 mt-0.5 flex items-center gap-1">
+                    {entry.staged && <span className="px-1 rounded bg-surface">staged</span>}
+                    {entry.unstaged && <span className="px-1 rounded bg-surface">unstaged</span>}
+                    {entry.untracked && <span className="px-1 rounded bg-surface">untracked</span>}
+                  </div>
+                )}
               </div>
             </button>
           );

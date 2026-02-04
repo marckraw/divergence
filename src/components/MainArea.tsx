@@ -8,7 +8,7 @@ import ChangesPanel from "./ChangesPanel";
 import TmuxPanel from "./TmuxPanel";
 import QuickEditDrawer from "./QuickEditDrawer";
 import FileQuickSwitcher from "./FileQuickSwitcher";
-import type { TerminalSession, SplitOrientation, Project, Divergence, GitChangeEntry } from "../types";
+import type { TerminalSession, SplitOrientation, Project, Divergence, GitChangeEntry, ChangesMode } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { buildSplitTmuxSessionName } from "../lib/tmux";
 import type { EditorThemeId } from "../lib/editorThemes";
@@ -37,6 +37,8 @@ interface MainAreaProps {
   divergencesLoading: boolean;
   showFileQuickSwitcher: boolean;
   onCloseFileQuickSwitcher: () => void;
+  isSidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
 function MainArea({
@@ -61,6 +63,8 @@ function MainArea({
   divergencesLoading,
   showFileQuickSwitcher,
   onCloseFileQuickSwitcher,
+  isSidebarOpen,
+  onToggleSidebar,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -95,6 +99,7 @@ function MainArea({
   const [diffError, setDiffError] = useState<string | null>(null);
   const [drawerTab, setDrawerTab] = useState<"diff" | "edit">("edit");
   const [allowEdit, setAllowEdit] = useState(true);
+  const [changesMode, setChangesMode] = useState<ChangesMode>("working");
 
   const isDrawerOpen = Boolean(openFilePath);
   const isDirty = openFileContent !== openFileInitial;
@@ -188,37 +193,49 @@ function MainArea({
     const isDeleted = entry.status === "D";
 
     setDrawerTab("diff");
-    setAllowEdit(!isDeleted);
+    setAllowEdit(!isDeleted && changesMode === "working");
     setOpenDiff(null);
     setDiffLoading(true);
     setDiffError(null);
 
-    if (isDeleted) {
-      setOpenFilePath(absolutePath);
-      setOpenFileContent("");
-      setOpenFileInitial("");
-      setFileLoadError(null);
-      setFileSaveError(null);
-      setIsReadOnly(true);
-      setLargeFileWarning(null);
-      setIsLoadingFile(false);
+    if (isDeleted || changesMode === "branch") {
+      if (isDeleted) {
+        setOpenFilePath(absolutePath);
+        setOpenFileContent("");
+        setOpenFileInitial("");
+        setFileLoadError(null);
+        setFileSaveError(null);
+        setIsReadOnly(true);
+        setLargeFileWarning(null);
+        setIsLoadingFile(false);
+      } else {
+        await handleOpenFile(absolutePath, { resetDiff: false });
+      }
     } else {
       await handleOpenFile(absolutePath, { resetDiff: false });
     }
 
     try {
-      const diff = await invoke<{ diff: string; isBinary: boolean }>("get_git_diff", {
-        path: activeRootPath,
-        filePath: absolutePath,
-        mode: "working",
-      });
-      setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
+      if (changesMode === "branch") {
+        const diff = await invoke<{ diff: string; isBinary: boolean }>("get_branch_diff", {
+          path: activeRootPath,
+          filePath: absolutePath,
+        });
+        setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
+      } else {
+        const diff = await invoke<{ diff: string; isBinary: boolean }>("get_git_diff", {
+          path: activeRootPath,
+          filePath: absolutePath,
+          mode: "working",
+        });
+        setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
+      }
     } catch (err) {
       setDiffError(err instanceof Error ? err.message : "Failed to load diff.");
     } finally {
       setDiffLoading(false);
     }
-  }, [activeRootPath, handleOpenFile, joinPath]);
+  }, [activeRootPath, handleOpenFile, joinPath, changesMode]);
 
   const handleCloseDrawer = useCallback(() => {
     if (isDirty) {
@@ -378,6 +395,34 @@ function MainArea({
     <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
       {/* Tab bar */}
       <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="flex items-center justify-center w-8 h-8 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 transition-colors"
+          title={isSidebarOpen ? "Hide sidebar (Cmd+B)" : "Show sidebar (Cmd+B)"}
+          aria-pressed={isSidebarOpen}
+          aria-label="Toggle sidebar"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5v14"
+            />
+          </svg>
+        </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
           {sessionList.length === 0 ? (
@@ -623,6 +668,8 @@ function MainArea({
                       <ChangesPanel
                         rootPath={activeRootPath}
                         activeFilePath={openFilePath}
+                        mode={changesMode}
+                        onModeChange={setChangesMode}
                         onOpenChange={handleOpenChange}
                       />
                     </motion.div>

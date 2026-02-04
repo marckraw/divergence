@@ -231,6 +231,12 @@ pub struct GitDiffResponse {
     pub is_binary: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct BranchChangesResponse {
+    pub base_ref: Option<String>,
+    pub changes: Vec<GitChangeEntry>,
+}
+
 fn value_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
     let mut current = value;
     for key in path {
@@ -538,4 +544,47 @@ pub async fn list_project_files(root_path: String) -> Result<FileListResult, Str
     files.sort();
 
     Ok(FileListResult { files, truncated })
+}
+
+#[tauri::command]
+pub async fn list_branch_changes(path: String) -> Result<BranchChangesResponse, String> {
+    let repo_path = PathBuf::from(&path);
+    if !git::is_git_repo(&repo_path) {
+        return Err("Path is not a git repository".to_string());
+    }
+    let result = git::list_branch_changes(&repo_path)?;
+
+    Ok(BranchChangesResponse {
+        base_ref: result.base_ref,
+        changes: result
+            .changes
+            .into_iter()
+            .map(|change| GitChangeEntry {
+                path: change.path,
+                old_path: change.old_path,
+                status: change.status.to_string(),
+                staged: change.staged,
+                unstaged: change.unstaged,
+                untracked: change.untracked,
+            })
+            .collect(),
+    })
+}
+
+#[tauri::command]
+pub async fn get_branch_diff(
+    path: String,
+    file_path: String,
+) -> Result<GitDiffResponse, String> {
+    let repo_path = PathBuf::from(&path);
+    if !git::is_git_repo(&repo_path) {
+        return Err("Path is not a git repository".to_string());
+    }
+    let file_path = PathBuf::from(&file_path);
+    let diff = git::get_branch_diff(&repo_path, &file_path)?;
+
+    Ok(GitDiffResponse {
+        diff: diff.diff,
+        is_binary: diff.is_binary,
+    })
 }
