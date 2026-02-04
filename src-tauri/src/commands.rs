@@ -214,6 +214,22 @@ pub struct BranchStatus {
     pub diverged: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct GitChangeEntry {
+    pub path: String,
+    pub old_path: Option<String>,
+    pub status: String,
+    pub staged: bool,
+    pub unstaged: bool,
+    pub untracked: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GitDiffResponse {
+    pub diff: String,
+    pub is_binary: bool,
+}
+
 fn value_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
     let mut current = value;
     for key in path {
@@ -342,6 +358,50 @@ pub async fn check_branch_status(path: String, branch: String) -> Result<BranchS
     let repo_path = PathBuf::from(&path);
     let (merged, diverged) = git::get_branch_status(&repo_path, &branch)?;
     Ok(BranchStatus { merged, diverged })
+}
+
+#[tauri::command]
+pub async fn list_git_changes(path: String) -> Result<Vec<GitChangeEntry>, String> {
+    let repo_path = PathBuf::from(&path);
+    if !git::is_git_repo(&repo_path) {
+        return Err("Path is not a git repository".to_string());
+    }
+    let changes = git::list_changes(&repo_path)?;
+
+    Ok(changes
+        .into_iter()
+        .map(|change| GitChangeEntry {
+            path: change.path,
+            old_path: change.old_path,
+            status: change.status.to_string(),
+            staged: change.staged,
+            unstaged: change.unstaged,
+            untracked: change.untracked,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn get_git_diff(
+    path: String,
+    file_path: String,
+    mode: String,
+) -> Result<GitDiffResponse, String> {
+    let repo_path = PathBuf::from(&path);
+    if !git::is_git_repo(&repo_path) {
+        return Err("Path is not a git repository".to_string());
+    }
+    let file_path = PathBuf::from(&file_path);
+    let diff_mode = match mode.as_str() {
+        "staged" => git::DiffMode::Staged,
+        _ => git::DiffMode::Working,
+    };
+    let diff = git::get_diff(&repo_path, &file_path, diff_mode)?;
+
+    Ok(GitDiffResponse {
+        diff: diff.diff,
+        is_binary: diff.is_binary,
+    })
 }
 
 #[tauri::command]

@@ -15,6 +15,17 @@ export interface Divergence {
   has_diverged: number;
 }
 
+export type GitChangeStatus = "A" | "M" | "D" | "R" | "C" | "U" | "?";
+
+export interface GitChangeEntry {
+  path: string;
+  old_path?: string;
+  status: GitChangeStatus;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+}
+
 export interface TerminalSession {
   id: string;
   type: "project" | "divergence";

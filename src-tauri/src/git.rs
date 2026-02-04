@@ -3,6 +3,28 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::io::ErrorKind;
 
+#[derive(Debug, Clone)]
+pub struct GitChange {
+    pub path: String,
+    pub old_path: Option<String>,
+    pub status: char,
+    pub staged: bool,
+    pub unstaged: bool,
+    pub untracked: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct GitDiff {
+    pub diff: String,
+    pub is_binary: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DiffMode {
+    Working,
+    Staged,
+}
+
 pub fn clone_repo(source: &Path, destination: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args(["clone", "--local"])
@@ -437,4 +459,184 @@ pub fn get_remote_url(repo_path: &Path) -> Result<Option<String>, String> {
 
 pub fn is_git_repo(path: &Path) -> bool {
     path.join(".git").exists()
+}
+
+pub fn list_changes(repo_path: &Path) -> Result<Vec<GitChange>, String> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain=v2", "-z"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to list git changes: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to list git changes: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let parts: Vec<&[u8]> = output
+        .stdout
+        .split(|b| *b == 0u8)
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    let mut changes = Vec::new();
+    let mut i = 0;
+    while i < parts.len() {
+        let part = String::from_utf8_lossy(parts[i]);
+        let mut chars = part.chars();
+        let tag = chars.next().unwrap_or('\0');
+
+        match tag {
+            '1' => {
+                let fields: Vec<&str> = part.splitn(9, ' ').collect();
+                if fields.len() < 9 {
+                    i += 1;
+                    continue;
+                }
+                let xy = fields[1];
+                let path = fields[8];
+                changes.push(change_from_xy(path, None, xy));
+            }
+            '2' => {
+                let fields: Vec<&str> = part.splitn(10, ' ').collect();
+                if fields.len() < 10 {
+                    i += 1;
+                    continue;
+                }
+                let xy = fields[1];
+                let path = fields[9];
+                let old_path = parts
+                    .get(i + 1)
+                    .map(|p| String::from_utf8_lossy(p).to_string());
+                changes.push(change_from_xy(path, old_path, xy));
+                i += 1;
+            }
+            'u' => {
+                let fields: Vec<&str> = part.splitn(11, ' ').collect();
+                let path = fields.last().copied().unwrap_or_default();
+                changes.push(GitChange {
+                    path: path.to_string(),
+                    old_path: None,
+                    status: 'U',
+                    staged: true,
+                    unstaged: true,
+                    untracked: false,
+                });
+            }
+            '?' => {
+                let path = part.strip_prefix("? ").unwrap_or("");
+                changes.push(GitChange {
+                    path: path.to_string(),
+                    old_path: None,
+                    status: '?',
+                    staged: false,
+                    unstaged: false,
+                    untracked: true,
+                });
+            }
+            '!' => {
+                // ignored; skip
+            }
+            _ => {
+                // Unknown or unexpected entry; skip
+            }
+        }
+
+        i += 1;
+    }
+
+    Ok(changes)
+}
+
+pub fn get_diff(repo_path: &Path, file_path: &Path, mode: DiffMode) -> Result<GitDiff, String> {
+    let rel_path = file_path.strip_prefix(repo_path).unwrap_or(file_path);
+    let rel_string = rel_path.to_string_lossy().to_string();
+
+    let diff = run_diff(repo_path, &rel_string, mode)?;
+    let mut diff_text = diff;
+
+    if diff_text.is_empty() && matches!(mode, DiffMode::Working) && is_untracked(repo_path, &rel_string)
+    {
+        diff_text = run_untracked_diff(repo_path, &rel_string)?;
+    }
+
+    let is_binary = diff_text.contains("Binary files") || diff_text.contains("GIT binary patch");
+
+    Ok(GitDiff {
+        diff: diff_text,
+        is_binary,
+    })
+}
+
+fn change_from_xy(path: &str, old_path: Option<String>, xy: &str) -> GitChange {
+    let mut chars = xy.chars();
+    let staged_status = chars.next().unwrap_or('.');
+    let unstaged_status = chars.next().unwrap_or('.');
+
+    let staged = staged_status != '.';
+    let unstaged = unstaged_status != '.';
+    let status = if staged_status != '.' {
+        staged_status
+    } else if unstaged_status != '.' {
+        unstaged_status
+    } else {
+        '?'
+    };
+
+    GitChange {
+        path: path.to_string(),
+        old_path,
+        status,
+        staged,
+        unstaged,
+        untracked: false,
+    }
+}
+
+fn run_diff(repo_path: &Path, rel_path: &str, mode: DiffMode) -> Result<String, String> {
+    let mut args = vec!["diff", "--no-color", "--patch"];
+    if matches!(mode, DiffMode::Staged) {
+        args.push("--cached");
+    }
+    args.push("--");
+    args.push(rel_path);
+
+    run_git_diff(repo_path, &args)
+}
+
+fn run_untracked_diff(repo_path: &Path, rel_path: &str) -> Result<String, String> {
+    let args = ["diff", "--no-color", "--patch", "--no-index", "--", "/dev/null", rel_path];
+    run_git_diff(repo_path, &args)
+}
+
+fn run_git_diff(repo_path: &Path, args: &[&str]) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git diff: {}", e))?;
+
+    let code = output.status.code().unwrap_or(0);
+    if code > 1 {
+        return Err(format!(
+            "Git diff failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn is_untracked(repo_path: &Path, rel_path: &str) -> bool {
+    let status = Command::new("git")
+        .args(["ls-files", "--error-unmatch", "--", rel_path])
+        .current_dir(repo_path)
+        .status();
+
+    match status {
+        Ok(result) => !result.success(),
+        Err(_) => false,
+    }
 }

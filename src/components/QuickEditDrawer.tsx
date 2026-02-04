@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   autocompletion,
   completeAnyWord,
@@ -39,6 +39,11 @@ interface QuickEditDrawerProps {
   projectRootPath?: string | null;
   content: string;
   editorTheme?: EditorThemeId;
+  diff?: { text: string; isBinary: boolean } | null;
+  diffLoading?: boolean;
+  diffError?: string | null;
+  defaultTab?: "diff" | "edit";
+  allowEdit?: boolean;
   isDirty: boolean;
   isSaving: boolean;
   isLoading: boolean;
@@ -638,12 +643,103 @@ function CodeEditor({
   return <div ref={containerRef} className="h-full w-full" />;
 }
 
+function DiffViewer({
+  diff,
+  isBinary,
+  isLoading,
+  error,
+}: {
+  diff: string | null;
+  isBinary: boolean;
+  isLoading: boolean;
+  error: string | null;
+}) {
+  const lines = useMemo(() => diff?.split("\n") ?? [], [diff]);
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center text-sm text-subtext">
+        <div className="flex items-center gap-2">
+          <span className="spinner" />
+          Loading diff...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center text-sm text-red">
+        {error}
+      </div>
+    );
+  }
+
+  if (isBinary) {
+    return (
+      <div className="h-full flex items-center justify-center text-sm text-subtext">
+        Binary file diff is not available.
+      </div>
+    );
+  }
+
+  if (!diff) {
+    return (
+      <div className="h-full flex items-center justify-center text-sm text-subtext">
+        No diff available.
+      </div>
+    );
+  }
+
+  const getLineClass = (line: string) => {
+    if (
+      line.startsWith("diff ")
+      || line.startsWith("index ")
+      || line.startsWith("--- ")
+      || line.startsWith("+++ ")
+    ) {
+      return "text-subtext/70";
+    }
+    if (line.startsWith("@@")) {
+      return "text-accent";
+    }
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      return "text-green bg-green/10";
+    }
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      return "text-red bg-red/10";
+    }
+    if (line.startsWith("\\ No newline")) {
+      return "text-subtext/70";
+    }
+    return "text-subtext/80";
+  };
+
+  return (
+    <div className="h-full w-full overflow-auto font-mono text-[11px] leading-5">
+      {lines.map((line, index) => (
+        <div
+          key={`${index}-${line}`}
+          className={`px-3 whitespace-pre ${getLineClass(line)}`}
+        >
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function QuickEditDrawer({
   isOpen,
   filePath,
   projectRootPath = null,
   content,
   editorTheme = DEFAULT_EDITOR_THEME,
+  diff = null,
+  diffLoading = false,
+  diffError = null,
+  defaultTab = "edit",
+  allowEdit = true,
   isDirty,
   isSaving,
   isLoading,
@@ -656,6 +752,17 @@ function QuickEditDrawer({
   onClose,
 }: QuickEditDrawerProps) {
   const shouldReduceMotion = useReducedMotion();
+  const [activeTab, setActiveTab] = useState<"diff" | "edit">(defaultTab);
+  const showTabs = diff !== null || diffLoading || diffError !== null;
+  const canEdit = allowEdit && !isReadOnly;
+
+  useEffect(() => {
+    if (!allowEdit && defaultTab === "edit") {
+      setActiveTab("diff");
+      return;
+    }
+    setActiveTab(defaultTab);
+  }, [defaultTab, filePath, isOpen, allowEdit]);
   const drawerVariants = useMemo(
     () => getSlideUpVariants(shouldReduceMotion),
     [shouldReduceMotion]
@@ -669,6 +776,7 @@ function QuickEditDrawer({
     ? FAST_EASE_OUT
     : { type: "spring", stiffness: 240, damping: 30, mass: 0.8 };
   const contentKey = filePath ?? "empty";
+  const contentVariantKey = `${contentKey}-${activeTab}`;
 
   return (
     <AnimatePresence>
@@ -698,14 +806,16 @@ function QuickEditDrawer({
                   Read-only
                 </span>
               )}
-              <button
-                type="button"
-                className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
-                onClick={onSave}
-                disabled={isSaving || isLoading || isReadOnly || !filePath}
-              >
-                {isSaving ? "Saving..." : "Save"}
-              </button>
+              {allowEdit && (
+                <button
+                  type="button"
+                  className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 disabled:opacity-40"
+                  onClick={onSave}
+                  disabled={isSaving || isLoading || isReadOnly || !filePath}
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
+              )}
               <button
                 type="button"
                 className="text-xs px-2 py-1 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50"
@@ -715,6 +825,34 @@ function QuickEditDrawer({
               </button>
             </div>
           </div>
+          {showTabs && (
+            <div className="flex items-center border-b border-surface text-xs">
+              <button
+                type="button"
+                className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                  activeTab === "diff"
+                    ? "text-text border-b-2 border-accent"
+                    : "text-subtext hover:text-text"
+                }`}
+                onClick={() => setActiveTab("diff")}
+              >
+                Diff
+              </button>
+              {allowEdit && (
+                <button
+                  type="button"
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    activeTab === "edit"
+                      ? "text-text border-b-2 border-accent"
+                      : "text-subtext hover:text-text"
+                  }`}
+                  onClick={() => setActiveTab("edit")}
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+          )}
           {largeFileWarning && (
             <div className="px-4 py-2 text-[11px] text-yellow-200/90 bg-yellow-400/10 border-b border-yellow-400/20">
               {largeFileWarning}
@@ -732,7 +870,24 @@ function QuickEditDrawer({
           )}
           <div className="flex-1 min-h-0">
             <AnimatePresence mode="wait" initial={false}>
-              {isLoading ? (
+              {activeTab === "diff" && showTabs ? (
+                <motion.div
+                  key="diff"
+                  className="h-full w-full"
+                  variants={contentVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={contentTransition}
+                >
+                  <DiffViewer
+                    diff={diff?.text ?? null}
+                    isBinary={diff?.isBinary ?? false}
+                    isLoading={diffLoading}
+                    error={diffError}
+                  />
+                </motion.div>
+              ) : isLoading ? (
                 <motion.div
                   key="loading"
                   className="h-full flex items-center justify-center text-sm text-subtext"
@@ -749,7 +904,7 @@ function QuickEditDrawer({
                 </motion.div>
               ) : (
                 <motion.div
-                  key={contentKey}
+                  key={contentVariantKey}
                   className="h-full w-full"
                   variants={contentVariants}
                   initial="hidden"
@@ -762,7 +917,7 @@ function QuickEditDrawer({
                     content={content}
                     editorTheme={editorTheme}
                     projectRootPath={projectRootPath}
-                    isReadOnly={isReadOnly}
+                    isReadOnly={!canEdit}
                     onChange={onChange}
                     onSave={onSave}
                     onClose={onClose}
