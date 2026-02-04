@@ -321,6 +321,10 @@ function Settings({ onClose, updater }: SettingsProps) {
             </label>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
+                <span className="text-subtext">Toggle Sidebar</span>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ B</kbd>
+              </div>
+              <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Quick Switcher</span>
                 <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ K</kbd>
               </div>

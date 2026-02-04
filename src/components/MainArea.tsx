@@ -34,6 +34,8 @@ interface MainAreaProps {
   divergencesByProject: Map<number, Divergence[]>;
   projectsLoading: boolean;
   divergencesLoading: boolean;
+  isSidebarOpen: boolean;
+  onToggleSidebar: () => void;
 }
 
 function MainArea({
@@ -56,6 +58,8 @@ function MainArea({
   divergencesByProject,
   projectsLoading,
   divergencesLoading,
+  isSidebarOpen,
+  onToggleSidebar,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -373,6 +377,34 @@ function MainArea({
     <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
       {/* Tab bar */}
       <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="flex items-center justify-center w-8 h-8 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 transition-colors"
+          title={isSidebarOpen ? "Hide sidebar (Cmd+B)" : "Show sidebar (Cmd+B)"}
+          aria-pressed={isSidebarOpen}
+          aria-label="Toggle sidebar"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"
+            />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5v14"
+            />
+          </svg>
+        </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
           {sessionList.length === 0 ? (
