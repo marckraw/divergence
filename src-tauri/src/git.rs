@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::io::ErrorKind;
+use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]
 pub struct GitChange {
@@ -104,6 +105,10 @@ pub fn set_origin_to_source_remote(source: &Path, destination: &Path) -> Result<
 }
 
 pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
+    if !session_name.starts_with("divergence-") {
+        return Ok(());
+    }
+
     let output = Command::new("tmux")
         .args(["kill-session", "-t", session_name])
         .output();
@@ -131,6 +136,76 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
             Err(format!("Failed to execute tmux: {}", err))
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct TmuxSessionInfo {
+    pub name: String,
+    pub created: String,
+    pub attached: bool,
+    pub window_count: u32,
+    pub activity: String,
+}
+
+fn epoch_to_iso8601(epoch: &str) -> String {
+    epoch
+        .trim()
+        .parse::<i64>()
+        .ok()
+        .and_then(|secs| DateTime::from_timestamp(secs, 0))
+        .map(|dt: DateTime<Utc>| dt.to_rfc3339())
+        .unwrap_or_default()
+}
+
+pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
+    let output = Command::new("tmux")
+        .args([
+            "list-sessions",
+            "-F",
+            "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
+        ])
+        .output();
+
+    let result = match output {
+        Ok(r) => r,
+        Err(err) => {
+            if err.kind() == ErrorKind::NotFound {
+                return Ok(vec![]);
+            }
+            return Err(format!("Failed to execute tmux: {}", err));
+        }
+    };
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        if stderr.contains("no server running") || stderr.contains("failed to connect to server") {
+            return Ok(vec![]);
+        }
+        return Err(format!("Failed to list tmux sessions: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let mut sessions = Vec::new();
+
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 5 {
+            continue;
+        }
+        let name = parts[0];
+        if !name.starts_with("divergence-") {
+            continue;
+        }
+        sessions.push(TmuxSessionInfo {
+            name: name.to_string(),
+            created: epoch_to_iso8601(parts[1]),
+            attached: parts[2] != "0",
+            window_count: parts[3].trim().parse().unwrap_or(0),
+            activity: epoch_to_iso8601(parts[4]),
+        });
+    }
+
+    Ok(sessions)
 }
 
 fn list_ignored_paths(repo_path: &Path) -> Result<Vec<PathBuf>, String> {

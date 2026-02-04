@@ -28,8 +28,12 @@ const NOTIFY_COOLDOWN_MS = 3000;
 
 function App() {
   const updater = useUpdater(true);
-  const { projects, addProject, removeProject } = useProjects();
-  const { divergencesByProject, refresh: refreshDivergences } = useAllDivergences();
+  const { projects, addProject, removeProject, loading: projectsLoading } = useProjects();
+  const {
+    divergencesByProject,
+    refresh: refreshDivergences,
+    loading: divergencesLoading,
+  } = useAllDivergences();
   const { settingsByProjectId, updateProjectSettings } = useProjectSettingsMap(projects);
   const { settings: appSettings } = useAppSettings();
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
@@ -566,6 +570,9 @@ function App() {
         globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
         selectToCopy={selectToCopy}
         editorTheme={editorTheme}
+        divergencesByProject={divergencesByProject}
+        projectsLoading={projectsLoading}
+        divergencesLoading={divergencesLoading}
       />
 
       {/* Quick Switcher */}
