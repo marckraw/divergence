@@ -413,3 +413,37 @@ pub async fn get_divergence_base_path() -> Result<String, String> {
 pub async fn kill_tmux_session(session_name: String) -> Result<(), String> {
     git::kill_tmux_session(&session_name)
 }
+
+#[derive(Debug, Serialize)]
+pub struct TmuxSessionEntry {
+    pub name: String,
+    pub created: String,
+    pub attached: bool,
+    pub window_count: u32,
+    pub activity: String,
+}
+
+#[tauri::command]
+pub async fn list_tmux_sessions() -> Result<Vec<TmuxSessionEntry>, String> {
+    let sessions = git::list_tmux_sessions()?;
+    Ok(sessions
+        .into_iter()
+        .map(|s| TmuxSessionEntry {
+            name: s.name,
+            created: s.created,
+            attached: s.attached,
+            window_count: s.window_count,
+            activity: s.activity,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn kill_all_tmux_sessions(session_names: Vec<String>) -> Result<u32, String> {
+    let mut killed = 0u32;
+    for name in &session_names {
+        git::kill_tmux_session(name)?;
+        killed += 1;
+    }
+    Ok(killed)
+}
