@@ -18,6 +18,8 @@ interface SidebarProps {
   divergencesByProject: Map<number, Divergence[]>;
   sessions: Map<string, TerminalSession>;
   activeSessionId: string | null;
+  createDivergenceFor: Project | null;
+  onCreateDivergenceForChange: (project: Project | null) => void;
   onSelectProject: (project: Project) => void;
   onSelectDivergence: (divergence: Divergence) => void;
   onAddProject: (name: string, path: string) => Promise<void>;
@@ -31,6 +33,8 @@ function Sidebar({
   divergencesByProject,
   sessions,
   activeSessionId,
+  createDivergenceFor,
+  onCreateDivergenceForChange,
   onSelectProject,
   onSelectDivergence,
   onAddProject,
@@ -47,7 +51,6 @@ function Sidebar({
     y: number;
     item: Project | Divergence;
   } | null>(null);
-  const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
   const shouldReduceMotion = useReducedMotion();
   const contextMenuVariants = useMemo(
     () => getPopVariants(shouldReduceMotion, 8, 0.98),
@@ -300,7 +303,7 @@ function Sidebar({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setCreateDivergenceFor(project);
+                          onCreateDivergenceForChange(project);
                         }}
                         className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-subtext hover:text-accent transition-opacity"
                         title="Create Divergence"
@@ -425,7 +428,7 @@ function Sidebar({
                 <button
                   className="w-full px-4 py-2 text-sm text-left text-text hover:bg-sidebar transition-colors"
                   onClick={() => {
-                    setCreateDivergenceFor(contextMenu.item as Project);
+                    onCreateDivergenceForChange(contextMenu.item as Project);
                     closeContextMenu();
                   }}
                 >
@@ -456,7 +459,7 @@ function Sidebar({
         {createDivergenceFor && (
           <CreateDivergenceModal
             project={createDivergenceFor}
-            onClose={() => setCreateDivergenceFor(null)}
+            onClose={() => onCreateDivergenceForChange(null)}
             onCreated={(divergence) => {
               onDivergenceCreated();
               onSelectDivergence(divergence);
