@@ -40,6 +40,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
@@ -122,6 +123,13 @@ function App() {
 
     idleNotifyTimersRef.current.set(sessionId, timeoutId);
   }, [clearIdleNotifyTimer, projectsById]);
+
+  // Reset banner dismiss when a new update or error arrives
+  useEffect(() => {
+    if (updater.status === "available" || updater.status === "error") {
+      setBannerDismissed(false);
+    }
+  }, [updater.status]);
 
   // Merge detection
   useMergeDetection(allDivergences, projectsById, (notification) => {
@@ -584,7 +592,7 @@ function App() {
         {showSettings && (
           <Settings onClose={() => {
             setShowSettings(false);
-          }} />
+          }} updater={updater} />
         )}
       </AnimatePresence>
 
@@ -604,30 +612,46 @@ function App() {
       </AnimatePresence>
 
       {/* Update Banner */}
-      {(updater.status === "available" || updater.status === "downloading") && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white shadow-lg">
-          {updater.status === "available" && (
-            <div className="flex items-center gap-3">
-              <span>Update {updater.version} available</span>
-              <button
-                onClick={updater.downloadAndInstall}
-                className="rounded bg-white px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
-              >
-                Install & Restart
-              </button>
-            </div>
-          )}
-          {updater.status === "downloading" && (
-            <div className="flex items-center gap-3">
-              <span>Downloading update... {updater.progress}%</span>
-              <div className="h-1.5 w-24 overflow-hidden rounded-full bg-blue-400">
-                <div
-                  className="h-full rounded-full bg-white transition-all"
-                  style={{ width: `${updater.progress}%` }}
-                />
-              </div>
-            </div>
-          )}
+      {!bannerDismissed && (updater.status === "available" || updater.status === "downloading" || updater.status === "error") && (
+        <div className={`fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm text-white shadow-lg ${
+          updater.status === "error" ? "bg-red-600" : "bg-blue-600"
+        }`}>
+          <div className="flex items-center gap-3">
+            {updater.status === "available" && (
+              <>
+                <span>Update {updater.version} available</span>
+                <button
+                  onClick={updater.downloadAndInstall}
+                  className="rounded bg-white px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                >
+                  Install & Restart
+                </button>
+              </>
+            )}
+            {updater.status === "downloading" && (
+              <>
+                <span>Downloading update... {updater.progress}%</span>
+                <div className="h-1.5 w-24 overflow-hidden rounded-full bg-blue-400">
+                  <div
+                    className="h-full rounded-full bg-white transition-all"
+                    style={{ width: `${updater.progress}%` }}
+                  />
+                </div>
+              </>
+            )}
+            {updater.status === "error" && (
+              <span>{updater.error ?? "Update check failed"}</span>
+            )}
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="ml-1 rounded p-0.5 hover:bg-white/20"
+              aria-label="Dismiss"
+            >
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
     </div>

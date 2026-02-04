@@ -7,6 +7,7 @@ export type UpdateStatus =
   | "checking"
   | "available"
   | "downloading"
+  | "installed"
   | "error";
 
 interface UpdaterState {
@@ -14,6 +15,7 @@ interface UpdaterState {
   version: string | null;
   progress: number;
   error: string | null;
+  checkForUpdate: () => Promise<void>;
   downloadAndInstall: () => Promise<void>;
 }
 
@@ -24,13 +26,33 @@ export function useUpdater(checkOnMount = false): UpdaterState {
   const [error, setError] = useState<string | null>(null);
   const [update, setUpdate] = useState<Update | null>(null);
 
+  const checkForUpdate = useCallback(async () => {
+    setStatus("checking");
+    setError(null);
+    try {
+      const result = await check();
+
+      if (result) {
+        setUpdate(result);
+        setVersion(result.version);
+        setStatus("available");
+      } else {
+        setStatus("idle");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setStatus("error");
+    }
+  }, []);
+
   useEffect(() => {
     if (!checkOnMount) return;
 
     let cancelled = false;
 
-    async function checkForUpdate() {
+    async function doCheck() {
       setStatus("checking");
+      setError(null);
       try {
         const result = await check();
         if (cancelled) return;
@@ -49,7 +71,7 @@ export function useUpdater(checkOnMount = false): UpdaterState {
       }
     }
 
-    checkForUpdate();
+    doCheck();
     return () => {
       cancelled = true;
     };
@@ -76,6 +98,7 @@ export function useUpdater(checkOnMount = false): UpdaterState {
         }
       });
 
+      setStatus("installed");
       await relaunch();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -83,5 +106,5 @@ export function useUpdater(checkOnMount = false): UpdaterState {
     }
   }, [update]);
 
-  return { status, version, progress, error, downloadAndInstall };
+  return { status, version, progress, error, checkForUpdate, downloadAndInstall };
 }
