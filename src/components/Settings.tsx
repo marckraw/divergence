@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { motion, useReducedMotion } from "framer-motion";
+import type { UpdateStatus } from "../hooks/useUpdater";
 import {
   DEFAULT_APP_SETTINGS,
   normalizeTmuxHistoryLimit,
@@ -15,8 +17,18 @@ import {
 } from "../lib/editorThemes";
 import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
 
+interface UpdaterProp {
+  status: UpdateStatus;
+  version: string | null;
+  progress: number;
+  error: string | null;
+  checkForUpdate: () => Promise<void>;
+  downloadAndInstall: () => Promise<void>;
+}
+
 interface SettingsProps {
   onClose: () => void;
+  updater: UpdaterProp;
 }
 
 interface SettingsState {
@@ -34,9 +46,10 @@ const defaultSettings: SettingsState = {
   divergenceBasePath: "",
 };
 
-function Settings({ onClose }: SettingsProps) {
+function Settings({ onClose, updater }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [loading, setLoading] = useState(true);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const shouldReduceMotion = useReducedMotion();
   const panelVariants = useMemo(
     () => getPopVariants(shouldReduceMotion),
@@ -65,6 +78,10 @@ function Settings({ onClose }: SettingsProps) {
     }
 
     loadSettings();
+  }, []);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
   }, []);
 
   const handleSave = useCallback(() => {
@@ -322,6 +339,59 @@ function Settings({ onClose }: SettingsProps) {
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Previous/Next Tab</span>
                 <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ [ / ]</kbd>
+              </div>
+            </div>
+          </div>
+
+          {/* About / Updates */}
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              About / Updates
+            </label>
+            <div className="space-y-3">
+              {appVersion && (
+                <p className="text-sm text-subtext">
+                  Current version: <span className="text-text font-medium">v{appVersion}</span>
+                </p>
+              )}
+
+              <p className="text-sm text-subtext">
+                {updater.status === "idle" && "Up to date"}
+                {updater.status === "checking" && "Checking for updates..."}
+                {updater.status === "available" && `Update available: v${updater.version}`}
+                {updater.status === "downloading" && `Downloading update... ${updater.progress}%`}
+                {updater.status === "installed" && "Update installed, restarting..."}
+                {updater.status === "error" && (
+                  <span className="text-red-400">{updater.error ?? "Update check failed"}</span>
+                )}
+              </p>
+
+              {updater.status === "downloading" && (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
+                  <div
+                    className="h-full rounded-full bg-accent transition-all"
+                    style={{ width: `${updater.progress}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                {(updater.status === "idle" || updater.status === "error") && (
+                  <button
+                    onClick={updater.checkForUpdate}
+                    className="px-3 py-1.5 text-sm border border-surface rounded hover:bg-surface text-text"
+                  >
+                    Check for Updates
+                  </button>
+                )}
+                {updater.status === "available" && (
+                  <button
+                    onClick={updater.downloadAndInstall}
+                    className="px-3 py-1.5 text-sm bg-accent text-main rounded hover:bg-accent/80"
+                  >
+                    Install & Restart
+                  </button>
+                )}
               </div>
             </div>
           </div>
