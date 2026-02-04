@@ -1,5 +1,11 @@
 # divergence
 
+## 0.6.1
+
+### Patch Changes
+
+- 13dd3b0: Improve tmux session discovery in release builds by resolving the tmux binary path.
+
 ## 0.6.0
 
 ### Minor Changes
