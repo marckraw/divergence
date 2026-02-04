@@ -1,5 +1,11 @@
 # divergence
 
+## 0.4.2
+
+### Patch Changes
+
+- b9b7ae5: Fix tmux session discovery in release builds by using a login-shell PATH.
+
 ## 0.4.1
 
 ### Patch Changes
