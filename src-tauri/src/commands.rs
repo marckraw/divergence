@@ -2,6 +2,7 @@ use crate::db::{get_divergence_dir, get_repos_dir};
 use crate::git;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
@@ -446,4 +447,95 @@ pub async fn kill_all_tmux_sessions(session_names: Vec<String>) -> Result<u32, S
         killed += 1;
     }
     Ok(killed)
+}
+
+#[derive(Debug, Serialize)]
+pub struct FileListResult {
+    pub files: Vec<String>,
+    pub truncated: bool,
+}
+
+#[tauri::command]
+pub async fn list_project_files(root_path: String) -> Result<FileListResult, String> {
+    const MAX_FILES: usize = 10_000;
+
+    let ignore_dirs: HashSet<&str> = [
+        "node_modules",
+        ".git",
+        "target",
+        "dist",
+        "build",
+        ".next",
+        "__pycache__",
+        ".DS_Store",
+        ".cache",
+        ".turbo",
+        ".vercel",
+        ".output",
+        "coverage",
+        ".nyc_output",
+        ".parcel-cache",
+        ".svelte-kit",
+        ".nuxt",
+        ".expo",
+        "vendor",
+    ]
+    .into_iter()
+    .collect();
+
+    let root = PathBuf::from(&root_path);
+    if !root.is_dir() {
+        return Err(format!("Path is not a directory: {}", root_path));
+    }
+
+    let mut files: Vec<String> = Vec::new();
+    let mut truncated = false;
+    let mut stack: Vec<PathBuf> = vec![root.clone()];
+
+    while let Some(dir) = stack.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+
+            if ignore_dirs.contains(name_str.as_ref()) {
+                continue;
+            }
+
+            let path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(ft) => ft,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
+                stack.push(path);
+            } else if file_type.is_file() {
+                if files.len() >= MAX_FILES {
+                    truncated = true;
+                    break;
+                }
+                if let Ok(relative) = path.strip_prefix(&root) {
+                    files.push(relative.to_string_lossy().to_string());
+                }
+            }
+        }
+
+        if truncated {
+            break;
+        }
+    }
+
+    files.sort();
+
+    Ok(FileListResult { files, truncated })
 }

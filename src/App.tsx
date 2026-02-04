@@ -41,6 +41,7 @@ function App() {
   const [splitBySessionId, setSplitBySessionId] = useState<Map<string, { orientation: SplitOrientation }>>(new Map());
   const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
+  const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
@@ -417,6 +418,15 @@ function App() {
       return;
     }
 
+    // File Quick Switcher - Cmd+Shift+O
+    if (isMeta && e.shiftKey && e.key.toLowerCase() === "o") {
+      e.preventDefault();
+      if (activeSessionId) {
+        setShowFileQuickSwitcher(prev => !prev);
+      }
+      return;
+    }
+
     // Settings - Cmd+,
     if (isMeta && e.key === ",") {
       e.preventDefault();
@@ -427,6 +437,7 @@ function App() {
     // Close modal on Escape
     if (e.key === "Escape") {
       setShowQuickSwitcher(false);
+      setShowFileQuickSwitcher(false);
       setShowSettings(false);
       return;
     }
@@ -573,6 +584,8 @@ function App() {
         divergencesByProject={divergencesByProject}
         projectsLoading={projectsLoading}
         divergencesLoading={divergencesLoading}
+        showFileQuickSwitcher={showFileQuickSwitcher}
+        onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
       />
 
       {/* Quick Switcher */}
