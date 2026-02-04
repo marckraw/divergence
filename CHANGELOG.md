@@ -1,5 +1,11 @@
 # divergence
 
+## 0.2.5
+
+### Patch Changes
+
+- 40e7a5e: Fix Cmd+T to open the New Divergence modal for the active project.
+
 ## 0.2.4
 
 ### Patch Changes
