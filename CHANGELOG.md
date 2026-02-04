@@ -1,5 +1,11 @@
 # divergence
 
+## 0.4.0
+
+### Minor Changes
+
+- d876579: Add manual check-for-updates trigger, error visibility, version display in Settings, and dismissible update banner
+
 ## 0.3.0
 
 ### Minor Changes
