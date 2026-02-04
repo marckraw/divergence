@@ -1,5 +1,11 @@
 # divergence
 
+## 0.6.0
+
+### Minor Changes
+
+- bae6381: Add file quick switcher (Cmd+Shift+O) to search and open project files in the editor.
+
 ## 0.5.0
 
 ### Minor Changes
