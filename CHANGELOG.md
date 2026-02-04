@@ -1,5 +1,11 @@
 # divergence
 
+## 0.2.6
+
+### Patch Changes
+
+- 5d45394: Add quick editor autocomplete for words and import paths.
+
 ## 0.2.5
 
 ### Patch Changes
