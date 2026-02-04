@@ -5,8 +5,9 @@ import Terminal from "./Terminal";
 import ProjectSettingsPanel from "./ProjectSettingsPanel";
 import FileExplorer from "./FileExplorer";
 import ChangesPanel from "./ChangesPanel";
+import TmuxPanel from "./TmuxPanel";
 import QuickEditDrawer from "./QuickEditDrawer";
-import type { TerminalSession, SplitOrientation, Project, GitChangeEntry } from "../types";
+import type { TerminalSession, SplitOrientation, Project, Divergence, GitChangeEntry } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { buildSplitTmuxSessionName } from "../lib/tmux";
 import type { EditorThemeId } from "../lib/editorThemes";
@@ -30,6 +31,9 @@ interface MainAreaProps {
   onReconnectSession: (sessionId: string) => void;
   globalTmuxHistoryLimit: number;
   editorTheme: EditorThemeId;
+  divergencesByProject: Map<number, Divergence[]>;
+  projectsLoading: boolean;
+  divergencesLoading: boolean;
 }
 
 function MainArea({
@@ -49,6 +53,9 @@ function MainArea({
   onReconnectSession,
   globalTmuxHistoryLimit,
   editorTheme,
+  divergencesByProject,
+  projectsLoading,
+  divergencesLoading,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -68,7 +75,7 @@ function MainArea({
     : null;
   const activeSplit = activeSession ? splitBySessionId.get(activeSession.id) ?? null : null;
   const activeRootPath = activeSession?.path ?? null;
-  const [rightPanelTab, setRightPanelTab] = useState<"settings" | "files" | "changes">("settings");
+  const [rightPanelTab, setRightPanelTab] = useState<"settings" | "files" | "changes" | "tmux">("settings");
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
   const [openFileContent, setOpenFileContent] = useState("");
   const [openFileInitial, setOpenFileInitial] = useState("");
@@ -550,6 +557,17 @@ function MainArea({
                 >
                   Changes
                 </button>
+                <button
+                  type="button"
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    rightPanelTab === "tmux"
+                      ? "text-text border-b-2 border-accent"
+                      : "text-subtext hover:text-text"
+                  }`}
+                  onClick={() => setRightPanelTab("tmux")}
+                >
+                  Tmux
+                </button>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden">
                 <AnimatePresence mode="wait" initial={false}>
@@ -587,7 +605,7 @@ function MainArea({
                         onOpenFile={handleOpenFile}
                       />
                     </motion.div>
-                  ) : (
+                  ) : rightPanelTab === "changes" ? (
                     <motion.div
                       key="changes"
                       className="h-full"
@@ -601,6 +619,23 @@ function MainArea({
                         rootPath={activeRootPath}
                         activeFilePath={openFilePath}
                         onOpenChange={handleOpenChange}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="tmux"
+                      className="h-full"
+                      variants={panelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      transition={panelTransition}
+                    >
+                      <TmuxPanel
+                        projects={projects}
+                        divergencesByProject={divergencesByProject}
+                        projectsLoading={projectsLoading}
+                        divergencesLoading={divergencesLoading}
                       />
                     </motion.div>
                   )}

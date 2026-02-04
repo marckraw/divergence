@@ -42,6 +42,24 @@ export interface TerminalSession {
   lastActivity?: Date;
 }
 
+export interface TmuxSessionEntry {
+  name: string;
+  created: string;
+  attached: boolean;
+  window_count: number;
+  activity: string;
+}
+
+export type TmuxSessionOwnership =
+  | { kind: "project"; project: Project }
+  | { kind: "divergence"; project: Project; divergence: Divergence }
+  | { kind: "orphan" }
+  | { kind: "unknown" };
+
+export interface TmuxSessionWithOwnership extends TmuxSessionEntry {
+  ownership: TmuxSessionOwnership;
+}
+
 export type SplitOrientation = "vertical" | "horizontal";
 
 export interface AppState {

@@ -1,0 +1,203 @@
+import { useCallback } from "react";
+import { useTmuxSessions } from "../hooks/useTmuxSessions";
+import type { Project, Divergence, TmuxSessionWithOwnership } from "../types";
+
+interface TmuxPanelProps {
+  projects: Project[];
+  divergencesByProject: Map<number, Divergence[]>;
+  projectsLoading: boolean;
+  divergencesLoading: boolean;
+}
+
+function ownershipLabel(session: TmuxSessionWithOwnership): {
+  text: string;
+  className: string;
+} {
+  switch (session.ownership.kind) {
+    case "project":
+      return {
+        text: session.ownership.project.name,
+        className: "bg-accent/20 text-accent",
+      };
+    case "divergence":
+      return {
+        text: `${session.ownership.project.name} / ${session.ownership.divergence.branch}`,
+        className: "bg-accent/20 text-accent",
+      };
+    case "orphan":
+      return {
+        text: "orphan",
+        className: "bg-yellow/20 text-yellow",
+      };
+    case "unknown":
+      return {
+        text: "checking",
+        className: "bg-surface text-subtext",
+      };
+  }
+}
+
+function TmuxPanel({
+  projects,
+  divergencesByProject,
+  projectsLoading,
+  divergencesLoading,
+}: TmuxPanelProps) {
+  const ownershipReady = !projectsLoading && !divergencesLoading;
+  const {
+    sessions,
+    loading,
+    error,
+    orphanCount,
+    refresh,
+    killSession,
+    killOrphans,
+    killAll,
+  } = useTmuxSessions(projects, divergencesByProject, ownershipReady);
+
+  const handleKillOrphans = useCallback(() => {
+    if (!ownershipReady) return;
+    if (!window.confirm(`Kill ${orphanCount} orphan session(s)?`)) return;
+    killOrphans();
+  }, [orphanCount, killOrphans, ownershipReady]);
+
+  const handleKillAll = useCallback(() => {
+    if (!window.confirm(`Kill all ${sessions.length} session(s)?`)) return;
+    killAll();
+  }, [sessions.length, killAll]);
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-surface">
+        <div className="text-xs uppercase text-subtext font-medium">
+          Tmux Sessions
+        </div>
+        <button
+          type="button"
+          className="text-xs text-subtext hover:text-text"
+          onClick={refresh}
+          disabled={loading}
+        >
+          {loading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      {/* Summary bar */}
+      {sessions.length > 0 && (
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface text-[10px] text-subtext">
+          <span>
+            {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+            {!ownershipReady && (
+              <span className="text-subtext/70"> · checking ownership…</span>
+            )}
+            {ownershipReady && orphanCount > 0 && (
+              <span className="text-yellow">
+                {" "}
+                &middot; {orphanCount} orphan{orphanCount !== 1 ? "s" : ""}
+              </span>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            {ownershipReady && orphanCount > 0 && (
+              <button
+                type="button"
+                className="text-yellow hover:text-text transition-colors"
+                onClick={handleKillOrphans}
+                disabled={loading}
+              >
+                Kill Orphans
+              </button>
+            )}
+            <button
+              type="button"
+              className="text-subtext hover:text-red transition-colors"
+              onClick={handleKillAll}
+              disabled={loading}
+            >
+              Kill All
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Session list */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
+        {error && (
+          <div className="px-2 py-2 text-xs text-red bg-red/10 border border-red/30 rounded">
+            {error}
+          </div>
+        )}
+
+        {!error && loading && sessions.length === 0 && (
+          <div className="px-2 py-8 text-center text-xs text-subtext">
+            Loading...
+          </div>
+        )}
+
+        {!error && !loading && sessions.length === 0 && (
+          <div className="px-2 py-8 text-center text-xs text-subtext">
+            No divergence tmux sessions running.
+          </div>
+        )}
+
+        {sessions.map((session) => {
+          const badge = ownershipLabel(session);
+          return (
+            <div
+              key={session.name}
+              className="group w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface/50 transition-colors"
+            >
+              {/* Status dot */}
+              <div
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  session.attached ? "bg-green" : "bg-subtext/40"
+                }`}
+                title={session.attached ? "Attached" : "Detached"}
+              />
+
+              {/* Name + ownership */}
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-text truncate">{session.name}</div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span
+                    className={`text-[10px] px-1 rounded ${badge.className}`}
+                  >
+                    {badge.text}
+                  </span>
+                  <span className="text-[10px] text-subtext/70 px-1 rounded bg-surface">
+                    {session.attached ? "attached" : "detached"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Kill button */}
+              <button
+                type="button"
+                className="w-5 h-5 flex items-center justify-center text-subtext hover:text-red opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                onClick={() => killSession(session.name)}
+                title="Kill session"
+              >
+                <svg
+                  className="w-3 h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default TmuxPanel;
