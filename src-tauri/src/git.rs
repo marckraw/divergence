@@ -116,7 +116,7 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let output = command_with_login_path("tmux")
+    let output = command_with_tmux()
         .args(["kill-session", "-t", session_name])
         .output();
 
@@ -165,7 +165,7 @@ fn epoch_to_iso8601(epoch: &str) -> String {
 }
 
 pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
-    let output = command_with_login_path("tmux")
+    let output = command_with_tmux()
         .args([
             "list-sessions",
             "-F",
@@ -216,6 +216,18 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
 }
 
 static LOGIN_SHELL_PATH: OnceLock<Option<String>> = OnceLock::new();
+static TMUX_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+fn command_with_tmux() -> Command {
+    if let Some(path) = get_tmux_path() {
+        let mut cmd = Command::new(path);
+        if let Some(path) = get_login_shell_path() {
+            cmd.env("PATH", path);
+        }
+        return cmd;
+    }
+    command_with_login_path("tmux")
+}
 
 fn command_with_login_path(program: &str) -> Command {
     let mut cmd = Command::new(program);
@@ -230,6 +242,74 @@ fn get_login_shell_path() -> Option<String> {
         .get_or_init(resolve_login_shell_path)
         .as_ref()
         .cloned()
+}
+
+fn get_tmux_path() -> Option<PathBuf> {
+    TMUX_PATH.get_or_init(resolve_tmux_path).as_ref().cloned()
+}
+
+fn resolve_tmux_path() -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("DIVERGENCE_TMUX_PATH") {
+        let candidate = PathBuf::from(explicit);
+        if is_executable(&candidate) {
+            return Some(candidate);
+        }
+    }
+
+    if let Some(path) = get_login_shell_path() {
+        if let Some(found) = find_in_path(&path, "tmux") {
+            return Some(found);
+        }
+    }
+
+    if let Ok(path) = std::env::var("PATH") {
+        if let Some(found) = find_in_path(&path, "tmux") {
+            return Some(found);
+        }
+    }
+
+    for candidate in [
+        "/opt/homebrew/bin/tmux",
+        "/usr/local/bin/tmux",
+        "/opt/local/bin/tmux",
+        "/usr/bin/tmux",
+        "/bin/tmux",
+    ] {
+        let candidate = Path::new(candidate);
+        if is_executable(candidate) {
+            return Some(candidate.to_path_buf());
+        }
+    }
+
+    None
+}
+
+fn find_in_path(path_value: &str, program: &str) -> Option<PathBuf> {
+    for dir in std::env::split_paths(path_value) {
+        let candidate = dir.join(program);
+        if is_executable(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 fn resolve_login_shell_path() -> Option<String> {
