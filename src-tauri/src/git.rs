@@ -21,6 +21,12 @@ pub struct GitDiff {
     pub is_binary: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct BranchChanges {
+    pub base_ref: Option<String>,
+    pub changes: Vec<GitChange>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum DiffMode {
     Working,
@@ -761,4 +767,107 @@ fn is_untracked(repo_path: &Path, rel_path: &str) -> bool {
         Ok(result) => !result.success(),
         Err(_) => false,
     }
+}
+
+pub fn list_branch_changes(repo_path: &Path) -> Result<BranchChanges, String> {
+    let base_ref = find_base_ref(repo_path)?;
+    let Some(ref base) = base_ref else {
+        return Ok(BranchChanges {
+            base_ref: None,
+            changes: vec![],
+        });
+    };
+
+    let output = Command::new("git")
+        .args([
+            "diff",
+            "--name-status",
+            "-z",
+            &format!("{}...HEAD", base),
+        ])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git diff: {}", e))?;
+
+    let code = output.status.code().unwrap_or(0);
+    if code > 1 {
+        return Err(format!(
+            "Git diff failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let parts: Vec<&[u8]> = output
+        .stdout
+        .split(|b| *b == 0u8)
+        .filter(|part| !part.is_empty())
+        .collect();
+
+    let mut changes = Vec::new();
+    let mut i = 0;
+    while i < parts.len() {
+        let status_str = String::from_utf8_lossy(parts[i]).to_string();
+        let status_char = status_str.chars().next().unwrap_or('?');
+
+        if status_char == 'R' || status_char == 'C' {
+            // Renames/copies have two paths: old_path and new_path
+            if i + 2 < parts.len() {
+                let old_path = String::from_utf8_lossy(parts[i + 1]).to_string();
+                let new_path = String::from_utf8_lossy(parts[i + 2]).to_string();
+                changes.push(GitChange {
+                    path: new_path,
+                    old_path: Some(old_path),
+                    status: status_char,
+                    staged: false,
+                    unstaged: false,
+                    untracked: false,
+                });
+                i += 3;
+            } else {
+                i += 1;
+            }
+        } else if i + 1 < parts.len() {
+            let path = String::from_utf8_lossy(parts[i + 1]).to_string();
+            changes.push(GitChange {
+                path,
+                old_path: None,
+                status: status_char,
+                staged: false,
+                unstaged: false,
+                untracked: false,
+            });
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+
+    Ok(BranchChanges {
+        base_ref,
+        changes,
+    })
+}
+
+pub fn get_branch_diff(repo_path: &Path, file_path: &Path) -> Result<GitDiff, String> {
+    let base_ref = find_base_ref(repo_path)?;
+    let Some(ref base) = base_ref else {
+        return Err("No base branch found".to_string());
+    };
+    let rel_path = file_path.strip_prefix(repo_path).unwrap_or(file_path);
+    let diff_text = run_git_diff(
+        repo_path,
+        &[
+            "diff",
+            "--no-color",
+            "--patch",
+            &format!("{}...HEAD", base),
+            "--",
+            &rel_path.to_string_lossy(),
+        ],
+    )?;
+    let is_binary = diff_text.contains("Binary files") || diff_text.contains("GIT binary patch");
+    Ok(GitDiff {
+        diff: diff_text,
+        is_binary,
+    })
 }

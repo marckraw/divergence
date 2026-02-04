@@ -60,6 +60,8 @@ export interface TmuxSessionWithOwnership extends TmuxSessionEntry {
   ownership: TmuxSessionOwnership;
 }
 
+export type ChangesMode = "working" | "branch";
+
 export type SplitOrientation = "vertical" | "horizontal";
 
 export interface AppState {

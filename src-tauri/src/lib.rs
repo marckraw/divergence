@@ -43,6 +43,8 @@ pub fn run() {
             commands::kill_tmux_session,
             commands::list_tmux_sessions,
             commands::kill_all_tmux_sessions,
+            commands::list_branch_changes,
+            commands::get_branch_diff,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
