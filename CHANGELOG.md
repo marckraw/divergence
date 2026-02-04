@@ -1,5 +1,11 @@
 # divergence
 
+## 0.4.3
+
+### Patch Changes
+
+- 9ba508d: Add a toggleable sidebar with Cmd+B shortcut and UI controls.
+
 ## 0.4.2
 
 ### Patch Changes
