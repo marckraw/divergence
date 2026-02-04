@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { invoke } from "@tauri-apps/api/core";
 import Terminal from "./Terminal";
 import ProjectSettingsPanel from "./ProjectSettingsPanel";
 import FileExplorer from "./FileExplorer";
+import ChangesPanel from "./ChangesPanel";
 import QuickEditDrawer from "./QuickEditDrawer";
-import type { TerminalSession, SplitOrientation, Project } from "../types";
+import type { TerminalSession, SplitOrientation, Project, GitChangeEntry } from "../types";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { buildSplitTmuxSessionName } from "../lib/tmux";
 import type { EditorThemeId } from "../lib/editorThemes";
@@ -66,7 +68,7 @@ function MainArea({
     : null;
   const activeSplit = activeSession ? splitBySessionId.get(activeSession.id) ?? null : null;
   const activeRootPath = activeSession?.path ?? null;
-  const [rightPanelTab, setRightPanelTab] = useState<"settings" | "files">("settings");
+  const [rightPanelTab, setRightPanelTab] = useState<"settings" | "files" | "changes">("settings");
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
   const [openFileContent, setOpenFileContent] = useState("");
   const [openFileInitial, setOpenFileInitial] = useState("");
@@ -76,6 +78,11 @@ function MainArea({
   const [isSavingFile, setIsSavingFile] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [largeFileWarning, setLargeFileWarning] = useState<string | null>(null);
+  const [openDiff, setOpenDiff] = useState<{ text: string; isBinary: boolean } | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffError, setDiffError] = useState<string | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"diff" | "edit">("edit");
+  const [allowEdit, setAllowEdit] = useState(true);
 
   const isDrawerOpen = Boolean(openFilePath);
   const isDirty = openFileContent !== openFileInitial;
@@ -90,7 +97,23 @@ function MainArea({
     setIsSavingFile(false);
     setIsReadOnly(false);
     setLargeFileWarning(null);
+    setOpenDiff(null);
+    setDiffLoading(false);
+    setDiffError(null);
+    setDrawerTab("edit");
+    setAllowEdit(true);
   }, [activeSession?.id]);
+
+  const joinPath = useCallback((parent: string, child: string) => {
+    if (child.startsWith("/") || child.startsWith("\\")) {
+      return child;
+    }
+    if (parent.endsWith("/") || parent.endsWith("\\")) {
+      return `${parent}${child}`;
+    }
+    const separator = parent.includes("\\") ? "\\" : "/";
+    return `${parent}${separator}${child}`;
+  }, []);
 
   const formatBytes = useCallback((bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -100,7 +123,18 @@ function MainArea({
     return `${mb.toFixed(1)} MB`;
   }, []);
 
-  const handleOpenFile = useCallback(async (path: string) => {
+  const handleOpenFile = useCallback(async (
+    path: string,
+    options?: { resetDiff?: boolean }
+  ) => {
+    const resetDiff = options?.resetDiff ?? true;
+    if (resetDiff) {
+      setOpenDiff(null);
+      setDiffLoading(false);
+      setDiffError(null);
+      setDrawerTab("edit");
+      setAllowEdit(true);
+    }
     setOpenFilePath(path);
     setOpenFileContent("");
     setOpenFileInitial("");
@@ -133,6 +167,47 @@ function MainArea({
     }
   }, [formatBytes]);
 
+  const handleOpenChange = useCallback(async (entry: GitChangeEntry) => {
+    if (!activeRootPath) {
+      return;
+    }
+
+    const absolutePath = joinPath(activeRootPath, entry.path);
+    const isDeleted = entry.status === "D";
+
+    setDrawerTab("diff");
+    setAllowEdit(!isDeleted);
+    setOpenDiff(null);
+    setDiffLoading(true);
+    setDiffError(null);
+
+    if (isDeleted) {
+      setOpenFilePath(absolutePath);
+      setOpenFileContent("");
+      setOpenFileInitial("");
+      setFileLoadError(null);
+      setFileSaveError(null);
+      setIsReadOnly(true);
+      setLargeFileWarning(null);
+      setIsLoadingFile(false);
+    } else {
+      await handleOpenFile(absolutePath, { resetDiff: false });
+    }
+
+    try {
+      const diff = await invoke<{ diff: string; isBinary: boolean }>("get_git_diff", {
+        path: activeRootPath,
+        filePath: absolutePath,
+        mode: "working",
+      });
+      setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
+    } catch (err) {
+      setDiffError(err instanceof Error ? err.message : "Failed to load diff.");
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [activeRootPath, handleOpenFile, joinPath]);
+
   const handleCloseDrawer = useCallback(() => {
     if (isDirty) {
       const confirmClose = window.confirm("Discard unsaved changes?");
@@ -147,6 +222,11 @@ function MainArea({
     setFileSaveError(null);
     setIsReadOnly(false);
     setLargeFileWarning(null);
+    setOpenDiff(null);
+    setDiffLoading(false);
+    setDiffError(null);
+    setDrawerTab("edit");
+    setAllowEdit(true);
   }, [isDirty]);
 
   const handleSaveFile = useCallback(async () => {
@@ -158,13 +238,30 @@ function MainArea({
     try {
       await writeTextFile(openFilePath, openFileContent);
       setOpenFileInitial(openFileContent);
+      if (openDiff && activeRootPath) {
+        setDiffLoading(true);
+        setDiffError(null);
+        try {
+          const diff = await invoke<{ diff: string; isBinary: boolean }>("get_git_diff", {
+            path: activeRootPath,
+            filePath: openFilePath,
+            mode: "working",
+          });
+          setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
+        } catch (err) {
+          setDiffError(err instanceof Error ? err.message : "Failed to refresh diff.");
+          console.warn("Failed to refresh diff:", err);
+        } finally {
+          setDiffLoading(false);
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save file.";
       setFileSaveError(message);
     } finally {
       setIsSavingFile(false);
     }
-  }, [isReadOnly, isSavingFile, openFileContent, openFilePath]);
+  }, [isReadOnly, isSavingFile, openFileContent, openFilePath, openDiff, activeRootPath]);
 
   const handleChangeContent = useCallback((next: string) => {
     setOpenFileContent(next);
@@ -442,6 +539,17 @@ function MainArea({
                 >
                   Files
                 </button>
+                <button
+                  type="button"
+                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                    rightPanelTab === "changes"
+                      ? "text-text border-b-2 border-accent"
+                      : "text-subtext hover:text-text"
+                  }`}
+                  onClick={() => setRightPanelTab("changes")}
+                >
+                  Changes
+                </button>
               </div>
               <div className="flex-1 min-h-0 overflow-hidden">
                 <AnimatePresence mode="wait" initial={false}>
@@ -463,7 +571,7 @@ function MainArea({
                         contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
                       />
                     </motion.div>
-                  ) : (
+                  ) : rightPanelTab === "files" ? (
                     <motion.div
                       key="files"
                       className="h-full"
@@ -477,6 +585,22 @@ function MainArea({
                         rootPath={activeRootPath}
                         activeFilePath={openFilePath}
                         onOpenFile={handleOpenFile}
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="changes"
+                      className="h-full"
+                      variants={panelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      transition={panelTransition}
+                    >
+                      <ChangesPanel
+                        rootPath={activeRootPath}
+                        activeFilePath={openFilePath}
+                        onOpenChange={handleOpenChange}
                       />
                     </motion.div>
                   )}
@@ -516,6 +640,11 @@ function MainArea({
         filePath={openFilePath}
         content={openFileContent}
         editorTheme={editorTheme}
+        diff={openDiff}
+        diffLoading={diffLoading}
+        diffError={diffError}
+        defaultTab={drawerTab}
+        allowEdit={allowEdit}
         isDirty={isDirty}
         isSaving={isSavingFile}
         isLoading={isLoadingFile}

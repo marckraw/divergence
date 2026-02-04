@@ -37,6 +37,8 @@ pub fn run() {
             commands::delete_divergence,
             commands::get_ralphy_config_summary,
             commands::check_branch_status,
+            commands::list_git_changes,
+            commands::get_git_diff,
             commands::get_divergence_base_path,
             commands::kill_tmux_session,
         ])
