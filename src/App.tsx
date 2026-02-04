@@ -45,6 +45,7 @@ function App() {
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
@@ -252,6 +253,10 @@ function App() {
     });
   }, []);
 
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen(prev => !prev);
+  }, []);
+
   const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
     const previousStatus = statusBySessionRef.current.get(sessionId) ?? "idle";
     statusBySessionRef.current.set(sessionId, status);
@@ -424,6 +429,13 @@ function App() {
       return;
     }
 
+    // Toggle sidebar - Cmd+B
+    if (isMeta && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      toggleSidebar();
+      return;
+    }
+
     // Close modal on Escape
     if (e.key === "Escape") {
       setShowQuickSwitcher(false);
@@ -516,6 +528,7 @@ function App() {
     handleCloseSession,
     handleSplitSession,
     handleReconnectSession,
+    toggleSidebar,
   ]);
 
   // Set up keyboard listener
@@ -539,20 +552,28 @@ function App() {
 
   return (
     <div className="flex h-full w-full">
-      <Sidebar
-        projects={projects}
-        divergencesByProject={divergencesByProject}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        createDivergenceFor={createDivergenceFor}
-        onCreateDivergenceForChange={setCreateDivergenceFor}
-        onSelectProject={handleSelectProject}
-        onSelectDivergence={handleSelectDivergence}
-        onAddProject={handleAddProject}
-        onRemoveProject={handleRemoveProject}
-        onDivergenceCreated={handleDivergenceCreated}
-        onDeleteDivergence={handleDeleteDivergence}
-      />
+      <div
+        className={`h-full shrink-0 overflow-hidden transition-[width] duration-200 ease-out ${
+          isSidebarOpen ? "w-64" : "w-0"
+        }`}
+      >
+        <Sidebar
+          projects={projects}
+          divergencesByProject={divergencesByProject}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          createDivergenceFor={createDivergenceFor}
+          onCreateDivergenceForChange={setCreateDivergenceFor}
+          onSelectProject={handleSelectProject}
+          onSelectDivergence={handleSelectDivergence}
+          onAddProject={handleAddProject}
+          onRemoveProject={handleRemoveProject}
+          onDivergenceCreated={handleDivergenceCreated}
+          onDeleteDivergence={handleDeleteDivergence}
+          onToggleSidebar={toggleSidebar}
+          isCollapsed={!isSidebarOpen}
+        />
+      </div>
       <MainArea
         projects={projects}
         sessions={sessions}
@@ -573,6 +594,8 @@ function App() {
         divergencesByProject={divergencesByProject}
         projectsLoading={projectsLoading}
         divergencesLoading={divergencesLoading}
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={toggleSidebar}
       />
 
       {/* Quick Switcher */}

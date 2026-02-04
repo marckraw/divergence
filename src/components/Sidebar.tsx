@@ -26,6 +26,8 @@ interface SidebarProps {
   onRemoveProject: (id: number) => Promise<void>;
   onDivergenceCreated: () => void;
   onDeleteDivergence: (id: number) => Promise<void>;
+  onToggleSidebar: () => void;
+  isCollapsed: boolean;
 }
 
 function Sidebar({
@@ -41,6 +43,8 @@ function Sidebar({
   onRemoveProject,
   onDivergenceCreated,
   onDeleteDivergence,
+  onToggleSidebar,
+  isCollapsed,
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
   const hasUserToggledExpansion = useRef(false);
@@ -203,10 +207,11 @@ function Sidebar({
 
   return (
     <>
-      <aside className="w-64 shrink-0 h-full bg-sidebar border-r border-surface flex flex-col">
+      <aside className={`w-full h-full bg-sidebar flex flex-col ${isCollapsed ? "" : "border-r border-surface"}`}>
         {/* Header */}
         <div className="p-4 border-b border-surface">
-          <h1 className="text-lg font-semibold text-text flex items-center gap-2">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold text-text flex items-center gap-2">
             <svg
               className="w-6 h-6 text-accent"
               fill="none"
@@ -221,7 +226,41 @@ function Sidebar({
               />
             </svg>
             Divergence
-          </h1>
+            </h1>
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              className="w-8 h-8 flex items-center justify-center rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 transition-colors"
+              title="Hide sidebar (Cmd+B)"
+              aria-label="Hide sidebar"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5v14"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M14 9l-3 3 3 3"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Projects List */}
