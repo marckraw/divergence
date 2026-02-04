@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 use std::io::ErrorKind;
 use chrono::{DateTime, Utc};
 
@@ -109,7 +110,7 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let output = Command::new("tmux")
+    let output = command_with_login_path("tmux")
         .args(["kill-session", "-t", session_name])
         .output();
 
@@ -158,7 +159,7 @@ fn epoch_to_iso8601(epoch: &str) -> String {
 }
 
 pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
-    let output = Command::new("tmux")
+    let output = command_with_login_path("tmux")
         .args([
             "list-sessions",
             "-F",
@@ -206,6 +207,52 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
     }
 
     Ok(sessions)
+}
+
+static LOGIN_SHELL_PATH: OnceLock<Option<String>> = OnceLock::new();
+
+fn command_with_login_path(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+    if let Some(path) = get_login_shell_path() {
+        cmd.env("PATH", path);
+    }
+    cmd
+}
+
+fn get_login_shell_path() -> Option<String> {
+    LOGIN_SHELL_PATH
+        .get_or_init(resolve_login_shell_path)
+        .as_ref()
+        .cloned()
+}
+
+fn resolve_login_shell_path() -> Option<String> {
+    let mut candidates = Vec::new();
+    if let Ok(shell) = std::env::var("SHELL") {
+        candidates.push(shell);
+    }
+    candidates.push("/bin/zsh".to_string());
+    candidates.push("/bin/bash".to_string());
+
+    for shell in candidates {
+        let output = Command::new(&shell)
+            .args(["-l", "-c", "echo -n $PATH"])
+            .output();
+
+        let Ok(result) = output else {
+            continue;
+        };
+        if !result.status.success() {
+            continue;
+        }
+
+        let path = String::from_utf8_lossy(&result.stdout).trim().to_string();
+        if !path.is_empty() {
+            return Some(path);
+        }
+    }
+
+    None
 }
 
 fn list_ignored_paths(repo_path: &Path) -> Result<Vec<PathBuf>, String> {
