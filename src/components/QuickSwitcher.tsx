@@ -251,15 +251,28 @@ function QuickSwitcher({ projects, divergencesByProject, onSelect, onClose }: Qu
                   </div>
 
                   {/* Type badge */}
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded ${
-                      result.type === "divergence"
-                        ? "bg-accent/20 text-accent"
-                        : "bg-surface text-subtext"
-                    }`}
-                  >
-                    {result.type}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded ${
+                        result.type === "divergence"
+                          ? "bg-accent/20 text-accent"
+                          : "bg-surface text-subtext"
+                      }`}
+                    >
+                      {result.type}
+                    </span>
+                    {result.type === "divergence" && (
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded border ${
+                          (result.item as Divergence).mode === "worktree"
+                            ? "bg-accent/15 text-accent border-accent/30"
+                            : "bg-surface text-subtext border-surface"
+                        }`}
+                      >
+                        {(result.item as Divergence).mode === "worktree" ? "worktree" : "clone"}
+                      </span>
+                    )}
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>

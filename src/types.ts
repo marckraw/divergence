@@ -13,6 +13,7 @@ export interface Divergence {
   path: string;
   created_at: string;
   has_diverged: number;
+  mode: "clone" | "worktree";
 }
 
 export type GitChangeStatus = "A" | "M" | "D" | "R" | "C" | "U" | "?";

@@ -24,6 +24,7 @@ pub struct Divergence {
     pub path: String,
     pub created_at: String,
     pub has_diverged: i32,
+    pub mode: String,
 }
 
 #[tauri::command]
@@ -64,6 +65,7 @@ pub async fn create_divergence(
     branch_name: String,
     copy_ignored_skip: Vec<String>,
     use_existing_branch: bool,
+    divergence_mode: Option<String>,
 ) -> Result<Divergence, String> {
     let source_path = PathBuf::from(&project_path);
 
@@ -79,20 +81,29 @@ pub async fn create_divergence(
     let divergence_dir_name = format!("{}-{}-{}", safe_project_name, safe_branch_name, short_uuid);
     let divergence_path = get_repos_dir().join(&divergence_dir_name);
 
-    // Clone the repository
-    git::clone_repo(&source_path, &divergence_path)?;
+    let requested_mode = divergence_mode.unwrap_or_else(|| "clone".to_string());
+    let use_worktree = requested_mode.eq_ignore_ascii_case("worktree");
+    let normalized_mode = if use_worktree { "worktree" } else { "clone" }.to_string();
 
-    // Update origin to the original remote (if present)
-    git::set_origin_to_source_remote(&source_path, &divergence_path)?;
-
-    // Checkout branch (existing or new)
-    if use_existing_branch {
-        git::checkout_existing_branch(&divergence_path, &branch_name)?;
+    if use_worktree {
+        // Create a git worktree from the source repo
+        git::add_worktree(&source_path, &divergence_path, &branch_name, use_existing_branch)?;
     } else {
-        git::checkout_branch(&divergence_path, &branch_name, true)?;
+        // Clone the repository
+        git::clone_repo(&source_path, &divergence_path)?;
+
+        // Update origin to the original remote (if present)
+        git::set_origin_to_source_remote(&source_path, &divergence_path)?;
+
+        // Checkout branch (existing or new)
+        if use_existing_branch {
+            git::checkout_existing_branch(&divergence_path, &branch_name)?;
+        } else {
+            git::checkout_branch(&divergence_path, &branch_name, true)?;
+        }
     }
 
-    // Copy ignored files (e.g., .env) from source into the divergence clone
+    // Copy ignored files (e.g., .env) from source into the divergence workspace
     git::copy_ignored_paths(&source_path, &divergence_path, &copy_ignored_skip)?;
 
     Ok(Divergence {
@@ -103,6 +114,7 @@ pub async fn create_divergence(
         path: divergence_path.to_string_lossy().to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
         has_diverged: 0,
+        mode: normalized_mode,
     })
 }
 
@@ -128,10 +140,14 @@ pub async fn delete_divergence(path: String) -> Result<(), String> {
         return Err("Cannot delete path outside of divergence repos directory".to_string());
     }
 
-    // Remove the directory
     if divergence_path.exists() {
-        fs::remove_dir_all(&divergence_path)
-            .map_err(|e| format!("Failed to delete divergence directory: {}", e))?;
+        if git::is_linked_worktree(&divergence_path) {
+            git::remove_worktree(&divergence_path)?;
+        } else {
+            // Remove the directory
+            fs::remove_dir_all(&divergence_path)
+                .map_err(|e| format!("Failed to delete divergence directory: {}", e))?;
+        }
     }
 
     Ok(())

@@ -9,6 +9,7 @@ import {
   loadAppSettings,
   saveAppSettings,
   broadcastAppSettings,
+  type DivergenceMode,
 } from "../lib/appSettings";
 import {
   EDITOR_THEME_OPTIONS_DARK,
@@ -37,6 +38,7 @@ interface SettingsState {
   editorThemeForLightMode: EditorThemeId;
   editorThemeForDarkMode: EditorThemeId;
   selectToCopy: boolean;
+  divergenceMode: DivergenceMode;
   divergenceBasePath: string;
   tmuxHistoryLimit: number;
 }
@@ -283,6 +285,39 @@ function Settings({ onClose, updater }: SettingsProps) {
             </div>
           </div>
 
+          {/* Divergence Mode */}
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Divergence Mode
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => updateSetting("divergenceMode", "clone")}
+                className={`flex-1 px-4 py-2 rounded border ${
+                  settings.divergenceMode === "clone"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-surface text-subtext hover:text-text"
+                }`}
+              >
+                Clone
+              </button>
+              <button
+                onClick={() => updateSetting("divergenceMode", "worktree")}
+                className={`flex-1 px-4 py-2 rounded border ${
+                  settings.divergenceMode === "worktree"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-surface text-subtext hover:text-text"
+                }`}
+              >
+                Worktree
+              </button>
+            </div>
+            <p className="text-xs text-subtext mt-1">
+              Clone makes a full copy. Worktree creates a lightweight workspace that shares git objects
+              with the project.
+            </p>
+          </div>
+
           {/* Storage Location */}
           <div>
             <label className="block text-sm font-medium text-text mb-2">
@@ -292,7 +327,7 @@ function Settings({ onClose, updater }: SettingsProps) {
               {settings.divergenceBasePath}
             </div>
             <p className="text-xs text-subtext mt-1">
-              Cloned repositories are stored in this location
+              Divergences are stored in this location
             </p>
           </div>
 

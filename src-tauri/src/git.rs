@@ -51,6 +51,101 @@ pub fn clone_repo(source: &Path, destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
+pub fn add_worktree(
+    source: &Path,
+    destination: &Path,
+    branch: &str,
+    use_existing_branch: bool,
+) -> Result<(), String> {
+    if use_existing_branch {
+        fetch_origin(source);
+
+        let local_ref = format!("refs/heads/{}", branch);
+        if ref_exists(source, &local_ref)? {
+            return worktree_add_existing(source, destination, branch);
+        }
+
+        let remote_ref = format!("refs/remotes/origin/{}", branch);
+        if !ref_exists(source, &remote_ref)? {
+            return Err(format!("Remote branch origin/{} not found", branch));
+        }
+
+        let remote_start = format!("origin/{}", branch);
+        return worktree_add_new(
+            source,
+            destination,
+            branch,
+            Some(remote_start.as_str()),
+        );
+    }
+
+    let local_ref = format!("refs/heads/{}", branch);
+    if ref_exists(source, &local_ref)? {
+        return worktree_add_existing(source, destination, branch);
+    }
+
+    worktree_add_new(source, destination, branch, None)
+}
+
+fn worktree_add_existing(source: &Path, destination: &Path, branch: &str) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["worktree", "add"])
+        .arg(destination)
+        .arg(branch)
+        .current_dir(source)
+        .output()
+        .map_err(|e| format!("Failed to execute git worktree add: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("is already checked out at") {
+            return Err(format!(
+                "Branch '{}' is already checked out in another worktree. \
+                 Git worktrees require each branch to be checked out in only one location at a time.",
+                branch
+            ));
+        }
+        return Err(format!("Git worktree add failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
+fn worktree_add_new(
+    source: &Path,
+    destination: &Path,
+    branch: &str,
+    start_point: Option<&str>,
+) -> Result<(), String> {
+    let mut command = Command::new("git");
+    command
+        .args(["worktree", "add", "-b"])
+        .arg(branch)
+        .arg(destination);
+
+    if let Some(start) = start_point {
+        command.arg(start);
+    }
+
+    let output = command
+        .current_dir(source)
+        .output()
+        .map_err(|e| format!("Failed to execute git worktree add: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("already exists") {
+            return Err(format!(
+                "Branch '{}' already exists. Use the 'existing branch' option to check it out.",
+                branch
+            ));
+        }
+        return Err(format!("Git worktree add failed: {}", stderr));
+    }
+
+    Ok(())
+}
+
 pub fn copy_ignored_paths(
     source: &Path,
     destination: &Path,
@@ -667,6 +762,58 @@ pub fn get_remote_url(repo_path: &Path) -> Result<Option<String>, String> {
 
 pub fn is_git_repo(path: &Path) -> bool {
     path.join(".git").exists()
+}
+
+pub fn is_linked_worktree(path: &Path) -> bool {
+    path.join(".git").is_file()
+}
+
+pub fn remove_worktree(path: &Path) -> Result<(), String> {
+    let common_dir = resolve_git_common_dir(path)?;
+    let output = Command::new("git")
+        .args(["--git-dir"])
+        .arg(&common_dir)
+        .args(["worktree", "remove", "--force"])
+        .arg(path)
+        .output()
+        .map_err(|e| format!("Failed to execute git worktree remove: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Git worktree remove failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    Ok(())
+}
+
+fn resolve_git_common_dir(worktree_path: &Path) -> Result<PathBuf, String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-common-dir"])
+        .current_dir(worktree_path)
+        .output()
+        .map_err(|e| format!("Failed to resolve git common dir: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to resolve git common dir: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let raw = String::from_utf8_lossy(&output.stdout);
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Failed to resolve git common dir: empty response".to_string());
+    }
+
+    let mut path = PathBuf::from(trimmed);
+    if path.is_relative() {
+        path = worktree_path.join(path);
+    }
+
+    Ok(path)
 }
 
 pub fn list_changes(repo_path: &Path) -> Result<Vec<GitChange>, String> {
