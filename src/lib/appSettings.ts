@@ -12,6 +12,8 @@ export const DEFAULT_TMUX_HISTORY_LIMIT = 50000;
 const MIN_TMUX_HISTORY_LIMIT = 1000;
 const MAX_TMUX_HISTORY_LIMIT = 500000;
 
+export type DivergenceMode = "clone" | "worktree";
+
 export interface AppSettings {
   defaultShell: string;
   theme: "dark" | "light";
@@ -19,6 +21,7 @@ export interface AppSettings {
   editorThemeForDarkMode: EditorThemeId;
   selectToCopy: boolean;
   tmuxHistoryLimit: number;
+  divergenceMode: DivergenceMode;
   divergenceBasePath?: string;
 }
 
@@ -29,8 +32,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
   selectToCopy: true,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
+  divergenceMode: "clone",
   divergenceBasePath: "",
 };
+
+function normalizeDivergenceMode(value: unknown): DivergenceMode {
+  return value === "worktree" ? "worktree" : "clone";
+}
 
 export function normalizeTmuxHistoryLimit(
   value: unknown,
@@ -75,6 +83,7 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     selectToCopy: typeof input?.selectToCopy === "boolean"
       ? input.selectToCopy
       : DEFAULT_APP_SETTINGS.selectToCopy,
+    divergenceMode: normalizeDivergenceMode(input?.divergenceMode),
   };
 }
 

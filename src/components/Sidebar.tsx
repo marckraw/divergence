@@ -382,6 +382,7 @@ function Sidebar({
                           {divergences.map(divergence => {
                             const divStatus = getSessionStatus("divergence", divergence.id);
                             const divActive = isActive("divergence", divergence.id);
+                            const divergenceMode = divergence.mode === "worktree" ? "worktree" : "clone";
 
                             return (
                               <motion.div
@@ -411,6 +412,15 @@ function Sidebar({
                                 </svg>
                                 <span className="flex-1 truncate text-sm text-text">
                                   {divergence.branch}
+                                </span>
+                                <span
+                                  className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded border ${
+                                    divergenceMode === "worktree"
+                                      ? "bg-accent/15 text-accent border-accent/30"
+                                      : "bg-surface text-subtext border-surface"
+                                  }`}
+                                >
+                                  {divergenceMode}
                                 </span>
                               </motion.div>
                             );

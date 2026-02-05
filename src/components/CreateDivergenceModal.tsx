@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { motion, useReducedMotion } from "framer-motion";
 import type { Project, Divergence } from "../types";
+import { useAppSettings } from "../hooks/useAppSettings";
 import { loadProjectSettings } from "../lib/projectSettings";
 import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
 
@@ -13,6 +14,7 @@ interface CreateDivergenceModalProps {
 }
 
 function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergenceModalProps) {
+  const { settings: appSettings } = useAppSettings();
   const [branchName, setBranchName] = useState("");
   const [useExistingBranch, setUseExistingBranch] = useState(false);
   const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
@@ -61,12 +63,14 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
         branchName: branchName.trim(),
         copyIgnoredSkip: settings.copyIgnoredSkip,
         useExistingBranch,
+        divergenceMode: appSettings.divergenceMode,
       });
 
       // Save to database
       const db = await Database.load("sqlite:divergence.db");
+      const divergenceMode = divergence.mode ?? appSettings.divergenceMode;
       await db.execute(
-        "INSERT INTO divergences (project_id, name, branch, path, created_at, has_diverged) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO divergences (project_id, name, branch, path, created_at, has_diverged, mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
           divergence.project_id,
           divergence.name,
@@ -74,6 +78,7 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
           divergence.path,
           divergence.created_at,
           divergence.has_diverged ?? 0,
+          divergenceMode,
         ]
       );
 
@@ -81,14 +86,14 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
       const rows = await db.select<{ id: number }[]>("SELECT last_insert_rowid() as id");
       const insertedId = rows[0]?.id ?? 0;
 
-      onCreated({ ...divergence, id: insertedId });
+      onCreated({ ...divergence, id: insertedId, mode: divergenceMode });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsCreating(false);
     }
-  }, [branchName, project, onCreated, onClose, useExistingBranch]);
+  }, [branchName, project, onCreated, onClose, useExistingBranch, appSettings.divergenceMode]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isCreating) {
