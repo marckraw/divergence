@@ -1,5 +1,11 @@
 # divergence
 
+## 0.6.2
+
+### Patch Changes
+
+- a15b556: Add keyboard shortcut to toggle the right side panel and add search functionality to tmux sessions panel
+
 ## 0.6.1
 
 ### Patch Changes

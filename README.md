@@ -26,6 +26,8 @@ A Tauri + React desktop app for managing multiple projects, branches, and parall
 | `Cmd+K` | Quick Switcher |
 | `Cmd+,` | Settings |
 | `Cmd+W` | Close Terminal |
+| `Cmd+B` | Toggle Left Sidebar |
+| `Cmd+Shift+B` | Toggle Right Panel |
 | `Cmd+D` | Split Terminal (Vertical) |
 | `Cmd+Shift+D` | Split Terminal (Horizontal) |
 | `Cmd+1-9` | Switch to Tab |

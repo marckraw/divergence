@@ -47,6 +47,7 @@ function App() {
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
@@ -258,6 +259,10 @@ function App() {
     setIsSidebarOpen(prev => !prev);
   }, []);
 
+  const toggleRightPanel = useCallback(() => {
+    setIsRightPanelOpen(prev => !prev);
+  }, []);
+
   const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
     const previousStatus = statusBySessionRef.current.get(sessionId) ?? "idle";
     statusBySessionRef.current.set(sessionId, status);
@@ -439,6 +444,13 @@ function App() {
       return;
     }
 
+    // Toggle right panel - Cmd+Shift+B
+    if (isMeta && e.shiftKey && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      toggleRightPanel();
+      return;
+    }
+
     // Toggle sidebar - Cmd+B
     if (isMeta && e.key.toLowerCase() === "b") {
       e.preventDefault();
@@ -540,6 +552,7 @@ function App() {
     handleSplitSession,
     handleReconnectSession,
     toggleSidebar,
+    toggleRightPanel,
   ]);
 
   // Set up keyboard listener
@@ -606,6 +619,8 @@ function App() {
         onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={toggleSidebar}
+        isRightPanelOpen={isRightPanelOpen}
+        onToggleRightPanel={toggleRightPanel}
       />
 
       {/* Quick Switcher */}
