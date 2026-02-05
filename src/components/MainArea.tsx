@@ -27,7 +27,6 @@ interface MainAreaProps {
   splitBySessionId: Map<string, { orientation: SplitOrientation }>;
   onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
   onResetSplitSession: (sessionId: string) => void;
-  selectToCopy: boolean;
   reconnectBySessionId: Map<string, number>;
   onReconnectSession: (sessionId: string) => void;
   globalTmuxHistoryLimit: number;
@@ -53,7 +52,6 @@ function MainArea({
   splitBySessionId,
   onSplitSession,
   onResetSplitSession,
-  selectToCopy,
   reconnectBySessionId,
   onReconnectSession,
   globalTmuxHistoryLimit,
@@ -356,7 +354,7 @@ function MainArea({
             tmuxSessionName={session.tmuxSessionName}
             tmuxHistoryLimit={session.tmuxHistoryLimit}
             useWebgl={effectiveUseWebgl}
-            selectToCopy={selectToCopy}
+
             onRendererChange={handleRendererChange(session.id)}
             onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
             onClose={() => onCloseSession(session.id)}
@@ -372,7 +370,7 @@ function MainArea({
               tmuxSessionName={paneTwoTmuxName}
               tmuxHistoryLimit={session.tmuxHistoryLimit}
               useWebgl={effectiveUseWebgl}
-              selectToCopy={selectToCopy}
+  
               onRendererChange={handleRendererChange(session.id)}
               onStatusChange={handleSplitStatusChange(session.id, 1)}
               onClose={() => onCloseSession(session.id)}
@@ -387,7 +385,6 @@ function MainArea({
     handleStatusChange,
     onCloseSession,
     reconnectBySessionId,
-    selectToCopy,
     splitBySessionId,
   ]);
 

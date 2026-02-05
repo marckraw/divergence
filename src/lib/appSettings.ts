@@ -17,7 +17,6 @@ export interface AppSettings {
   theme: "dark" | "light";
   editorThemeForLightMode: EditorThemeId;
   editorThemeForDarkMode: EditorThemeId;
-  selectToCopy: boolean;
   tmuxHistoryLimit: number;
   divergenceBasePath?: string;
 }
@@ -27,7 +26,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   theme: "dark",
   editorThemeForLightMode: DEFAULT_EDITOR_THEME_LIGHT,
   editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
-  selectToCopy: true,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
   divergenceBasePath: "",
 };
@@ -72,9 +70,6 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
     editorThemeForLightMode,
     editorThemeForDarkMode,
-    selectToCopy: typeof input?.selectToCopy === "boolean"
-      ? input.selectToCopy
-      : DEFAULT_APP_SETTINGS.selectToCopy,
   };
 }
 

@@ -554,7 +554,6 @@ function App() {
     document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark";
   }, [appSettings.theme]);
 
-  const selectToCopy = appSettings.selectToCopy ?? true;
   const editorTheme =
     appSettings.theme === "light"
       ? appSettings.editorThemeForLightMode
@@ -581,7 +580,6 @@ function App() {
           onRemoveProject={handleRemoveProject}
           onDivergenceCreated={handleDivergenceCreated}
           onDeleteDivergence={handleDeleteDivergence}
-          onToggleSidebar={toggleSidebar}
           isCollapsed={!isSidebarOpen}
         />
       </div>
@@ -600,7 +598,6 @@ function App() {
         reconnectBySessionId={reconnectBySessionId}
         onReconnectSession={handleReconnectSession}
         globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
-        selectToCopy={selectToCopy}
         editorTheme={editorTheme}
         divergencesByProject={divergencesByProject}
         projectsLoading={projectsLoading}

@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { spawn } from "tauri-pty";
 import { DEFAULT_TMUX_HISTORY_LIMIT } from "../lib/appSettings";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
 import { useAppSettings } from "../hooks/useAppSettings";
 
@@ -15,7 +15,6 @@ interface TerminalProps {
   tmuxSessionName?: string;
   tmuxHistoryLimit?: number;
   useWebgl?: boolean;
-  selectToCopy?: boolean;
   onRendererChange?: (renderer: "webgl" | "canvas") => void;
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterCommand?: (sessionId: string) => void;
@@ -81,7 +80,6 @@ function Terminal({
   tmuxSessionName,
   tmuxHistoryLimit,
   useWebgl = true,
-  selectToCopy = true,
   onRendererChange,
   onRegisterCommand,
   onUnregisterCommand,
@@ -103,12 +101,6 @@ function Terminal({
   const terminalFocusDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const initRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeDisabledRef = useRef(false);
-  const selectToCopyRef = useRef(selectToCopy);
-  const selectionDisposableRef = useRef<{ dispose: () => void } | null>(null);
-  const selectionDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSelectionRef = useRef<string>("");
-  const lastCopiedSelectionRef = useRef<string>("");
-  const terminalMouseUpDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
@@ -124,10 +116,6 @@ function Terminal({
   useEffect(() => {
     onRendererChangeRef.current = onRendererChange;
   }, [onRendererChange]);
-
-  useEffect(() => {
-    selectToCopyRef.current = selectToCopy;
-  }, [selectToCopy]);
 
   const updateStatus = useCallback((status: "idle" | "active" | "busy") => {
     if (statusRef.current === status) {
@@ -154,17 +142,13 @@ function Terminal({
     }
   }, [sessionId]);
 
-  const copySelection = useCallback(async (selection: string, force: boolean = false) => {
+  const copySelection = useCallback(async (selection: string) => {
     if (!selection) {
-      return;
-    }
-    if (!force && selection === lastCopiedSelectionRef.current) {
       return;
     }
 
     try {
       await writeText(selection);
-      lastCopiedSelectionRef.current = selection;
       return;
     } catch (err) {
       console.warn(`[${sessionId}] Clipboard plugin copy failed, trying browser clipboard`, err);
@@ -173,10 +157,31 @@ function Terminal({
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(selection);
-        lastCopiedSelectionRef.current = selection;
-        return;
       } catch (err) {
         console.warn(`[${sessionId}] Browser clipboard copy failed`, err);
+      }
+    }
+  }, [sessionId]);
+
+  const pasteFromClipboard = useCallback(async () => {
+    try {
+      const text = await readText();
+      if (text && ptyRef.current) {
+        ptyRef.current.write(text);
+      }
+      return;
+    } catch (err) {
+      console.warn(`[${sessionId}] Clipboard plugin paste failed, trying browser clipboard`, err);
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard?.readText) {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && ptyRef.current) {
+          ptyRef.current.write(text);
+        }
+      } catch (err) {
+        console.warn(`[${sessionId}] Browser clipboard paste failed`, err);
       }
     }
   }, [sessionId]);
@@ -265,23 +270,9 @@ function Terminal({
         const handleFocus = () => {
           tryResumePty();
         };
-        const handleMouseUp = () => {
-          if (!selectToCopyRef.current) {
-            return;
-          }
-          const selection = terminal.getSelection();
-          if (!selection) {
-            return;
-          }
-          void copySelection(selection, true);
-        };
         terminal.element.addEventListener("focusin", handleFocus);
-        terminal.element.addEventListener("mouseup", handleMouseUp);
         terminalFocusDisposableRef.current = {
           dispose: () => terminal.element?.removeEventListener("focusin", handleFocus),
-        };
-        terminalMouseUpDisposableRef.current = {
-          dispose: () => terminal.element?.removeEventListener("mouseup", handleMouseUp),
         };
       }
 
@@ -449,39 +440,34 @@ fi
         });
 
         terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-          const isCopy = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c";
-          if (!isCopy) {
+          if (event.type !== "keydown") {
             return true;
           }
-          const selection = terminal.getSelection();
-          if (!selection) {
-            return true;
+
+          const isMod = event.metaKey || event.ctrlKey;
+          const key = event.key.toLowerCase();
+
+          // Cmd+C / Ctrl+C: copy selection if present, else let SIGINT through
+          if (isMod && key === "c") {
+            const selection = terminal.getSelection();
+            if (!selection) {
+              return true;
+            }
+            void copySelection(selection);
+            return false;
           }
-          void copySelection(selection, true);
-          return false;
+
+          // Cmd+V / Ctrl+V: paste from clipboard
+          if (isMod && key === "v") {
+            void pasteFromClipboard();
+            return false;
+          }
+
+          return true;
         });
 
         terminal.focus();
 
-        // Select-to-copy: on selection change, debounce and copy to clipboard
-        selectionDisposableRef.current = terminal.onSelectionChange(() => {
-          const selection = terminal.getSelection();
-          if (selection) {
-            pendingSelectionRef.current = selection;
-          }
-          if (selectionDebounceTimerRef.current) {
-            clearTimeout(selectionDebounceTimerRef.current);
-          }
-          selectionDebounceTimerRef.current = setTimeout(() => {
-            if (!selectToCopyRef.current) {
-              return;
-            }
-            if (!pendingSelectionRef.current) {
-              return;
-            }
-            void copySelection(pendingSelectionRef.current);
-          }, 50);
-        });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         console.error(`[${sessionId}] PTY error:`, err);
@@ -514,11 +500,6 @@ fi
       if (activityTimeoutRef.current) {
         clearTimeout(activityTimeoutRef.current);
       }
-      if (selectionDebounceTimerRef.current) {
-        clearTimeout(selectionDebounceTimerRef.current);
-      }
-      selectionDisposableRef.current?.dispose();
-      selectionDisposableRef.current = null;
       disposeWebgl();
       if (initRetryTimeoutRef.current) {
         clearTimeout(initRetryTimeoutRef.current);
@@ -534,8 +515,6 @@ fi
       terminalResizeDisposableRef.current = null;
       terminalFocusDisposableRef.current?.dispose();
       terminalFocusDisposableRef.current = null;
-      terminalMouseUpDisposableRef.current?.dispose();
-      terminalMouseUpDisposableRef.current = null;
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
@@ -545,7 +524,7 @@ fi
       initializedRef.current = false;
       resumeDisabledRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, copySelection, themeMode, tmuxHistoryLimit]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, copySelection, pasteFromClipboard, themeMode, tmuxHistoryLimit]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
