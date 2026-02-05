@@ -39,6 +39,8 @@ interface MainAreaProps {
   onCloseFileQuickSwitcher: () => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
+  isRightPanelOpen: boolean;
+  onToggleRightPanel: () => void;
 }
 
 function MainArea({
@@ -65,6 +67,8 @@ function MainArea({
   onCloseFileQuickSwitcher,
   isSidebarOpen,
   onToggleSidebar,
+  isRightPanelOpen,
+  onToggleRightPanel,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -562,6 +566,34 @@ function MainArea({
           >
             Reconnect
           </button>
+          <button
+            type="button"
+            onClick={onToggleRightPanel}
+            className="flex items-center justify-center w-8 h-8 rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 transition-colors"
+            title={isRightPanelOpen ? "Hide right panel (Cmd+Shift+B)" : "Show right panel (Cmd+Shift+B)"}
+            aria-pressed={isRightPanelOpen}
+            aria-label="Toggle right panel"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 5v14"
+              />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -572,126 +604,171 @@ function MainArea({
             <div className="flex-1 relative overflow-hidden min-h-0">
               {renderSession(activeSession)}
             </div>
-            <div className="w-96 border-l border-surface bg-sidebar flex flex-col">
-              <div className="flex items-center border-b border-surface">
-                <button
-                  type="button"
-                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-                    rightPanelTab === "settings"
-                      ? "text-text border-b-2 border-accent"
-                      : "text-subtext hover:text-text"
-                  }`}
-                  onClick={() => setRightPanelTab("settings")}
-                >
-                  Settings
-                </button>
-                <button
-                  type="button"
-                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-                    rightPanelTab === "files"
-                      ? "text-text border-b-2 border-accent"
-                      : "text-subtext hover:text-text"
-                  }`}
-                  onClick={() => setRightPanelTab("files")}
-                >
-                  Files
-                </button>
-                <button
-                  type="button"
-                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-                    rightPanelTab === "changes"
-                      ? "text-text border-b-2 border-accent"
-                      : "text-subtext hover:text-text"
-                  }`}
-                  onClick={() => setRightPanelTab("changes")}
-                >
-                  Changes
-                </button>
-                <button
-                  type="button"
-                  className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
-                    rightPanelTab === "tmux"
-                      ? "text-text border-b-2 border-accent"
-                      : "text-subtext hover:text-text"
-                  }`}
-                  onClick={() => setRightPanelTab("tmux")}
-                >
-                  Tmux
-                </button>
-              </div>
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <AnimatePresence mode="wait" initial={false}>
-                  {rightPanelTab === "settings" ? (
-                    <motion.div
-                      key="settings"
-                      className="h-full"
-                      variants={panelVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      transition={panelTransition}
+            <div
+              className={`shrink-0 overflow-hidden transition-[width] duration-200 ease-out ${
+                isRightPanelOpen ? "w-96" : "w-0"
+              }`}
+            >
+              <div
+                className={`w-96 h-full bg-sidebar flex flex-col ${
+                  isRightPanelOpen ? "border-l border-surface" : ""
+                }`}
+              >
+                <div className="flex items-center border-b border-surface">
+                  <div className="flex flex-1">
+                    <button
+                      type="button"
+                      className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                        rightPanelTab === "settings"
+                          ? "text-text border-b-2 border-accent"
+                          : "text-subtext hover:text-text"
+                      }`}
+                      onClick={() => setRightPanelTab("settings")}
                     >
-                      <ProjectSettingsPanel
-                        project={activeProject}
-                        globalTmuxHistoryLimit={globalTmuxHistoryLimit}
-                        onSaved={onProjectSettingsSaved}
-                        contextPath={activeRootPath}
-                        contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
-                      />
-                    </motion.div>
-                  ) : rightPanelTab === "files" ? (
-                    <motion.div
-                      key="files"
-                      className="h-full"
-                      variants={panelVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      transition={panelTransition}
+                      Settings
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                        rightPanelTab === "files"
+                          ? "text-text border-b-2 border-accent"
+                          : "text-subtext hover:text-text"
+                      }`}
+                      onClick={() => setRightPanelTab("files")}
                     >
-                      <FileExplorer
-                        rootPath={activeRootPath}
-                        activeFilePath={openFilePath}
-                        onOpenFile={handleOpenFile}
-                      />
-                    </motion.div>
-                  ) : rightPanelTab === "changes" ? (
-                    <motion.div
-                      key="changes"
-                      className="h-full"
-                      variants={panelVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      transition={panelTransition}
+                      Files
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                        rightPanelTab === "changes"
+                          ? "text-text border-b-2 border-accent"
+                          : "text-subtext hover:text-text"
+                      }`}
+                      onClick={() => setRightPanelTab("changes")}
                     >
-                      <ChangesPanel
-                        rootPath={activeRootPath}
-                        activeFilePath={openFilePath}
-                        mode={changesMode}
-                        onModeChange={setChangesMode}
-                        onOpenChange={handleOpenChange}
-                      />
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="tmux"
-                      className="h-full"
-                      variants={panelVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      transition={panelTransition}
+                      Changes
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                        rightPanelTab === "tmux"
+                          ? "text-text border-b-2 border-accent"
+                          : "text-subtext hover:text-text"
+                      }`}
+                      onClick={() => setRightPanelTab("tmux")}
                     >
-                      <TmuxPanel
-                        projects={projects}
-                        divergencesByProject={divergencesByProject}
-                        projectsLoading={projectsLoading}
-                        divergencesLoading={divergencesLoading}
+                      Tmux
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onToggleRightPanel}
+                    className="w-8 h-8 mr-1 flex items-center justify-center rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 transition-colors"
+                    title="Hide right panel (Cmd+Shift+B)"
+                    aria-label="Hide right panel"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"
                       />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 5v14"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M10 9l3 3-3 3"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <AnimatePresence mode="wait" initial={false}>
+                    {rightPanelTab === "settings" ? (
+                      <motion.div
+                        key="settings"
+                        className="h-full"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                      >
+                        <ProjectSettingsPanel
+                          project={activeProject}
+                          globalTmuxHistoryLimit={globalTmuxHistoryLimit}
+                          onSaved={onProjectSettingsSaved}
+                          contextPath={activeRootPath}
+                          contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
+                        />
+                      </motion.div>
+                    ) : rightPanelTab === "files" ? (
+                      <motion.div
+                        key="files"
+                        className="h-full"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                      >
+                        <FileExplorer
+                          rootPath={activeRootPath}
+                          activeFilePath={openFilePath}
+                          onOpenFile={handleOpenFile}
+                        />
+                      </motion.div>
+                    ) : rightPanelTab === "changes" ? (
+                      <motion.div
+                        key="changes"
+                        className="h-full"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                      >
+                        <ChangesPanel
+                          rootPath={activeRootPath}
+                          activeFilePath={openFilePath}
+                          mode={changesMode}
+                          onModeChange={setChangesMode}
+                          onOpenChange={handleOpenChange}
+                        />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="tmux"
+                        className="h-full"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                      >
+                        <TmuxPanel
+                          projects={projects}
+                          divergencesByProject={divergencesByProject}
+                          projectsLoading={projectsLoading}
+                          divergencesLoading={divergencesLoading}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTmuxSessions } from "../hooks/useTmuxSessions";
 import type { Project, Divergence, TmuxSessionWithOwnership } from "../types";
 
@@ -37,12 +37,37 @@ function ownershipLabel(session: TmuxSessionWithOwnership): {
   }
 }
 
+function getSearchText(session: TmuxSessionWithOwnership): string {
+  const parts = [session.name, session.attached ? "attached" : "detached"];
+
+  switch (session.ownership.kind) {
+    case "project":
+      parts.push(session.ownership.project.name);
+      break;
+    case "divergence":
+      parts.push(
+        session.ownership.project.name,
+        session.ownership.divergence.branch
+      );
+      break;
+    case "orphan":
+      parts.push("orphan");
+      break;
+    case "unknown":
+      parts.push("checking");
+      break;
+  }
+
+  return parts.join(" ").toLowerCase();
+}
+
 function TmuxPanel({
   projects,
   divergencesByProject,
   projectsLoading,
   divergencesLoading,
 }: TmuxPanelProps) {
+  const [searchQuery, setSearchQuery] = useState("");
   const ownershipReady = !projectsLoading && !divergencesLoading;
   const {
     sessions,
@@ -54,6 +79,16 @@ function TmuxPanel({
     killOrphans,
     killAll,
   } = useTmuxSessions(projects, divergencesByProject, ownershipReady);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredSessions = useMemo(() => {
+    if (!normalizedQuery) {
+      return sessions;
+    }
+    return sessions.filter((session) =>
+      getSearchText(session).includes(normalizedQuery)
+    );
+  }, [sessions, normalizedQuery]);
+  const isFiltering = normalizedQuery.length > 0;
 
   const handleKillOrphans = useCallback(() => {
     if (!ownershipReady) return;
@@ -69,25 +104,85 @@ function TmuxPanel({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-surface">
-        <div className="text-xs uppercase text-subtext font-medium">
-          Tmux Sessions
+      <div className="border-b border-surface">
+        <div className="flex items-center justify-between px-3 py-2">
+          <div className="text-xs uppercase text-subtext font-medium">
+            Tmux Sessions
+          </div>
+          <button
+            type="button"
+            className="text-xs text-subtext hover:text-text"
+            onClick={refresh}
+            disabled={loading}
+          >
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
         </div>
-        <button
-          type="button"
-          className="text-xs text-subtext hover:text-text"
-          onClick={refresh}
-          disabled={loading}
-        >
-          {loading ? "Refreshing..." : "Refresh"}
-        </button>
+        <div className="px-3 pb-2">
+          <div className="flex items-center gap-2 bg-main px-3 py-2 rounded">
+            <svg
+              className="w-4 h-4 text-subtext"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setSearchQuery("");
+                  event.currentTarget.blur();
+                }
+              }}
+              placeholder="Search sessions..."
+              className="flex-1 bg-transparent text-text placeholder-subtext focus:outline-none text-xs"
+              aria-label="Search tmux sessions"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="text-subtext hover:text-text"
+                onClick={() => setSearchQuery("")}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Summary bar */}
       {sessions.length > 0 && (
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface text-[10px] text-subtext">
           <span>
-            {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+            {isFiltering
+              ? `${filteredSessions.length} of ${sessions.length} session${
+                  sessions.length !== 1 ? "s" : ""
+                }`
+              : `${sessions.length} session${sessions.length !== 1 ? "s" : ""}`}
             {!ownershipReady && (
               <span className="text-subtext/70"> · checking ownership…</span>
             )}
@@ -141,7 +236,13 @@ function TmuxPanel({
           </div>
         )}
 
-        {sessions.map((session) => {
+        {!error && !loading && sessions.length > 0 && filteredSessions.length === 0 && isFiltering && (
+          <div className="px-2 py-8 text-center text-xs text-subtext">
+            No sessions match "{searchQuery}"
+          </div>
+        )}
+
+        {filteredSessions.map((session) => {
           const badge = ownershipLabel(session);
           return (
             <div
