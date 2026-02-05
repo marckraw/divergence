@@ -658,39 +658,6 @@ function MainArea({
                       Tmux
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={onToggleRightPanel}
-                    className="w-8 h-8 mr-1 flex items-center justify-center rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 transition-colors"
-                    title="Hide right panel (Cmd+Shift+B)"
-                    aria-label="Hide right panel"
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 5v14"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M10 9l3 3-3 3"
-                      />
-                    </svg>
-                  </button>
                 </div>
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <AnimatePresence mode="wait" initial={false}>
