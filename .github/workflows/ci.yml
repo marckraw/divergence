@@ -19,6 +19,11 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Chaperone
+        run: bunx chaperone check --no-progress
+
       - name: TypeScript check
         run: npm run typecheck
 

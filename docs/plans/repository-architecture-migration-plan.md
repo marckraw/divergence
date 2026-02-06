@@ -349,6 +349,7 @@ Current progress notes:
 28. Added onboarding architecture quick reference at `docs/architecture/quick-reference.md`.
 29. `AGENTS.md` and `CLAUDE.md` now include the quick-reference doc and treat architecture lint/chaperone failures as blocking.
 30. Shared-layer upward dependencies were eliminated in phase hardening hotspots (`shared/ui/StatusIndicator.presentational.tsx`, `shared/api/tmuxSessions.api.ts`).
+31. CI now runs Chaperone checks in `.github/workflows/ci.yml`, so architecture enforcement is deterministic in pull requests.
 
 Repository coverage audit (2026-02-06):
 1. Reviewed migration coverage across `src/app`, `src/components`, `src/entities`, `src/features`, `src/hooks`, `src/lib`, `src/shared`, `src/widgets`, plus `tests` and `src-tauri` for scope checks.
