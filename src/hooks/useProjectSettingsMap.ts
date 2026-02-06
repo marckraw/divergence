@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Project } from "../types";
+import type { Project } from "../entities";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { loadProjectSettings } from "../lib/projectSettings";
 

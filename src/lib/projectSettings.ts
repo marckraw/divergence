@@ -1,4 +1,4 @@
-import { getDb } from "../hooks/useDatabase";
+import { getDb } from "../shared/api/database.api";
 import { DEFAULT_TMUX_HISTORY_LIMIT, normalizeTmuxHistoryLimit } from "./appSettings";
 
 export const DEFAULT_COPY_IGNORED_SKIP = [

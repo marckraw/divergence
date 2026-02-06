@@ -1,4 +1,4 @@
-import type { Divergence, Project, TerminalSession } from "../../types";
+import type { Divergence, Project, TerminalSession } from "../../entities";
 
 export type SessionType = "project" | "divergence";
 

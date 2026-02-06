@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type {
-  Project,
-  Divergence,
   TmuxSessionEntry,
   TmuxSessionWithOwnership,
 } from "../types";
+import type { Divergence, Project } from "../entities";
+import {
+  killAllTmuxSessions,
+  killTmuxSession,
+  listTmuxSessions,
+} from "../shared/api/tmuxSessions.api";
 import {
   annotateTmuxSessions,
   buildTmuxOwnershipMap,
@@ -49,7 +52,7 @@ export function useTmuxSessions(
     setLoading(true);
     setError(null);
     try {
-      const result = await invoke<TmuxSessionEntry[]>("list_tmux_sessions");
+      const result = await listTmuxSessions();
       setRawSessions(result);
     } catch (err) {
       const message =
@@ -69,7 +72,7 @@ export function useTmuxSessions(
       setLoading(true);
       setError(null);
       try {
-        await invoke("kill_tmux_session", { sessionName: name });
+        await killTmuxSession(name);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to kill tmux session.";
@@ -92,7 +95,7 @@ export function useTmuxSessions(
     setLoading(true);
     setError(null);
     try {
-      await invoke("kill_all_tmux_sessions", { sessionNames: orphanNames });
+      await killAllTmuxSessions(orphanNames);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to kill tmux sessions.";
@@ -108,7 +111,7 @@ export function useTmuxSessions(
     setLoading(true);
     setError(null);
     try {
-      await invoke("kill_all_tmux_sessions", { sessionNames: allNames });
+      await killAllTmuxSessions(allNames);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to kill tmux sessions.";

@@ -1,4 +1,4 @@
-import type { Project, TerminalSession } from "../../types";
+import type { Project, TerminalSession } from "../../entities";
 
 export interface ResolveProjectForNewDivergenceInput {
   activeSessionId: string | null;

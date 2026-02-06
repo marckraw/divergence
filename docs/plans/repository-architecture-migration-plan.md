@@ -1,6 +1,6 @@
 # Repository Architecture Migration Plan (2026)
 
-Status: Draft  
+Status: In Progress  
 Owner: Core team  
 Created: 2026-02-06  
 Scope: `src/**` (TypeScript/React), then policy sync in `AGENTS.md` and `CLAUDE.md`
@@ -239,7 +239,7 @@ Use `rules.custom` with these rule types:
 
 1. `component-location` for presentational/stateful placement.
 2. `regex` for forbidden usage patterns inside presentational files.
-3. `file-naming` for companion file rules.
+3. `regex` for container/presentational pairing checks.
 
 Example rule set shape (to be refined in implementation PR):
 
@@ -265,20 +265,19 @@ Example rule set shape (to be refined in implementation PR):
         "message": "Presentational components cannot contain side effects"
       },
       {
-        "type": "file-naming",
-        "id": "container-has-presentational-pair",
+        "type": "regex",
+        "id": "container-imports-presentational",
         "severity": "warning",
-        "pattern": "src/**/*.container.tsx",
-        "requireCompanion": {
-          "transform": "$1.presentational.tsx"
-        }
+        "files": "src/**/*.container.tsx",
+        "pattern": "^(?![\\\\s\\\\S]*from\\\\s+[\\\"']\\\\./[^\\\"']+\\\\.presentational[\\\"'])[\\\\s\\\\S]+$",
+        "message": "Container components should import a colocated *.presentational component (missing import detected)"
       }
     ]
   }
 }
 ```
 
-Note: Chaperone v0.1.0 supports these rule categories; regex rules will carry much of deterministic enforcement.
+Note: Current Chaperone `file-naming` companion transforms cannot strip a `.container` suffix from `$1`, so pairing is enforced via a regex violation pattern for now.
 
 ## 9) ESLint enforcement plan
 
@@ -310,14 +309,51 @@ Risk mitigations:
 
 ## 11) Tracking checklist
 
-- [ ] Phase 0 complete
-- [ ] Phase 1 complete
+- [x] Phase 0 complete
+- [x] Phase 1 complete
 - [ ] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
 - [ ] Phase 6 complete
 - [ ] Phase 7 complete
+
+Current progress notes:
+1. `features/task-center` and `features/quick-switcher` are introduced and consumed by app composition.
+2. `widgets/sidebar`, `widgets/main-area`, and `widgets/settings-modal` entry points are introduced and consumed by app composition.
+3. `Sidebar`, `MainArea`, and `Settings` container/presentational/type implementations now live under `src/widgets/*/ui`.
+4. Legacy `src/components/Sidebar.tsx`, `src/components/MainArea.tsx`, and `src/components/Settings.tsx` remain compatibility adapters.
+5. Main-area support components (`ProjectSettingsPanel`, `FileExplorer`, `ChangesPanel`, `TmuxPanel`, `QuickEditDrawer`, `FileQuickSwitcher`, `Terminal`) now live under `src/widgets/main-area/ui`.
+6. App orchestration moved to `src/app/App.container.tsx` with compatibility adapter `src/App.tsx`.
+7. `features/create-divergence` now owns divergence-create modal UI and validation utility, with legacy compatibility adapters in `src/components/CreateDivergenceModal.tsx` and `src/lib/utils/createDivergence.ts`.
+8. `features/merge-detection` now owns merge detection hook + merge notification UI, with legacy compatibility adapters in `src/hooks/useMergeDetection.ts` and `src/components/MergeNotification.tsx`.
+9. `features/file-quick-switcher` now exists with `container/presentational/types` split and is consumed by `widgets/main-area`.
+10. Core type contracts are now organized into `entities/project`, `entities/divergence`, and `entities/terminal-session`, with compatibility re-exports in `src/types.ts`.
+11. `features/delete-divergence` now owns delete orchestration via `*.service.ts`, and `src/app/App.container.tsx` delegates delete workflow to that service.
+12. `features/create-divergence` now owns divergence creation orchestration via `*.service.ts`, and `src/app/App.container.tsx` delegates create workflow to that service.
+13. `features/remove-project` now owns project removal orchestration via `*.service.ts`, and `src/app/App.container.tsx` delegates remove workflow to that service.
+14. Tmux kill-session IO is now consolidated in `src/shared/api/tmuxSessions.api.ts`, and delete/remove feature services call this shared API directly.
+15. Feature IO boundaries were tightened with dedicated API modules: `features/create-divergence/api/createDivergence.api.ts`, `features/delete-divergence/api/deleteDivergence.api.ts`, and `features/merge-detection/api/mergeDetection.api.ts`.
+16. Shared task runner contracts are now centralized in `entities/task` (`BackgroundTaskControls`, `BackgroundTaskRunOptions`, `RunBackgroundTask`) and reused by create/delete/remove feature type definitions.
+17. Database bootstrap/schema setup moved to `src/shared/api/database.api.ts`; `src/hooks/useDatabase.ts` is now a compatibility adapter.
+18. Project/divergence query and mutation hooks moved under entity slices (`entities/project/model/useProjects.ts`, `entities/divergence/model/useDivergences.ts`) with entity-local `*.api.ts` DB boundaries.
+19. `src/hooks/useTmuxSessions.ts` now calls `src/shared/api/tmuxSessions.api.ts` wrappers for list/kill/kill-all operations (no direct raw invoke calls in the hook).
+20. `src/lib/projectSettings.ts` now imports `getDb` directly from `src/shared/api/database.api.ts` instead of the legacy hook adapter.
+
+Repository coverage audit (2026-02-06):
+1. Reviewed migration coverage across `src/app`, `src/components`, `src/entities`, `src/features`, `src/hooks`, `src/lib`, `src/shared`, `src/widgets`, plus `tests` and `src-tauri` for scope checks.
+2. `src/components/*.tsx` is now consistently a compatibility adapter layer to widget/feature/shared modules.
+3. Remaining migration hotspots:
+   - `src/hooks/useRalphyConfig.ts`: still contains direct invoke orchestration and should move toward `*.api.ts` boundary + slice owner.
+   - Container-level raw invoke calls still pending Phase 6 extraction to `*.api.ts` in:
+     - `src/features/create-divergence/ui/CreateDivergenceModal.container.tsx`
+     - `src/features/file-quick-switcher/ui/FileQuickSwitcher.container.tsx`
+     - `src/widgets/main-area/ui/MainArea.container.tsx`
+     - `src/widgets/main-area/ui/ChangesPanel.tsx`
+     - `src/widgets/settings-modal/ui/Settings.container.tsx`
+   - `src/hooks/useTerminal.ts` and `src/widgets/main-area/ui/Terminal.tsx`: PTY spawn/process orchestration remains in UI/hook layer; needs API/service extraction.
+   - `src/widgets/main-area/ui/*.tsx` support components still use legacy naming (non `*.container.tsx`/`*.presentational.tsx`) and need incremental split.
+   - `src/lib/utils/*.ts`: many utilities are still in legacy flat location and should be progressively moved to `shared/entities/features` slice-local `lib` modules with compatibility re-exports.
 
 ## 12) Success metrics
 

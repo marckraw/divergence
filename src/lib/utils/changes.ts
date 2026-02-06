@@ -1,4 +1,4 @@
-import type { GitChangeEntry } from "../../types";
+import type { GitChangeEntry } from "../../entities";
 
 export function getRelativePathFromRoot(rootPath: string, absolutePath: string): string | null {
   if (!absolutePath.startsWith(rootPath)) {

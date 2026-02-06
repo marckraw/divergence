@@ -1,6 +1,6 @@
 # Phase 1 Execution Checklist: Presentational/Container Split
 
-Status: Planned  
+Status: In Progress  
 Primary objective: introduce `*.presentational.tsx` and `*.container.tsx` as the default component pattern for UI orchestration boundaries.  
 Related plan: `docs/plans/repository-architecture-migration-plan.md`
 
@@ -49,61 +49,61 @@ Out of scope:
 
 ## 5.1 TaskCenterDrawer
 
-- [ ] Create `src/components/TaskCenterDrawer.container.tsx`
-- [ ] Create `src/components/TaskCenterDrawer.presentational.tsx`
-- [ ] Move timer/effect logic (`nowMs` interval) to container
-- [ ] Keep card rendering and pure visual structure in presentational
-- [ ] Keep exported API compatible for current call-site
+- [x] Create `src/components/TaskCenterDrawer.container.tsx`
+- [x] Create `src/components/TaskCenterDrawer.presentational.tsx`
+- [x] Move timer/effect logic (`nowMs` interval) to container
+- [x] Keep card rendering and pure visual structure in presentational
+- [x] Keep exported API compatible for current call-site
 
 ## 5.2 QuickSwitcher
 
-- [ ] Create `src/components/QuickSwitcher.container.tsx`
-- [ ] Create `src/components/QuickSwitcher.presentational.tsx`
-- [ ] Move query state, keyboard handlers, selection logic to container
-- [ ] Keep result list rendering and static visuals in presentational
-- [ ] Ensure keyboard navigation behavior parity (`↑`, `↓`, `Enter`, `Escape`)
+- [x] Create `src/components/QuickSwitcher.container.tsx`
+- [x] Create `src/components/QuickSwitcher.presentational.tsx`
+- [x] Move query state, keyboard handlers, selection logic to container
+- [x] Keep result list rendering and static visuals in presentational
+- [x] Ensure keyboard navigation behavior parity (`↑`, `↓`, `Enter`, `Escape`)
 
 ## 5.3 Settings
 
-- [ ] Create `src/components/Settings.container.tsx`
-- [ ] Create `src/components/Settings.presentational.tsx`
-- [ ] Keep update check/install orchestration in container
-- [ ] Keep form rendering, sections, and visual controls in presentational
-- [ ] Preserve save behavior and settings normalization flow
+- [x] Create `src/components/Settings.container.tsx`
+- [x] Create `src/components/Settings.presentational.tsx`
+- [x] Keep update check/install orchestration in container
+- [x] Keep form rendering, sections, and visual controls in presentational
+- [x] Preserve save behavior and settings normalization flow
 
 ## 5.4 Sidebar
 
-- [ ] Create `src/components/Sidebar.container.tsx`
-- [ ] Create `src/components/Sidebar.presentational.tsx`
-- [ ] Keep context menu state and divergence actions in container
-- [ ] Keep project/divergence tree rendering in presentational
-- [ ] Preserve expand/collapse, selection, and context menu behavior
+- [x] Create `src/components/Sidebar.container.tsx`
+- [x] Create `src/components/Sidebar.presentational.tsx`
+- [x] Keep context menu state and divergence actions in container
+- [x] Keep project/divergence tree rendering in presentational
+- [x] Preserve expand/collapse, selection, and context menu behavior
 
 ## 5.5 MainArea
 
-- [ ] Create `src/components/MainArea.container.tsx`
-- [ ] Create `src/components/MainArea.presentational.tsx`
-- [ ] Keep file IO + diff loading + save logic in container
-- [ ] Keep terminal tabbar and right panel rendering in presentational
-- [ ] Keep split/reconnect callbacks routed through container
-- [ ] Verify Quick Edit drawer behavior parity (dirty checks, save, close)
+- [x] Create `src/components/MainArea.container.tsx`
+- [x] Create `src/components/MainArea.presentational.tsx`
+- [x] Keep file IO + diff loading + save logic in container
+- [x] Keep terminal tabbar and right panel rendering in presentational
+- [x] Keep split/reconnect callbacks routed through container
+- [x] Verify Quick Edit drawer behavior parity (dirty checks, save, close)
 
 ## 6) Verification checklist per PR
 
-- [ ] `npm run test:unit`
-- [ ] `chaperone check --fix`
+- [x] `npm run test:unit`
+- [x] `chaperone check --fix`
 - [ ] Manual smoke test for affected component flow
 - [ ] No behavior regressions in keyboard shortcuts or modal interactions
 
 ## 7) Risk and rollback notes
 
-- [ ] Preserve legacy file exports temporarily if needed to reduce churn
-- [ ] If migration causes broad call-site churn, add adapter exports for one PR cycle
+- [x] Preserve legacy file exports temporarily if needed to reduce churn
+- [x] If migration causes broad call-site churn, add adapter exports for one PR cycle
 - [ ] If behavior differs, revert to previous step and split into smaller extraction commits
 
 ## 8) Exit criteria for Phase 1
 
-- [ ] All five in-scope components migrated
-- [ ] `*.presentational.tsx` and `*.container.tsx` conventions established in active usage
-- [ ] Chaperone rules active for presentational-side effect constraints
-- [ ] Agent instruction files updated (AGENTS/CLAUDE) and aligned with practice
+- [x] All five in-scope components migrated
+- [x] `*.presentational.tsx` and `*.container.tsx` conventions established in active usage
+- [x] Chaperone rules active for presentational-side effect constraints
+- [x] Agent instruction files updated (AGENTS/CLAUDE) and aligned with practice

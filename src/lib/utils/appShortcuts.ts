@@ -1,4 +1,4 @@
-import type { SplitOrientation } from "../../types";
+import type { SplitOrientation } from "../../entities";
 
 export interface AppShortcutEvent {
   defaultPrevented: boolean;

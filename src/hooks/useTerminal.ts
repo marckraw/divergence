@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { spawn, type IPty } from "tauri-pty";
-import type { TerminalSession } from "../types";
+import type { TerminalSession } from "../entities";
 
 interface UseTerminalOptions {
   cwd?: string;

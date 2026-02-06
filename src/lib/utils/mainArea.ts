@@ -1,4 +1,4 @@
-import type { TerminalSession } from "../../types";
+import type { TerminalSession } from "../../entities";
 
 export function joinSessionPath(parent: string, child: string): string {
   if (child.startsWith("/") || child.startsWith("\\")) {

@@ -41,34 +41,65 @@
         "message": "Presentational components must not import Tauri APIs"
       },
       {
-        "type": "file-naming",
-        "id": "container-has-presentational-pair",
+        "type": "regex",
+        "id": "container-imports-presentational",
         "severity": "warning",
-        "pattern": "src/**/*.container.tsx",
+        "files": "src/**/*.container.tsx",
         "exclude": [
           "src/app/**"
         ],
-        "requireCompanion": {
-          "transform": "$1.presentational.tsx"
-        },
-        "message": "Container components should have a colocated presentational pair"
+        "pattern": "^(?![\\s\\S]*from\\s+[\"']\\./[^\"']+\\.presentational[\"'])[\\s\\S]+$",
+        "message": "Container components should import a colocated *.presentational component (missing import detected)"
       },
       {
         "type": "component-location",
         "id": "presentational-in-legacy-components-tree",
         "severity": "warning",
-        "files": "src/**/*.presentational.tsx",
-        "exclude": [
-          "src/shared/**",
-          "src/entities/**",
-          "src/features/**",
-          "src/widgets/**",
-          "src/app/**"
-        ],
+        "files": "src/components/**/*.presentational.tsx",
         "componentType": "presentational",
         "requiredLocation": "src/components/**",
         "mustBeIn": true,
         "message": "During Phase 1 migration, presentational components should live under src/components"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-features-ui",
+        "severity": "warning",
+        "files": "src/features/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/features/**/ui/**",
+        "mustBeIn": true,
+        "message": "Feature presentational components should live under a ui/ folder"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-widgets-ui",
+        "severity": "warning",
+        "files": "src/widgets/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/widgets/**/ui/**",
+        "mustBeIn": true,
+        "message": "Widget presentational components should live under a ui/ folder"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-entities-ui",
+        "severity": "warning",
+        "files": "src/entities/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/entities/**/ui/**",
+        "mustBeIn": true,
+        "message": "Entity presentational components should live under a ui/ folder"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-shared-ui",
+        "severity": "warning",
+        "files": "src/shared/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/shared/ui/**",
+        "mustBeIn": true,
+        "message": "Shared presentational components should live under src/shared/ui"
       }
     ]
   },

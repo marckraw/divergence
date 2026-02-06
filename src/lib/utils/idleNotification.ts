@@ -1,4 +1,4 @@
-import type { TerminalSession } from "../../types";
+import type { TerminalSession } from "../../entities";
 
 export interface ShouldNotifyIdleInput {
   sessionExists: boolean;

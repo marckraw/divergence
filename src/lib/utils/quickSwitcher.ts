@@ -1,4 +1,4 @@
-import type { Divergence, Project } from "../../types";
+import type { Divergence, Project } from "../../entities";
 
 export interface QuickSwitcherSearchResult {
   type: "project" | "divergence";

@@ -1,4 +1,4 @@
-import type { Project, Divergence, TerminalSession } from "../../types";
+import type { Project, Divergence, TerminalSession } from "../../entities";
 import type { ProjectSettings } from "../projectSettings";
 import { DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "../projectSettings";
 import { buildTmuxSessionName } from "../tmux";
