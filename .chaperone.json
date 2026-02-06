@@ -132,6 +132,32 @@
         "files": "src/lib/**/*.ts",
         "pattern": ".+",
         "message": "src/lib is retired; move utilities to app/shared/entities/features/widgets lib folders"
+      },
+      {
+        "type": "package-fields",
+        "id": "pure-function-check-wired-into-unit-tests",
+        "severity": "error",
+        "requiredFields": [
+          "scripts.test:pure",
+          "scripts.test:unit"
+        ],
+        "fieldPatterns": {
+          "scripts.test:pure": "chaperone\\s+check",
+          "scripts.test:unit": "test:pure"
+        },
+        "message": "package.json must enforce pure-function test checks via test:pure and test:unit"
+      },
+      {
+        "type": "symbol-reference",
+        "id": "pure-function-exports-referenced-in-unit-tests",
+        "severity": "error",
+        "sourceFiles": "src/**/*.pure.ts",
+        "targetFiles": "tests/unit/**/*.test.ts",
+        "symbolKinds": [
+          "function-declaration",
+          "function-variable"
+        ],
+        "message": "Exported pure functions must be referenced in unit tests"
       }
     ]
   },
