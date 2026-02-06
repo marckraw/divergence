@@ -1,5 +1,11 @@
 # divergence
 
+## 0.6.3
+
+### Patch Changes
+
+- eb35b1c: shortcut and button to toggle sidepanel right
+
 ## 0.6.2
 
 ### Patch Changes
