@@ -1,10 +1,10 @@
 import { useCallback, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import {
   normalizeBranchName,
   validateBranchName,
 } from "../lib/createDivergence.pure";
+import { listRemoteBranches } from "../api/createDivergence.api";
 import CreateDivergenceModalPresentational from "./CreateDivergenceModal.presentational";
 import type { CreateDivergenceModalProps } from "./CreateDivergenceModal.types";
 
@@ -28,9 +28,7 @@ function CreateDivergenceModalContainer({
 
     setLoadingBranches(true);
     try {
-      const branches = await invoke<string[]>("list_remote_branches", {
-        path: project.path,
-      });
+      const branches = await listRemoteBranches(project.path);
       setRemoteBranches(branches);
     } catch (err) {
       console.warn("Failed to load remote branches:", err);

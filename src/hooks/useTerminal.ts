@@ -1,8 +1,9 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { spawn, type IPty } from "tauri-pty";
+import type { IPty } from "tauri-pty";
 import type { TerminalSession } from "../entities";
+import { spawnLoginPty } from "../shared/api/pty.api";
 
 interface UseTerminalOptions {
   cwd?: string;
@@ -71,12 +72,11 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     fitAddon.fit();
 
     // Spawn PTY process
-    const shell = "/bin/zsh";
     const cols = terminal.cols;
     const rows = terminal.rows;
 
     try {
-      const pty = spawn(shell, ["-l"], {
+      const pty = spawnLoginPty({
         cols,
         rows,
         cwd: options.cwd || "/",

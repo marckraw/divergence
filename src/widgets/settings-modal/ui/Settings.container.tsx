@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   DEFAULT_APP_SETTINGS,
@@ -9,6 +8,7 @@ import {
   broadcastAppSettings,
 } from "../../../lib/appSettings";
 import { getUpdaterPresentation } from "../../../lib/utils/updaterPresentation";
+import { getDivergenceBasePath } from "../api/settings.api";
 import SettingsPresentational from "./Settings.presentational";
 import type { SettingsProps, SettingsState } from "./Settings.types";
 
@@ -29,7 +29,7 @@ function SettingsContainer({ onClose, updater }: SettingsProps) {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const basePath = await invoke<string>("get_divergence_base_path");
+        const basePath = await getDivergenceBasePath();
         const storedSettings = loadAppSettings();
 
         setSettings({

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
-import { invoke } from "@tauri-apps/api/core";
-import Terminal from "./Terminal";
+import Terminal from "./Terminal.container";
 import MainAreaPresentational from "./MainArea.presentational";
 import type { MainAreaOpenDiff, MainAreaProps, RightPanelTab } from "./MainArea.types";
 import type {
@@ -16,6 +15,10 @@ import {
   getAggregatedTerminalStatus,
   joinSessionPath,
 } from "../../../lib/utils/mainArea";
+import {
+  getBranchDiff,
+  getWorkingDiff,
+} from "../api/mainArea.api";
 
 function MainAreaContainer({
   projects,
@@ -152,17 +155,10 @@ function MainAreaContainer({
 
     try {
       if (changesMode === "branch") {
-        const diff = await invoke<{ diff: string; isBinary: boolean }>("get_branch_diff", {
-          path: activeRootPath,
-          filePath: absolutePath,
-        });
+        const diff = await getBranchDiff(activeRootPath, absolutePath);
         setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
       } else {
-        const diff = await invoke<{ diff: string; isBinary: boolean }>("get_git_diff", {
-          path: activeRootPath,
-          filePath: absolutePath,
-          mode: "working",
-        });
+        const diff = await getWorkingDiff(activeRootPath, absolutePath);
         setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
       }
     } catch (error) {
@@ -206,11 +202,7 @@ function MainAreaContainer({
         setDiffLoading(true);
         setDiffError(null);
         try {
-          const diff = await invoke<{ diff: string; isBinary: boolean }>("get_git_diff", {
-            path: activeRootPath,
-            filePath: openFilePath,
-            mode: "working",
-          });
+          const diff = await getWorkingDiff(activeRootPath, openFilePath);
           setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
         } catch (error) {
           setDiffError(error instanceof Error ? error.message : "Failed to refresh diff.");

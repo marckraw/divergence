@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import {
   filterFilesByQuery,
   joinRootWithRelativePath,
 } from "../../../lib/utils/fileQuickSwitcher";
+import { listProjectFiles } from "../api/fileQuickSwitcher.api";
 import FileQuickSwitcherPresentational from "./FileQuickSwitcher.presentational";
 import type { FileQuickSwitcherProps } from "./FileQuickSwitcher.types";
-
-interface FileListResult {
-  files: string[];
-  truncated: boolean;
-}
 
 const MAX_RENDERED = 200;
 
@@ -30,7 +25,7 @@ function FileQuickSwitcherContainer({ rootPath, onSelect, onClose }: FileQuickSw
     setIsLoading(true);
     setError(null);
 
-    invoke<FileListResult>("list_project_files", { rootPath })
+    listProjectFiles(rootPath)
       .then((result) => {
         if (cancelled) {
           return;

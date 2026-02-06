@@ -1,6 +1,6 @@
 # Repository Architecture Migration Plan (2026)
 
-Status: In Progress  
+Status: In Progress (Phases 0-6 complete; Phase 7 hardening pending)  
 Owner: Core team  
 Created: 2026-02-06  
 Scope: `src/**` (TypeScript/React), then policy sync in `AGENTS.md` and `CLAUDE.md`
@@ -311,11 +311,11 @@ Risk mitigations:
 
 - [x] Phase 0 complete
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
-- [ ] Phase 3 complete
-- [ ] Phase 4 complete
-- [ ] Phase 5 complete
-- [ ] Phase 6 complete
+- [x] Phase 2 complete
+- [x] Phase 3 complete
+- [x] Phase 4 complete
+- [x] Phase 5 complete
+- [x] Phase 6 complete
 - [ ] Phase 7 complete
 
 Current progress notes:
@@ -339,21 +339,19 @@ Current progress notes:
 18. Project/divergence query and mutation hooks moved under entity slices (`entities/project/model/useProjects.ts`, `entities/divergence/model/useDivergences.ts`) with entity-local `*.api.ts` DB boundaries.
 19. `src/hooks/useTmuxSessions.ts` now calls `src/shared/api/tmuxSessions.api.ts` wrappers for list/kill/kill-all operations (no direct raw invoke calls in the hook).
 20. `src/lib/projectSettings.ts` now imports `getDb` directly from `src/shared/api/database.api.ts` instead of the legacy hook adapter.
+21. `src/hooks/useRalphyConfig.ts` now calls `src/shared/api/ralphyConfig.api.ts` and consumes shared Ralphy response/types from `src/shared/api/ralphyConfig.types.ts`.
+22. Container-level raw invoke calls were moved behind `*.api.ts` wrappers in create-divergence, file-quick-switcher, main-area, and settings-modal slices.
+23. PTY spawn/process entry points are standardized in `src/shared/api/pty.api.ts`, and hook/widget consumers (`useTerminal`, `Terminal`) now call those wrappers.
+24. Main-area support modules now follow incremental `*.container.tsx` naming (`ChangesPanel`, `FileExplorer`, `ProjectSettingsPanel`, `QuickEditDrawer`, `Terminal`, `TmuxPanel`) with compatibility adapters kept at legacy paths.
+25. Repository scan now confirms transport/process boundaries: raw `invoke(...)` and `spawn(...)` calls are confined to `*.api.ts` files only.
 
 Repository coverage audit (2026-02-06):
 1. Reviewed migration coverage across `src/app`, `src/components`, `src/entities`, `src/features`, `src/hooks`, `src/lib`, `src/shared`, `src/widgets`, plus `tests` and `src-tauri` for scope checks.
 2. `src/components/*.tsx` is now consistently a compatibility adapter layer to widget/feature/shared modules.
-3. Remaining migration hotspots:
-   - `src/hooks/useRalphyConfig.ts`: still contains direct invoke orchestration and should move toward `*.api.ts` boundary + slice owner.
-   - Container-level raw invoke calls still pending Phase 6 extraction to `*.api.ts` in:
-     - `src/features/create-divergence/ui/CreateDivergenceModal.container.tsx`
-     - `src/features/file-quick-switcher/ui/FileQuickSwitcher.container.tsx`
-     - `src/widgets/main-area/ui/MainArea.container.tsx`
-     - `src/widgets/main-area/ui/ChangesPanel.tsx`
-     - `src/widgets/settings-modal/ui/Settings.container.tsx`
-   - `src/hooks/useTerminal.ts` and `src/widgets/main-area/ui/Terminal.tsx`: PTY spawn/process orchestration remains in UI/hook layer; needs API/service extraction.
-   - `src/widgets/main-area/ui/*.tsx` support components still use legacy naming (non `*.container.tsx`/`*.presentational.tsx`) and need incremental split.
-   - `src/lib/utils/*.ts`: many utilities are still in legacy flat location and should be progressively moved to `shared/entities/features` slice-local `lib` modules with compatibility re-exports.
+3. Remaining work is now concentrated in Phase 7 hardening:
+   - Add explicit ESLint architecture boundary tooling/rules (`eslint-plugin-boundaries` and/or `eslint-plugin-check-file`) and keep it CI-enforced.
+   - Decide whether to promote the current Chaperone warning-level pairing/location checks to error-level after final compatibility adapters are retired.
+   - Add a short architecture quick-reference onboarding doc.
 
 ## 12) Success metrics
 

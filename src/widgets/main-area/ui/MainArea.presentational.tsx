@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import ProjectSettingsPanel from "./ProjectSettingsPanel";
-import FileExplorer from "./FileExplorer";
-import ChangesPanel from "./ChangesPanel";
-import TmuxPanel from "./TmuxPanel";
-import QuickEditDrawer from "./QuickEditDrawer";
+import ProjectSettingsPanel from "./ProjectSettingsPanel.container";
+import FileExplorer from "./FileExplorer.container";
+import ChangesPanel from "./ChangesPanel.container";
+import TmuxPanel from "./TmuxPanel.container";
+import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../lib/motion";
 import { TabButton, ToolbarButton } from "../../../shared/ui";

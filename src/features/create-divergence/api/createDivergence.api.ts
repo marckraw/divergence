@@ -9,6 +9,10 @@ interface CreateDivergenceCommandParams {
   useExistingBranch: boolean;
 }
 
+export async function listRemoteBranches(path: string): Promise<string[]> {
+  return invoke<string[]>("list_remote_branches", { path });
+}
+
 export async function createDivergenceRepository({
   project,
   branchName,
