@@ -5,6 +5,7 @@ import {
   filterTmuxSessions,
   getTmuxOwnershipBadge,
 } from "../../../lib/utils/tmuxPanel";
+import TmuxPanelPresentational from "./TmuxPanel.presentational";
 
 interface TmuxPanelProps {
   projects: Project[];
@@ -48,7 +49,8 @@ function TmuxPanel({
   }, [sessions.length, killAll]);
 
   return (
-    <div className="h-full flex flex-col">
+    <TmuxPanelPresentational>
+      <div className="h-full flex flex-col">
       {/* Header */}
       <div className="border-b border-surface">
         <div className="flex items-center justify-between px-3 py-2">
@@ -244,7 +246,8 @@ function TmuxPanel({
           );
         })}
       </div>
-    </div>
+      </div>
+    </TmuxPanelPresentational>
   );
 }
 

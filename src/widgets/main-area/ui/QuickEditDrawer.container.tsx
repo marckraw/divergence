@@ -44,6 +44,7 @@ import {
 } from "../../../lib/utils/quickEdit";
 import { getLanguageKind } from "../../../lib/utils/languageDetection";
 import { getImportPathMatchFromPrefix } from "../../../lib/utils/importPathMatch";
+import QuickEditDrawerPresentational from "./QuickEditDrawer.presentational";
 
 interface QuickEditDrawerProps {
   isOpen: boolean;
@@ -642,142 +643,144 @@ function QuickEditDrawer({
   const contentVariantKey = `${contentKey}-${activeTab}`;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          className="absolute inset-x-0 bottom-0 h-[45%] bg-main border-t border-surface shadow-xl flex flex-col"
-          data-editor-root="true"
-          aria-hidden={!isOpen}
-          style={{ pointerEvents: isOpen ? "auto" : "none" }}
-          variants={drawerVariants}
-          initial="hidden"
-          animate="visible"
-          exit="exit"
-          transition={drawerTransition}
-        >
-          <div className="flex items-center justify-between gap-4 px-4 py-2 border-b border-surface">
-            <div className="min-w-0">
-              <p className="text-xs text-subtext/70">Quick Edit</p>
-              <p className="text-sm text-text truncate">
-                {filePath ?? "No file selected"}
-                {isDirty ? <span className="text-accent"> *</span> : null}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isReadOnly && (
-                <span className="text-[10px] px-2 py-1 rounded bg-surface text-subtext">
-                  Read-only
-                </span>
-              )}
-              {allowEdit && (
+    <QuickEditDrawerPresentational>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className="absolute inset-x-0 bottom-0 h-[45%] bg-main border-t border-surface shadow-xl flex flex-col"
+            data-editor-root="true"
+            aria-hidden={!isOpen}
+            style={{ pointerEvents: isOpen ? "auto" : "none" }}
+            variants={drawerVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            transition={drawerTransition}
+          >
+            <div className="flex items-center justify-between gap-4 px-4 py-2 border-b border-surface">
+              <div className="min-w-0">
+                <p className="text-xs text-subtext/70">Quick Edit</p>
+                <p className="text-sm text-text truncate">
+                  {filePath ?? "No file selected"}
+                  {isDirty ? <span className="text-accent"> *</span> : null}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {isReadOnly && (
+                  <span className="text-[10px] px-2 py-1 rounded bg-surface text-subtext">
+                    Read-only
+                  </span>
+                )}
+                {allowEdit && (
+                  <ToolbarButton
+                    onClick={onSave}
+                    disabled={isSaving || isLoading || isReadOnly || !filePath}
+                  >
+                    {isSaving ? "Saving..." : "Save"}
+                  </ToolbarButton>
+                )}
                 <ToolbarButton
-                  onClick={onSave}
-                  disabled={isSaving || isLoading || isReadOnly || !filePath}
+                  onClick={onClose}
                 >
-                  {isSaving ? "Saving..." : "Save"}
+                  Close
                 </ToolbarButton>
-              )}
-              <ToolbarButton
-                onClick={onClose}
-              >
-                Close
-              </ToolbarButton>
+              </div>
             </div>
-          </div>
-          {showTabs && (
-            <div className="flex items-center border-b border-surface text-xs">
-              <TabButton
-                active={activeTab === "diff"}
-                onClick={() => setActiveTab("diff")}
-              >
-                Diff
-              </TabButton>
-              {allowEdit && (
+            {showTabs && (
+              <div className="flex items-center border-b border-surface text-xs">
                 <TabButton
-                  active={activeTab === "edit"}
-                  onClick={() => setActiveTab("edit")}
+                  active={activeTab === "diff"}
+                  onClick={() => setActiveTab("diff")}
                 >
-                  Edit
+                  Diff
                 </TabButton>
-              )}
+                {allowEdit && (
+                  <TabButton
+                    active={activeTab === "edit"}
+                    onClick={() => setActiveTab("edit")}
+                  >
+                    Edit
+                  </TabButton>
+                )}
+              </div>
+            )}
+            {largeFileWarning && (
+              <div className="px-4 py-2 text-[11px] text-yellow-200/90 bg-yellow-400/10 border-b border-yellow-400/20">
+                {largeFileWarning}
+              </div>
+            )}
+            {loadError && (
+              <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
+                {loadError}
+              </div>
+            )}
+            {saveError && (
+              <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
+                {saveError}
+              </div>
+            )}
+            <div className="flex-1 min-h-0">
+              <AnimatePresence mode="wait" initial={false}>
+                {activeTab === "diff" && showTabs ? (
+                  <motion.div
+                    key="diff"
+                    className="h-full w-full"
+                    variants={contentVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={contentTransition}
+                  >
+                    <DiffViewer
+                      diff={diff?.text ?? null}
+                      isBinary={diff?.isBinary ?? false}
+                      isLoading={diffLoading}
+                      error={diffError}
+                    />
+                  </motion.div>
+                ) : isLoading ? (
+                  <motion.div
+                    key="loading"
+                    className="h-full flex items-center justify-center text-sm text-subtext"
+                    variants={contentVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={contentTransition}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="spinner" />
+                      Loading file...
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key={contentVariantKey}
+                    className="h-full w-full"
+                    variants={contentVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={contentTransition}
+                  >
+                    <CodeEditor
+                      filePath={filePath}
+                      content={content}
+                      editorTheme={editorTheme}
+                      projectRootPath={projectRootPath}
+                      isReadOnly={!canEdit}
+                      onChange={onChange}
+                      onSave={onSave}
+                      onClose={onClose}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          )}
-          {largeFileWarning && (
-            <div className="px-4 py-2 text-[11px] text-yellow-200/90 bg-yellow-400/10 border-b border-yellow-400/20">
-              {largeFileWarning}
-            </div>
-          )}
-          {loadError && (
-            <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
-              {loadError}
-            </div>
-          )}
-          {saveError && (
-            <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
-              {saveError}
-            </div>
-          )}
-          <div className="flex-1 min-h-0">
-            <AnimatePresence mode="wait" initial={false}>
-              {activeTab === "diff" && showTabs ? (
-                <motion.div
-                  key="diff"
-                  className="h-full w-full"
-                  variants={contentVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  transition={contentTransition}
-                >
-                  <DiffViewer
-                    diff={diff?.text ?? null}
-                    isBinary={diff?.isBinary ?? false}
-                    isLoading={diffLoading}
-                    error={diffError}
-                  />
-                </motion.div>
-              ) : isLoading ? (
-                <motion.div
-                  key="loading"
-                  className="h-full flex items-center justify-center text-sm text-subtext"
-                  variants={contentVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  transition={contentTransition}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="spinner" />
-                    Loading file...
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key={contentVariantKey}
-                  className="h-full w-full"
-                  variants={contentVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  transition={contentTransition}
-                >
-                  <CodeEditor
-                    filePath={filePath}
-                    content={content}
-                    editorTheme={editorTheme}
-                    projectRootPath={projectRootPath}
-                    isReadOnly={!canEdit}
-                    onChange={onChange}
-                    onSave={onSave}
-                    onClose={onClose}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </QuickEditDrawerPresentational>
   );
 }
 

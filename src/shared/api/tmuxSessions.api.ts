@@ -1,11 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Divergence } from "../../entities";
 import type { TmuxSessionEntry } from "../../types";
 import {
   buildLegacyTmuxSessionName,
   buildSplitTmuxSessionName,
   buildTmuxSessionName,
 } from "../../lib/tmux";
+
+interface TmuxDivergenceRef {
+  id: number;
+  project_id: number;
+  branch: string;
+}
 
 export async function listTmuxSessions(): Promise<TmuxSessionEntry[]> {
   return invoke<TmuxSessionEntry[]>("list_tmux_sessions");
@@ -35,7 +40,7 @@ export async function killProjectTmuxSessions(projectId: number, projectName: st
 }
 
 export async function killDivergenceTmuxSessions(
-  divergence: Divergence,
+  divergence: TmuxDivergenceRef,
   projectName: string
 ): Promise<void> {
   const divergenceSessionName = buildTmuxSessionName({

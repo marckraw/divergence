@@ -1,6 +1,6 @@
 # Repository Architecture Migration Plan (2026)
 
-Status: In Progress (Phases 0-6 complete; Phase 7 hardening pending)  
+Status: Complete (Phases 0-7 complete)  
 Owner: Core team  
 Created: 2026-02-06  
 Scope: `src/**` (TypeScript/React), then policy sync in `AGENTS.md` and `CLAUDE.md`
@@ -316,7 +316,7 @@ Risk mitigations:
 - [x] Phase 4 complete
 - [x] Phase 5 complete
 - [x] Phase 6 complete
-- [ ] Phase 7 complete
+- [x] Phase 7 complete
 
 Current progress notes:
 1. `features/task-center` and `features/quick-switcher` are introduced and consumed by app composition.
@@ -344,14 +344,16 @@ Current progress notes:
 23. PTY spawn/process entry points are standardized in `src/shared/api/pty.api.ts`, and hook/widget consumers (`useTerminal`, `Terminal`) now call those wrappers.
 24. Main-area support modules now follow incremental `*.container.tsx` naming (`ChangesPanel`, `FileExplorer`, `ProjectSettingsPanel`, `QuickEditDrawer`, `Terminal`, `TmuxPanel`) with compatibility adapters kept at legacy paths.
 25. Repository scan now confirms transport/process boundaries: raw `invoke(...)` and `spawn(...)` calls are confined to `*.api.ts` files only.
+26. Phase 7 hardening is complete: Chaperone architecture rules are now error-level for pairing/location constraints.
+27. ESLint architecture rules are now active for layer direction and transport boundary checks (`invoke`/`spawn`/`Database.load` outside `*.api.ts`).
+28. Added onboarding architecture quick reference at `docs/architecture/quick-reference.md`.
+29. `AGENTS.md` and `CLAUDE.md` now include the quick-reference doc and treat architecture lint/chaperone failures as blocking.
+30. Shared-layer upward dependencies were eliminated in phase hardening hotspots (`shared/ui/StatusIndicator.presentational.tsx`, `shared/api/tmuxSessions.api.ts`).
 
 Repository coverage audit (2026-02-06):
 1. Reviewed migration coverage across `src/app`, `src/components`, `src/entities`, `src/features`, `src/hooks`, `src/lib`, `src/shared`, `src/widgets`, plus `tests` and `src-tauri` for scope checks.
 2. `src/components/*.tsx` is now consistently a compatibility adapter layer to widget/feature/shared modules.
-3. Remaining work is now concentrated in Phase 7 hardening:
-   - Add explicit ESLint architecture boundary tooling/rules (`eslint-plugin-boundaries` and/or `eslint-plugin-check-file`) and keep it CI-enforced.
-   - Decide whether to promote the current Chaperone warning-level pairing/location checks to error-level after final compatibility adapters are retired.
-   - Add a short architecture quick-reference onboarding doc.
+3. Migration plan scope is complete for Phases 0-7; ongoing work is normal feature development under enforced architecture constraints.
 
 ## 12) Success metrics
 

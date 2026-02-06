@@ -12,6 +12,7 @@ Always run `cargo clippy -- -D warnings` after every finished task.
 Source of truth:
 - `docs/plans/repository-architecture-migration-plan.md`
 - `docs/plans/phase-1-presentational-container-checklist.md`
+- `docs/architecture/quick-reference.md`
 
 ### Required folder strategy
 
@@ -65,3 +66,4 @@ Cross-slice imports must go through that slice `index.ts` public API. Avoid deep
 When touching large legacy component files, prefer opportunistic migration toward this model (especially Phase 1 presentational/container split) if risk is acceptable for the current task.
 
 All architecture/naming/boundary checks must remain green under configured lint/chaperone rules.
+Architecture lint/chaperone violations are treated as blocking issues.

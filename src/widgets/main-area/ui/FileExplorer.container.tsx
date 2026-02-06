@@ -10,6 +10,7 @@ import {
   normalizeFileExplorerEntry,
   sortFileExplorerEntries,
 } from "../../../lib/utils/fileExplorer";
+import FileExplorerPresentational from "./FileExplorer.presentational";
 
 interface FileExplorerProps {
   rootPath: string | null;
@@ -253,30 +254,34 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
 
   if (!rootPath) {
     return (
-      <div className="p-4 text-xs text-subtext">
-        Select a session to browse files.
-      </div>
+      <FileExplorerPresentational>
+        <div className="p-4 text-xs text-subtext">
+          Select a session to browse files.
+        </div>
+      </FileExplorerPresentational>
     );
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-surface flex items-center justify-between">
-        <div>
-          <p className="text-xs text-subtext/70">Project Files</p>
-          <p className="text-sm text-text truncate">{rootName}</p>
-          <p className="text-[10px] text-subtext/60 truncate">{rootPath}</p>
+    <FileExplorerPresentational>
+      <div className="h-full flex flex-col">
+        <div className="px-4 py-3 border-b border-surface flex items-center justify-between">
+          <div>
+            <p className="text-xs text-subtext/70">Project Files</p>
+            <p className="text-sm text-text truncate">{rootName}</p>
+            <p className="text-[10px] text-subtext/60 truncate">{rootPath}</p>
+          </div>
+          <ToolbarButton
+            onClick={refreshRoot}
+          >
+            Refresh
+          </ToolbarButton>
         </div>
-        <ToolbarButton
-          onClick={refreshRoot}
-        >
-          Refresh
-        </ToolbarButton>
+        <div className="flex-1 overflow-y-auto p-2">
+          {renderEntries(rootPath, 0)}
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-2">
-        {renderEntries(rootPath, 0)}
-      </div>
-    </div>
+    </FileExplorerPresentational>
   );
 }
 

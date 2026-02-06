@@ -1,7 +1,5 @@
-import type { TerminalSession } from "../../entities";
-
 interface StatusIndicatorProps {
-  status: TerminalSession["status"] | null;
+  status: "idle" | "active" | "busy" | null;
 }
 
 function StatusIndicatorPresentational({ status }: StatusIndicatorProps) {
@@ -42,4 +40,3 @@ function StatusIndicatorPresentational({ status }: StatusIndicatorProps) {
 }
 
 export default StatusIndicatorPresentational;
-

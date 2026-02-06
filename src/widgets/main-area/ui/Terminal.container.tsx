@@ -15,6 +15,7 @@ import {
   buildTmuxBootstrapCommand,
   sanitizeTmuxSessionNameForShell,
 } from "../../../lib/utils/terminalTmux";
+import TerminalPresentational from "./Terminal.presentational";
 
 interface TerminalProps {
   cwd: string;
@@ -521,30 +522,34 @@ function Terminal({
 
   if (error) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-main text-red">
-        <div className="text-center">
-          <p className="text-lg mb-2">Terminal Error</p>
-          <p className="text-sm text-subtext">{error}</p>
-          <button
-            onClick={onClose}
-            className="mt-4 px-4 py-2 bg-surface rounded hover:bg-surface/80 text-text"
-          >
-            Close
-          </button>
+      <TerminalPresentational>
+        <div className="absolute inset-0 flex items-center justify-center bg-main text-red">
+          <div className="text-center">
+            <p className="text-lg mb-2">Terminal Error</p>
+            <p className="text-sm text-subtext">{error}</p>
+            <button
+              onClick={onClose}
+              className="mt-4 px-4 py-2 bg-surface rounded hover:bg-surface/80 text-text"
+            >
+              Close
+            </button>
+          </div>
         </div>
-      </div>
+      </TerminalPresentational>
     );
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0 overflow-hidden p-2 bg-main"
-      onMouseDown={() => {
-        terminalRef.current?.focus();
-        tryResumePty();
-      }}
-    />
+    <TerminalPresentational>
+      <div
+        ref={containerRef}
+        className="absolute inset-0 overflow-hidden p-2 bg-main"
+        onMouseDown={() => {
+          terminalRef.current?.focus();
+          tryResumePty();
+        }}
+      />
+    </TerminalPresentational>
   );
 }
 

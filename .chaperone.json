@@ -43,7 +43,7 @@
       {
         "type": "regex",
         "id": "container-imports-presentational",
-        "severity": "warning",
+        "severity": "error",
         "files": "src/**/*.container.tsx",
         "exclude": [
           "src/app/**"
@@ -54,7 +54,7 @@
       {
         "type": "component-location",
         "id": "presentational-in-legacy-components-tree",
-        "severity": "warning",
+        "severity": "error",
         "files": "src/components/**/*.presentational.tsx",
         "componentType": "presentational",
         "requiredLocation": "src/components/**",
@@ -64,7 +64,7 @@
       {
         "type": "component-location",
         "id": "presentational-in-features-ui",
-        "severity": "warning",
+        "severity": "error",
         "files": "src/features/**/*.presentational.tsx",
         "componentType": "presentational",
         "requiredLocation": "src/features/**/ui/**",
@@ -74,7 +74,7 @@
       {
         "type": "component-location",
         "id": "presentational-in-widgets-ui",
-        "severity": "warning",
+        "severity": "error",
         "files": "src/widgets/**/*.presentational.tsx",
         "componentType": "presentational",
         "requiredLocation": "src/widgets/**/ui/**",
@@ -84,7 +84,7 @@
       {
         "type": "component-location",
         "id": "presentational-in-entities-ui",
-        "severity": "warning",
+        "severity": "error",
         "files": "src/entities/**/*.presentational.tsx",
         "componentType": "presentational",
         "requiredLocation": "src/entities/**/ui/**",
@@ -94,7 +94,7 @@
       {
         "type": "component-location",
         "id": "presentational-in-shared-ui",
-        "severity": "warning",
+        "severity": "error",
         "files": "src/shared/**/*.presentational.tsx",
         "componentType": "presentational",
         "requiredLocation": "src/shared/ui/**",

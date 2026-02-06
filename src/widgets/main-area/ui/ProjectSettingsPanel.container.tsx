@@ -17,6 +17,7 @@ import {
   formatRalphyProjectSummary,
   parseSkipListInput,
 } from "../../../lib/utils/projectSettingsPanel";
+import ProjectSettingsPanelPresentational from "./ProjectSettingsPanel.presentational";
 
 interface ProjectSettingsPanelProps {
   project: Project | null;
@@ -93,16 +94,19 @@ function ProjectSettingsPanel({
 
   if (!project) {
     return (
-      <div className="h-full p-4 text-sm text-subtext">
-        Select a project to see its settings.
-      </div>
+      <ProjectSettingsPanelPresentational>
+        <div className="h-full p-4 text-sm text-subtext">
+          Select a project to see its settings.
+        </div>
+      </ProjectSettingsPanelPresentational>
     );
   }
 
   const showContextPath = contextPath && contextPath !== project.path;
 
   return (
-    <div className="h-full flex flex-col">
+    <ProjectSettingsPanelPresentational>
+      <div className="h-full flex flex-col">
       <div className="p-4 border-b border-surface">
         <h2 className="text-sm font-semibold text-text">Project Settings</h2>
         <p className="text-xs text-subtext mt-1">{project.name}</p>
@@ -302,7 +306,8 @@ function ProjectSettingsPanel({
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </ProjectSettingsPanelPresentational>
   );
 }
 
