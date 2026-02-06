@@ -1,18 +1,16 @@
 import { useState, useCallback, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { motion, useReducedMotion } from "framer-motion";
 import type { Divergence } from "../types";
-import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "../lib/tmux";
 import { FAST_EASE_OUT, SOFT_SPRING, getSlideInRightVariants } from "../lib/motion";
 
 interface MergeNotificationProps {
   divergence: Divergence;
   projectName: string;
   onClose: () => void;
-  onDeleted: () => void;
+  onDeleteDivergence: (divergence: Divergence, origin: string) => Promise<void>;
 }
 
-function MergeNotification({ divergence, projectName, onClose, onDeleted }: MergeNotificationProps) {
+function MergeNotification({ divergence, projectName, onClose, onDeleteDivergence }: MergeNotificationProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const shouldReduceMotion = useReducedMotion();
@@ -27,30 +25,13 @@ function MergeNotification({ divergence, projectName, onClose, onDeleted }: Merg
     setError(null);
 
     try {
-      // Delete the directory
-      await invoke("delete_divergence", { path: divergence.path });
-      const divergenceSessionName = buildTmuxSessionName({
-        type: "divergence",
-        projectName,
-        projectId: divergence.project_id,
-        divergenceId: divergence.id,
-        branch: divergence.branch,
-      });
-      await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
-      await invoke("kill_tmux_session", {
-        sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
-      });
-      await invoke("kill_tmux_session", {
-        sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
-      });
-
-      onDeleted();
+      await onDeleteDivergence(divergence, "merge_notification");
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setIsDeleting(false);
     }
-  }, [divergence, projectName, onDeleted, onClose]);
+  }, [divergence, onDeleteDivergence, onClose]);
 
   return (
     <motion.div

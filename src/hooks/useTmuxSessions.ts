@@ -4,14 +4,13 @@ import type {
   Project,
   Divergence,
   TmuxSessionEntry,
-  TmuxSessionOwnership,
   TmuxSessionWithOwnership,
 } from "../types";
 import {
-  buildTmuxSessionName,
-  buildLegacyTmuxSessionName,
-  buildSplitTmuxSessionName,
-} from "../lib/tmux";
+  annotateTmuxSessions,
+  buildTmuxOwnershipMap,
+  countOrphanTmuxSessions,
+} from "../lib/utils/tmuxOwnership";
 
 interface UseTmuxSessionsResult {
   sessions: TmuxSessionWithOwnership[];
@@ -34,61 +33,15 @@ export function useTmuxSessions(
   const [error, setError] = useState<string | null>(null);
 
   const ownershipMap = useMemo(() => {
-    const map = new Map<string, TmuxSessionOwnership>();
-
-    for (const project of projects) {
-      const ownership: TmuxSessionOwnership = { kind: "project", project };
-
-      const baseName = buildTmuxSessionName({
-        type: "project",
-        projectName: project.name,
-        projectId: project.id,
-      });
-      map.set(baseName, ownership);
-      map.set(buildSplitTmuxSessionName(baseName, "pane-2"), ownership);
-      map.set(buildLegacyTmuxSessionName(`project-${project.id}`), ownership);
-
-      const divergences = divergencesByProject.get(project.id) ?? [];
-      for (const divergence of divergences) {
-        const divOwnership: TmuxSessionOwnership = {
-          kind: "divergence",
-          project,
-          divergence,
-        };
-        const divBase = buildTmuxSessionName({
-          type: "divergence",
-          projectName: project.name,
-          projectId: project.id,
-          divergenceId: divergence.id,
-          branch: divergence.branch,
-        });
-        map.set(divBase, divOwnership);
-        map.set(buildSplitTmuxSessionName(divBase, "pane-2"), divOwnership);
-        map.set(
-          buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
-          divOwnership
-        );
-      }
-    }
-
-    return map;
+    return buildTmuxOwnershipMap(projects, divergencesByProject);
   }, [projects, divergencesByProject]);
 
   const sessions = useMemo<TmuxSessionWithOwnership[]>(() => {
-    if (!ownershipReady) {
-      return rawSessions.map((s) => ({
-        ...s,
-        ownership: { kind: "unknown" },
-      }));
-    }
-    return rawSessions.map((s) => ({
-      ...s,
-      ownership: ownershipMap.get(s.name) ?? { kind: "orphan" },
-    }));
+    return annotateTmuxSessions(rawSessions, ownershipMap, ownershipReady);
   }, [rawSessions, ownershipMap, ownershipReady]);
 
   const orphanCount = useMemo(
-    () => (ownershipReady ? sessions.filter((s) => s.ownership.kind === "orphan").length : 0),
+    () => countOrphanTmuxSessions(sessions, ownershipReady),
     [sessions, ownershipReady]
   );
 

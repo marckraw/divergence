@@ -16,6 +16,7 @@ import {
   type EditorThemeId,
 } from "../lib/editorThemes";
 import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
+import { getUpdaterPresentation } from "../lib/utils/updaterPresentation";
 
 interface UpdaterProp {
   status: UpdateStatus;
@@ -55,6 +56,10 @@ function Settings({ onClose, updater }: SettingsProps) {
     [shouldReduceMotion]
   );
   const panelTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
+  const updaterPresentation = useMemo(
+    () => getUpdaterPresentation(updater.status, updater.version, updater.progress, updater.error),
+    [updater.status, updater.version, updater.progress, updater.error]
+  );
 
   useEffect(() => {
     async function loadSettings() {
@@ -333,17 +338,12 @@ function Settings({ onClose, updater }: SettingsProps) {
               )}
 
               <p className="text-sm text-subtext">
-                {updater.status === "idle" && "Up to date"}
-                {updater.status === "checking" && "Checking for updates..."}
-                {updater.status === "available" && `Update available: v${updater.version}`}
-                {updater.status === "downloading" && `Downloading update... ${updater.progress}%`}
-                {updater.status === "installed" && "Update installed, restarting..."}
-                {updater.status === "error" && (
-                  <span className="text-red-400">{updater.error ?? "Update check failed"}</span>
-                )}
+                <span className={updaterPresentation.isError ? "text-red-400" : undefined}>
+                  {updaterPresentation.message}
+                </span>
               </p>
 
-              {updater.status === "downloading" && (
+              {updaterPresentation.showProgress && (
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
                   <div
                     className="h-full rounded-full bg-accent transition-all"
@@ -353,7 +353,7 @@ function Settings({ onClose, updater }: SettingsProps) {
               )}
 
               <div className="flex gap-2">
-                {(updater.status === "idle" || updater.status === "error") && (
+                {updaterPresentation.showCheckButton && (
                   <button
                     onClick={updater.checkForUpdate}
                     className="px-3 py-1.5 text-sm border border-surface rounded hover:bg-surface text-text"
@@ -361,7 +361,7 @@ function Settings({ onClose, updater }: SettingsProps) {
                     Check for Updates
                   </button>
                 )}
-                {updater.status === "available" && (
+                {updaterPresentation.showInstallButton && (
                   <button
                     onClick={updater.downloadAndInstall}
                     className="px-3 py-1.5 text-sm bg-accent text-main rounded hover:bg-accent/80"

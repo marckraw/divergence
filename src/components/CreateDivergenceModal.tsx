@@ -1,18 +1,18 @@
 import { useState, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import Database from "@tauri-apps/plugin-sql";
 import { motion, useReducedMotion } from "framer-motion";
 import type { Project, Divergence } from "../types";
-import { loadProjectSettings } from "../lib/projectSettings";
 import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../lib/motion";
+import { normalizeBranchName, validateBranchName } from "../lib/utils/createDivergence";
 
 interface CreateDivergenceModalProps {
   project: Project;
   onClose: () => void;
+  onCreate: (branchName: string, useExistingBranch: boolean) => Promise<Divergence>;
   onCreated: (divergence: Divergence) => void;
 }
 
-function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergenceModalProps) {
+function CreateDivergenceModal({ project, onClose, onCreate, onCreated }: CreateDivergenceModalProps) {
   const [branchName, setBranchName] = useState("");
   const [useExistingBranch, setUseExistingBranch] = useState(false);
   const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
@@ -42,8 +42,10 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
   }, [loadingBranches, project.path]);
 
   const handleCreate = useCallback(async () => {
-    if (!branchName.trim()) {
-      setError("Branch name is required");
+    const normalizedBranchName = normalizeBranchName(branchName);
+    const validationError = validateBranchName(normalizedBranchName);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -51,44 +53,15 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
     setError(null);
 
     try {
-      const settings = await loadProjectSettings(project.id);
-
-      // Create divergence via Tauri command (handles git clone/checkout)
-      const divergence = await invoke<Divergence>("create_divergence", {
-        projectId: project.id,
-        projectName: project.name,
-        projectPath: project.path,
-        branchName: branchName.trim(),
-        copyIgnoredSkip: settings.copyIgnoredSkip,
-        useExistingBranch,
-      });
-
-      // Save to database
-      const db = await Database.load("sqlite:divergence.db");
-      await db.execute(
-        "INSERT INTO divergences (project_id, name, branch, path, created_at, has_diverged) VALUES (?, ?, ?, ?, ?, ?)",
-        [
-          divergence.project_id,
-          divergence.name,
-          divergence.branch,
-          divergence.path,
-          divergence.created_at,
-          divergence.has_diverged ?? 0,
-        ]
-      );
-
-      // Get the ID of the inserted row so we can open it immediately
-      const rows = await db.select<{ id: number }[]>("SELECT last_insert_rowid() as id");
-      const insertedId = rows[0]?.id ?? 0;
-
-      onCreated({ ...divergence, id: insertedId });
+      const divergence = await onCreate(normalizedBranchName, useExistingBranch);
+      onCreated(divergence);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsCreating(false);
     }
-  }, [branchName, project, onCreated, onClose, useExistingBranch]);
+  }, [branchName, onCreate, onCreated, onClose, useExistingBranch]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isCreating) {
@@ -198,7 +171,7 @@ function CreateDivergenceModal({ project, onClose, onCreated }: CreateDivergence
           </button>
           <button
             onClick={handleCreate}
-            disabled={isCreating || !branchName.trim()}
+            disabled={isCreating || Boolean(validateBranchName(branchName))}
             className="px-4 py-2 bg-accent text-main text-sm rounded hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isCreating ? "Creating..." : "Create"}

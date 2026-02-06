@@ -7,15 +7,25 @@ import MainArea from "./components/MainArea";
 import QuickSwitcher from "./components/QuickSwitcher";
 import Settings from "./components/Settings";
 import MergeNotification from "./components/MergeNotification";
+import TaskCenterDrawer from "./components/TaskCenterDrawer";
+import TaskToasts from "./components/TaskToasts";
 import { useProjects, useAllDivergences } from "./hooks/useDatabase";
 import { useMergeDetection } from "./hooks/useMergeDetection";
 import { useProjectSettingsMap } from "./hooks/useProjectSettingsMap";
 import { useAppSettings } from "./hooks/useAppSettings";
 import { useUpdater } from "./hooks/useUpdater";
+import { useTaskCenter } from "./hooks/useTaskCenter";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "./types";
-import { DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "./lib/projectSettings";
+import { loadProjectSettings } from "./lib/projectSettings";
 import { buildTmuxSessionName, buildLegacyTmuxSessionName, buildSplitTmuxSessionName } from "./lib/tmux";
 import { notifyCommandFinished } from "./lib/notifications";
+import { resolveProjectForNewDivergence } from "./lib/utils/appSelection";
+import { buildTerminalSession } from "./lib/utils/sessionBuilder";
+import {
+  buildIdleNotificationTargetLabel,
+  shouldNotifyIdle,
+} from "./lib/utils/idleNotification";
+import { resolveAppShortcut } from "./lib/utils/appShortcuts";
 
 interface MergeNotificationData {
   divergence: Divergence;
@@ -54,6 +64,20 @@ function App() {
   const busySinceRef = useRef<Map<string, number>>(new Map());
   const idleNotifyTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
+  const {
+    runningTasks,
+    recentTasks,
+    toasts,
+    runningCount,
+    isDrawerOpen,
+    focusedTaskId,
+    closeDrawer,
+    toggleDrawer,
+    dismissToast,
+    viewTask,
+    retryTask,
+    runTask,
+  } = useTaskCenter(2);
 
   useEffect(() => {
     sessionsRef.current = sessions;
@@ -97,31 +121,27 @@ function App() {
 
     const timeoutId = setTimeout(async () => {
       const currentSession = sessionsRef.current.get(sessionId);
-      if (!currentSession || currentSession.status !== "idle") {
-        return;
-      }
-
       const now = Date.now();
       const duration = now - startedAt;
-      if (duration < NOTIFY_MIN_BUSY_MS) {
-        return;
-      }
-
       const lastNotifiedAt = lastNotifiedAtRef.current.get(sessionId) ?? 0;
-      if (now - lastNotifiedAt < NOTIFY_COOLDOWN_MS) {
-        return;
-      }
-
-      const isFocused = document.hasFocus();
       const activeId = activeSessionIdRef.current;
-      if (isFocused && activeId === sessionId) {
+      const shouldNotify = shouldNotifyIdle({
+        sessionExists: Boolean(currentSession),
+        sessionStatus: currentSession?.status ?? null,
+        durationMs: duration,
+        notifyMinBusyMs: NOTIFY_MIN_BUSY_MS,
+        nowMs: now,
+        lastNotifiedAtMs: lastNotifiedAt,
+        notifyCooldownMs: NOTIFY_COOLDOWN_MS,
+        isWindowFocused: document.hasFocus(),
+        isSessionActive: activeId === sessionId,
+      });
+      if (!shouldNotify || !currentSession) {
         return;
       }
 
       const projectName = projectsById.get(currentSession.projectId)?.name ?? currentSession.name;
-      const targetLabel = currentSession.type === "divergence"
-        ? `${projectName} / ${currentSession.name}`
-        : projectName;
+      const targetLabel = buildIdleNotificationTargetLabel(currentSession, projectName);
 
       await notifyCommandFinished("Command finished", `${targetLabel} is idle`);
       lastNotifiedAtRef.current.set(sessionId, now);
@@ -153,36 +173,13 @@ function App() {
       return existing;
     }
 
-    const projectId = type === "project" ? target.id : (target as Divergence).project_id;
-    const useTmux = settingsByProjectId.get(projectId)?.useTmux ?? DEFAULT_USE_TMUX;
-    const useWebgl = settingsByProjectId.get(projectId)?.useWebgl ?? DEFAULT_USE_WEBGL;
-    const projectHistoryLimit = settingsByProjectId.get(projectId)?.tmuxHistoryLimit ?? null;
-    const tmuxHistoryLimit = projectHistoryLimit ?? appSettings.tmuxHistoryLimit;
-    const projectName = type === "project"
-      ? (target as Project).name
-      : projectsById.get(projectId)?.name ?? "project";
-    const branchName = type === "divergence" ? (target as Divergence).branch : undefined;
-    const tmuxSessionName = buildTmuxSessionName({
+    const session = buildTerminalSession({
       type,
-      projectName,
-      projectId,
-      divergenceId: type === "divergence" ? target.id : undefined,
-      branch: branchName,
+      target,
+      settingsByProjectId,
+      projectsById,
+      globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
     });
-
-    const session: TerminalSession = {
-      id,
-      type,
-      targetId: target.id,
-      projectId,
-      name: target.name,
-      path: target.path,
-      useTmux,
-      tmuxSessionName,
-      tmuxHistoryLimit,
-      useWebgl,
-      status: "idle",
-    };
 
     setSessions(prev => new Map(prev).set(id, session));
     return session;
@@ -327,227 +324,298 @@ function App() {
     await addProject(name, path);
   }, [addProject]);
 
-  const handleRemoveProject = useCallback(async (id: number) => {
-    await removeProject(id);
-    // Close any sessions for this project
-    const sessionsToClose = Array.from(sessions.entries())
-      .filter(([, s]) => s.type === "project" && s.targetId === id)
+  const killProjectTmuxSessions = useCallback(async (projectId: number, projectName: string) => {
+    const projectSessionName = buildTmuxSessionName({
+      type: "project",
+      projectName,
+      projectId,
+    });
+    await invoke("kill_tmux_session", { sessionName: projectSessionName });
+    await invoke("kill_tmux_session", {
+      sessionName: buildSplitTmuxSessionName(projectSessionName, "pane-2"),
+    });
+    await invoke("kill_tmux_session", {
+      sessionName: buildLegacyTmuxSessionName(`project-${projectId}`),
+    });
+  }, []);
+
+  const killDivergenceTmuxSessions = useCallback(async (divergence: Divergence, projectName: string) => {
+    const divergenceSessionName = buildTmuxSessionName({
+      type: "divergence",
+      projectName,
+      projectId: divergence.project_id,
+      divergenceId: divergence.id,
+      branch: divergence.branch,
+    });
+    await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
+    await invoke("kill_tmux_session", {
+      sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
+    });
+    await invoke("kill_tmux_session", {
+      sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
+    });
+  }, []);
+
+  const closeSessionsForProject = useCallback((projectId: number) => {
+    const sessionsToClose = Array.from(sessionsRef.current.entries())
+      .filter(([, session]) => session.projectId === projectId)
       .map(([sessionId]) => sessionId);
     sessionsToClose.forEach(handleCloseSession);
+  }, [handleCloseSession]);
 
-    // Kill tmux sessions for this project and its divergences
-    try {
-      const projectSessionName = buildTmuxSessionName({
+  const closeSessionsForDivergence = useCallback((divergenceId: number) => {
+    const sessionsToClose = Array.from(sessionsRef.current.entries())
+      .filter(([, session]) => session.type === "divergence" && session.targetId === divergenceId)
+      .map(([sessionId]) => sessionId);
+    sessionsToClose.forEach(handleCloseSession);
+  }, [handleCloseSession]);
+
+  const handleCreateDivergence = useCallback(async (
+    project: Project,
+    branchName: string,
+    useExistingBranch: boolean
+  ): Promise<Divergence> => {
+    return runTask<Divergence>({
+      kind: "create_divergence",
+      title: `Create divergence: ${branchName}`,
+      target: {
+        type: "divergence",
+        projectId: project.id,
+        projectName: project.name,
+        branch: branchName,
+        path: project.path,
+        label: `${project.name} / ${branchName}`,
+      },
+      origin: "create_divergence_modal",
+      fsHeavy: true,
+      initialPhase: "Queued",
+      successMessage: `Created divergence: ${branchName}`,
+      errorMessage: `Failed to create divergence: ${branchName}`,
+      run: async ({ setPhase }) => {
+        setPhase("Loading project settings");
+        const settings = await loadProjectSettings(project.id);
+
+        setPhase("Creating repository copy");
+        const divergence = await invoke<Divergence>("create_divergence", {
+          projectId: project.id,
+          projectName: project.name,
+          projectPath: project.path,
+          branchName,
+          copyIgnoredSkip: settings.copyIgnoredSkip,
+          useExistingBranch,
+        });
+
+        setPhase("Saving divergence record");
+        const db = await Database.load("sqlite:divergence.db");
+        await db.execute(
+          "INSERT INTO divergences (project_id, name, branch, path, created_at, has_diverged) VALUES (?, ?, ?, ?, ?, ?)",
+          [
+            divergence.project_id,
+            divergence.name,
+            divergence.branch,
+            divergence.path,
+            divergence.created_at,
+            divergence.has_diverged ?? 0,
+          ]
+        );
+        const rows = await db.select<{ id: number }[]>("SELECT last_insert_rowid() as id");
+        const insertedId = rows[0]?.id ?? 0;
+
+        setPhase("Refreshing divergences");
+        await refreshDivergences();
+        return { ...divergence, id: insertedId };
+      },
+    });
+  }, [refreshDivergences, runTask]);
+
+  const handleDeleteDivergence = useCallback(async (
+    divergence: Divergence,
+    origin: string
+  ): Promise<void> => {
+    const projectName = projectsById.get(divergence.project_id)?.name ?? "project";
+    await runTask<void>({
+      kind: "delete_divergence",
+      title: `Delete divergence: ${divergence.branch}`,
+      target: {
+        type: "divergence",
+        projectId: divergence.project_id,
+        divergenceId: divergence.id,
+        projectName,
+        branch: divergence.branch,
+        path: divergence.path,
+        label: `${projectName} / ${divergence.branch}`,
+      },
+      origin,
+      fsHeavy: true,
+      initialPhase: "Queued",
+      successMessage: `Deleted divergence: ${divergence.branch}`,
+      errorMessage: `Failed to delete divergence: ${divergence.branch}`,
+      run: async ({ setPhase }) => {
+        setPhase("Deleting local files");
+        await invoke("delete_divergence", { path: divergence.path });
+
+        setPhase("Closing terminal sessions");
+        await killDivergenceTmuxSessions(divergence, projectName);
+
+        setPhase("Closing open tabs");
+        closeSessionsForDivergence(divergence.id);
+
+        setPhase("Removing database record");
+        const db = await Database.load("sqlite:divergence.db");
+        await db.execute("DELETE FROM divergences WHERE id = ?", [divergence.id]);
+
+        setPhase("Refreshing divergences");
+        await refreshDivergences();
+      },
+    });
+  }, [closeSessionsForDivergence, killDivergenceTmuxSessions, projectsById, refreshDivergences, runTask]);
+
+  const handleRemoveProject = useCallback(async (id: number): Promise<void> => {
+    const projectName = projectsById.get(id)?.name ?? "project";
+    const divergences = divergencesByProject.get(id) ?? [];
+
+    await runTask<void>({
+      kind: "remove_project",
+      title: `Remove project: ${projectName}`,
+      target: {
         type: "project",
-        projectName: projectsById.get(id)?.name ?? "project",
         projectId: id,
-      });
-      await invoke("kill_tmux_session", { sessionName: projectSessionName });
-      await invoke("kill_tmux_session", {
-        sessionName: buildSplitTmuxSessionName(projectSessionName, "pane-2"),
-      });
-      await invoke("kill_tmux_session", {
-        sessionName: buildLegacyTmuxSessionName(`project-${id}`),
-      });
-      const divergences = divergencesByProject.get(id) || [];
-      for (const divergence of divergences) {
-        const divergenceSessionName = buildTmuxSessionName({
-          type: "divergence",
-          projectName: projectsById.get(id)?.name ?? "project",
-          projectId: id,
-          divergenceId: divergence.id,
-          branch: divergence.branch,
-        });
-        await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
-        await invoke("kill_tmux_session", {
-          sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
-        });
-        await invoke("kill_tmux_session", {
-          sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
-        });
-      }
-    } catch (err) {
-      console.warn("Failed to kill tmux sessions:", err);
-    }
-  }, [removeProject, sessions, handleCloseSession, divergencesByProject, projectsById]);
+        projectName,
+        label: projectName,
+      },
+      origin: "sidebar_context_menu",
+      fsHeavy: false,
+      initialPhase: "Queued",
+      successMessage: `Removed project: ${projectName}`,
+      errorMessage: `Failed to remove project: ${projectName}`,
+      run: async ({ setPhase }) => {
+        setPhase("Closing open tabs");
+        closeSessionsForProject(id);
 
-  const handleDivergenceCreated = useCallback(() => {
-    refreshDivergences();
-  }, [refreshDivergences]);
+        setPhase("Removing project from database");
+        await removeProject(id);
 
-  const handleDeleteDivergence = useCallback(async (id: number) => {
-    // Close any sessions for this divergence
-    const sessionsToClose = Array.from(sessions.entries())
-      .filter(([, s]) => s.type === "divergence" && s.targetId === id)
-      .map(([sessionId]) => sessionId);
-    sessionsToClose.forEach(handleCloseSession);
-    try {
-      const db = await Database.load("sqlite:divergence.db");
-      await db.execute("DELETE FROM divergences WHERE id = ?", [id]);
-    } catch (err) {
-      console.warn("Failed to delete divergence from database:", err);
-    }
-    await refreshDivergences();
-  }, [sessions, handleCloseSession, refreshDivergences]);
-
-  const resolveProjectForNewDivergence = useCallback((): Project | null => {
-    if (activeSessionId) {
-      const session = sessions.get(activeSessionId);
-      if (session) {
-        const project = projects.find((item) => item.id === session.projectId);
-        if (project) {
-          return project;
+        setPhase("Closing terminal sessions");
+        await killProjectTmuxSessions(id, projectName);
+        for (const divergence of divergences) {
+          await killDivergenceTmuxSessions(divergence, projectName);
         }
-      }
-    }
 
-    if (projects.length === 1) {
-      return projects[0];
-    }
+        setPhase("Refreshing divergences");
+        await refreshDivergences();
+      },
+    });
+  }, [
+    closeSessionsForProject,
+    divergencesByProject,
+    killDivergenceTmuxSessions,
+    killProjectTmuxSessions,
+    projectsById,
+    refreshDivergences,
+    removeProject,
+    runTask,
+  ]);
 
-    return null;
+  const resolveProjectForNewDivergenceCallback = useCallback((): Project | null => {
+    return resolveProjectForNewDivergence({
+      activeSessionId,
+      sessions,
+      projects,
+    });
   }, [activeSessionId, sessions, projects]);
 
   // Keyboard shortcuts
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.defaultPrevented) {
+    const isFromEditor = e.target instanceof HTMLElement
+      ? Boolean(e.target.closest("[data-editor-root='true'], .cm-editor"))
+      : false;
+    const action = resolveAppShortcut(e, {
+      isFromEditor,
+      hasActiveSession: Boolean(activeSessionId),
+      activeSessionId,
+      sessionCount: sessions.size,
+      hasCreateDivergenceModalOpen: Boolean(createDivergenceFor),
+      canResolveProjectForNewDivergence: Boolean(resolveProjectForNewDivergenceCallback()),
+    });
+    if (!action) {
       return;
     }
-    if (e.target instanceof HTMLElement) {
-      const editorHost = e.target.closest("[data-editor-root='true'], .cm-editor");
-      if (editorHost) {
+
+    e.preventDefault();
+    const sessionIds = Array.from(sessions.keys());
+
+    switch (action.type) {
+      case "toggle_quick_switcher":
+        setShowQuickSwitcher(prev => !prev);
         return;
-      }
-    }
-    const isMeta = e.metaKey || e.ctrlKey;
-
-    // Quick Switcher - Cmd+K
-    if (isMeta && e.key === "k") {
-      e.preventDefault();
-      setShowQuickSwitcher(prev => !prev);
-      return;
-    }
-
-    // File Quick Switcher - Cmd+Shift+O
-    if (isMeta && e.shiftKey && e.key.toLowerCase() === "o") {
-      e.preventDefault();
-      if (activeSessionId) {
+      case "toggle_file_quick_switcher":
         setShowFileQuickSwitcher(prev => !prev);
-      }
-      return;
-    }
-
-    // Settings - Cmd+,
-    if (isMeta && e.key === ",") {
-      e.preventDefault();
-      setShowSettings(prev => !prev);
-      return;
-    }
-
-    // Toggle right panel - Cmd+Shift+B
-    if (isMeta && e.shiftKey && e.key.toLowerCase() === "b") {
-      e.preventDefault();
-      toggleRightPanel();
-      return;
-    }
-
-    // Toggle sidebar - Cmd+B
-    if (isMeta && e.key.toLowerCase() === "b") {
-      e.preventDefault();
-      toggleSidebar();
-      return;
-    }
-
-    // Close modal on Escape
-    if (e.key === "Escape") {
-      setShowQuickSwitcher(false);
-      setShowFileQuickSwitcher(false);
-      setShowSettings(false);
-      return;
-    }
-
-    // Close current session - Cmd+W
-    if (isMeta && e.key === "w") {
-      e.preventDefault();
-      if (activeSessionId) {
-        handleCloseSession(activeSessionId);
-      }
-      return;
-    }
-
-    // New divergence - Cmd+T
-    if (isMeta && e.key.toLowerCase() === "t") {
-      e.preventDefault();
-      if (createDivergenceFor) {
+        return;
+      case "toggle_settings":
+        setShowSettings(prev => !prev);
+        return;
+      case "toggle_right_panel":
+        toggleRightPanel();
+        return;
+      case "toggle_sidebar":
+        toggleSidebar();
+        return;
+      case "close_overlays":
+        setShowQuickSwitcher(false);
+        setShowFileQuickSwitcher(false);
+        setShowSettings(false);
+        return;
+      case "close_active_session":
+        if (activeSessionId) {
+          handleCloseSession(activeSessionId);
+        }
+        return;
+      case "new_divergence": {
+        const project = resolveProjectForNewDivergenceCallback();
+        if (project) {
+          setShowQuickSwitcher(false);
+          setShowSettings(false);
+          setCreateDivergenceFor(project);
+        }
         return;
       }
-      const project = resolveProjectForNewDivergence();
-      if (project) {
-        setShowQuickSwitcher(false);
-        setShowSettings(false);
-        setCreateDivergenceFor(project);
-      }
-      return;
-    }
-
-    // Split terminal - Cmd+D (vertical) / Cmd+Shift+D (horizontal)
-    if (isMeta && e.key.toLowerCase() === "d") {
-      e.preventDefault();
-      if (activeSessionId) {
-        const orientation: SplitOrientation = e.shiftKey ? "horizontal" : "vertical";
-        handleSplitSession(activeSessionId, orientation);
-      }
-      return;
-    }
-
-    // Reconnect terminal - Cmd+Shift+R
-    if (isMeta && e.shiftKey && e.key.toLowerCase() === "r") {
-      e.preventDefault();
-      if (activeSessionId) {
-        handleReconnectSession(activeSessionId);
-      }
-      return;
-    }
-
-    // Switch tabs - Cmd+1-9
-    if (isMeta && e.key >= "1" && e.key <= "9") {
-      e.preventDefault();
-      const index = parseInt(e.key) - 1;
-      const sessionIds = Array.from(sessions.keys());
-      if (index < sessionIds.length) {
-        setActiveSessionId(sessionIds[index]);
-      }
-      return;
-    }
-
-    // Previous tab - Cmd+[
-    if (isMeta && e.key === "[") {
-      e.preventDefault();
-      const sessionIds = Array.from(sessions.keys());
-      if (activeSessionId && sessionIds.length > 1) {
-        const currentIndex = sessionIds.indexOf(activeSessionId);
-        const prevIndex = currentIndex > 0 ? currentIndex - 1 : sessionIds.length - 1;
-        setActiveSessionId(sessionIds[prevIndex]);
-      }
-      return;
-    }
-
-    // Next tab - Cmd+]
-    if (isMeta && e.key === "]") {
-      e.preventDefault();
-      const sessionIds = Array.from(sessions.keys());
-      if (activeSessionId && sessionIds.length > 1) {
-        const currentIndex = sessionIds.indexOf(activeSessionId);
-        const nextIndex = currentIndex < sessionIds.length - 1 ? currentIndex + 1 : 0;
-        setActiveSessionId(sessionIds[nextIndex]);
-      }
-      return;
+      case "split_terminal":
+        if (activeSessionId) {
+          handleSplitSession(activeSessionId, action.orientation);
+        }
+        return;
+      case "reconnect_terminal":
+        if (activeSessionId) {
+          handleReconnectSession(activeSessionId);
+        }
+        return;
+      case "select_tab":
+        if (action.index < sessionIds.length) {
+          setActiveSessionId(sessionIds[action.index]);
+        }
+        return;
+      case "select_previous_tab":
+        if (activeSessionId && sessionIds.length > 1) {
+          const currentIndex = sessionIds.indexOf(activeSessionId);
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : sessionIds.length - 1;
+          setActiveSessionId(sessionIds[prevIndex]);
+        }
+        return;
+      case "select_next_tab":
+        if (activeSessionId && sessionIds.length > 1) {
+          const currentIndex = sessionIds.indexOf(activeSessionId);
+          const nextIndex = currentIndex < sessionIds.length - 1 ? currentIndex + 1 : 0;
+          setActiveSessionId(sessionIds[nextIndex]);
+        }
+        return;
+      default:
+        return;
     }
   }, [
     sessions,
     activeSessionId,
     createDivergenceFor,
-    resolveProjectForNewDivergence,
+    resolveProjectForNewDivergenceCallback,
     handleCloseSession,
     handleSplitSession,
     handleReconnectSession,
@@ -591,7 +659,7 @@ function App() {
           onSelectDivergence={handleSelectDivergence}
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
-          onDivergenceCreated={handleDivergenceCreated}
+          onCreateDivergence={handleCreateDivergence}
           onDeleteDivergence={handleDeleteDivergence}
           isCollapsed={!isSidebarOpen}
         />
@@ -621,6 +689,8 @@ function App() {
         onToggleSidebar={toggleSidebar}
         isRightPanelOpen={isRightPanelOpen}
         onToggleRightPanel={toggleRightPanel}
+        taskRunningCount={runningCount}
+        onToggleTaskCenter={toggleDrawer}
       />
 
       {/* Quick Switcher */}
@@ -658,13 +728,26 @@ function App() {
             divergence={mergeNotification.divergence}
             projectName={mergeNotification.projectName}
             onClose={() => setMergeNotification(null)}
-            onDeleted={() => {
-              handleDeleteDivergence(mergeNotification.divergence.id);
-              setMergeNotification(null);
-            }}
+            onDeleteDivergence={handleDeleteDivergence}
           />
         )}
       </AnimatePresence>
+
+      <TaskToasts
+        toasts={toasts}
+        onDismiss={dismissToast}
+        onViewTask={viewTask}
+      />
+
+      <TaskCenterDrawer
+        isOpen={isDrawerOpen}
+        runningCount={runningCount}
+        runningTasks={runningTasks}
+        recentTasks={recentTasks}
+        focusedTaskId={focusedTaskId}
+        onClose={closeDrawer}
+        onRetryTask={retryTask}
+      />
 
       {/* Update Banner */}
       {!bannerDismissed && (updater.status === "available" || updater.status === "downloading" || updater.status === "error") && (

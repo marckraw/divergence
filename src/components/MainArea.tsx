@@ -14,6 +14,11 @@ import { buildSplitTmuxSessionName } from "../lib/tmux";
 import type { EditorThemeId } from "../lib/editorThemes";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../lib/motion";
+import {
+  formatBytes,
+  getAggregatedTerminalStatus,
+  joinSessionPath,
+} from "../lib/utils/mainArea";
 
 interface MainAreaProps {
   projects: Project[];
@@ -40,6 +45,8 @@ interface MainAreaProps {
   onToggleSidebar: () => void;
   isRightPanelOpen: boolean;
   onToggleRightPanel: () => void;
+  taskRunningCount: number;
+  onToggleTaskCenter: () => void;
 }
 
 function MainArea({
@@ -67,6 +74,8 @@ function MainArea({
   onToggleSidebar,
   isRightPanelOpen,
   onToggleRightPanel,
+  taskRunningCount,
+  onToggleTaskCenter,
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
@@ -123,25 +132,6 @@ function MainArea({
     setAllowEdit(true);
   }, [activeSession?.id]);
 
-  const joinPath = useCallback((parent: string, child: string) => {
-    if (child.startsWith("/") || child.startsWith("\\")) {
-      return child;
-    }
-    if (parent.endsWith("/") || parent.endsWith("\\")) {
-      return `${parent}${child}`;
-    }
-    const separator = parent.includes("\\") ? "\\" : "/";
-    return `${parent}${separator}${child}`;
-  }, []);
-
-  const formatBytes = useCallback((bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    const kb = bytes / 1024;
-    if (kb < 1024) return `${kb.toFixed(1)} KB`;
-    const mb = kb / 1024;
-    return `${mb.toFixed(1)} MB`;
-  }, []);
-
   const handleOpenFile = useCallback(async (
     path: string,
     options?: { resetDiff?: boolean }
@@ -184,14 +174,14 @@ function MainArea({
     } finally {
       setIsLoadingFile(false);
     }
-  }, [formatBytes]);
+  }, []);
 
   const handleOpenChange = useCallback(async (entry: GitChangeEntry) => {
     if (!activeRootPath) {
       return;
     }
 
-    const absolutePath = joinPath(activeRootPath, entry.path);
+    const absolutePath = joinSessionPath(activeRootPath, entry.path);
     const isDeleted = entry.status === "D";
 
     setDrawerTab("diff");
@@ -237,7 +227,7 @@ function MainArea({
     } finally {
       setDiffLoading(false);
     }
-  }, [activeRootPath, handleOpenFile, joinPath, changesMode]);
+  }, [activeRootPath, handleOpenFile, changesMode]);
 
   const handleCloseDrawer = useCallback(() => {
     if (isDirty) {
@@ -308,24 +298,14 @@ function MainArea({
     [onStatusChange]
   );
 
-  const getAggregatedStatus = useCallback((entry: { pane1: TerminalSession["status"]; pane2: TerminalSession["status"] }) => {
-    if (entry.pane1 === "busy" || entry.pane2 === "busy") {
-      return "busy";
-    }
-    if (entry.pane1 === "active" || entry.pane2 === "active") {
-      return "active";
-    }
-    return "idle";
-  }, []);
-
   const handleSplitStatusChange = useCallback(
     (sessionId: string, paneIndex: 0 | 1) => (status: TerminalSession["status"]) => {
       const existing = paneStatusRef.current.get(sessionId) ?? { pane1: "idle", pane2: "idle" };
       const next = { ...existing, [paneIndex === 0 ? "pane1" : "pane2"]: status };
       paneStatusRef.current.set(sessionId, next);
-      onStatusChange(sessionId, getAggregatedStatus(next));
+      onStatusChange(sessionId, getAggregatedTerminalStatus(next));
     },
-    [getAggregatedStatus, onStatusChange]
+    [onStatusChange]
   );
 
   const handleRendererChange = useCallback(
@@ -590,6 +570,17 @@ function MainArea({
                 d="M15 5v14"
               />
             </svg>
+          </button>
+          <button
+            type="button"
+            onClick={onToggleTaskCenter}
+            className="flex items-center gap-1.5 px-2 py-1 rounded border border-surface text-xs text-subtext hover:text-text hover:bg-surface/50 transition-colors"
+            title="Toggle task center"
+          >
+            {taskRunningCount > 0 && (
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+            )}
+            Tasks{taskRunningCount > 0 ? ` (${taskRunningCount})` : ""}
           </button>
         </div>
       </div>
