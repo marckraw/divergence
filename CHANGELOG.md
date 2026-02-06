@@ -1,5 +1,11 @@
 # divergence
 
+## 0.7.0
+
+### Minor Changes
+
+- adf84b8: Add task center for background task management, move tasks button to top bar, extract utilities and add unit tests
+
 ## 0.6.3
 
 ### Patch Changes
