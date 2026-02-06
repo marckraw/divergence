@@ -4,7 +4,7 @@ import {
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeAppSettings,
   normalizeTmuxHistoryLimit,
-} from "../../src/lib/appSettings";
+} from "../../src/shared/config/appSettings";
 
 describe("normalizeTmuxHistoryLimit", () => {
   it("uses fallback for invalid values", () => {

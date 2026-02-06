@@ -6,8 +6,8 @@ import {
   SOFT_SPRING,
   getContentSwapVariants,
   getPopVariants,
-} from "../../../lib/motion";
-import { getFileQuickSwitcherInfo } from "../../../lib/utils/fileQuickSwitcher";
+} from "../../../shared/lib/motion";
+import { getFileQuickSwitcherInfo } from "../lib/fileQuickSwitcher.pure";
 import type { FileQuickSwitcherPresentationalProps } from "./FileQuickSwitcher.types";
 
 function FileQuickSwitcherPresentational({

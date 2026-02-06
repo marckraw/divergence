@@ -100,6 +100,38 @@
         "requiredLocation": "src/shared/ui/**",
         "mustBeIn": true,
         "message": "Shared presentational components should live under src/shared/ui"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-layer-imports",
+        "severity": "error",
+        "files": "src/**/*.{ts,tsx}",
+        "pattern": "from\\s+[\"'](?:@/|~/|src/)(?:components|hooks|lib)/",
+        "message": "Legacy root imports from src/components, src/hooks, and src/lib are not allowed"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-components-files",
+        "severity": "error",
+        "files": "src/components/**/*.{ts,tsx}",
+        "pattern": ".+",
+        "message": "src/components is retired; place code in app/shared/entities/features/widgets layers"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-hooks-files",
+        "severity": "error",
+        "files": "src/hooks/**/*.ts",
+        "pattern": ".+",
+        "message": "src/hooks is retired; move hooks to slice-local or shared hooks"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-lib-files",
+        "severity": "error",
+        "files": "src/lib/**/*.ts",
+        "pattern": ".+",
+        "message": "src/lib is retired; move utilities to app/shared/entities/features/widgets lib folders"
       }
     ]
   },

@@ -4,7 +4,7 @@ import {
   filterTmuxSessions,
   getTmuxOwnershipBadge,
   getTmuxSessionSearchText,
-} from "../../src/lib/utils/tmuxPanel";
+} from "../../src/widgets/main-area/lib/tmuxPanel.pure";
 
 const project: Project = {
   id: 1,

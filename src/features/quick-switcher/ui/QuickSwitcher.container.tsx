@@ -4,7 +4,7 @@ import {
   buildQuickSwitcherSearchResults,
   filterQuickSwitcherSearchResults,
   type QuickSwitcherSearchResult,
-} from "../../../lib/utils/quickSwitcher";
+} from "../lib/quickSwitcher.pure";
 import QuickSwitcherPresentational from "./QuickSwitcher.presentational";
 import type { QuickSwitcherProps } from "./QuickSwitcher.types";
 

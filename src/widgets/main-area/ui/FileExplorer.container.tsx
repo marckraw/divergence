@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readDir } from "@tauri-apps/plugin-fs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants } from "../../../lib/motion";
+import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants } from "../../../shared/lib/motion";
 import { ToolbarButton } from "../../../shared/ui";
 import {
   type FileEntry,
@@ -9,7 +9,7 @@ import {
   getFileBadgeInfo,
   normalizeFileExplorerEntry,
   sortFileExplorerEntries,
-} from "../../../lib/utils/fileExplorer";
+} from "../lib/fileExplorer.pure";
 import FileExplorerPresentational from "./FileExplorer.presentational";
 
 interface FileExplorerProps {

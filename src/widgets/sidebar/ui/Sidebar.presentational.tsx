@@ -8,11 +8,11 @@ import {
   SOFT_SPRING,
   getCollapseVariants,
   getPopVariants,
-} from "../../../lib/motion";
+} from "../../../shared/lib/motion";
 import {
   getSessionStatus,
   isSessionActive,
-} from "../../../lib/utils/sidebar";
+} from "../lib/sidebar.pure";
 import type { SidebarPresentationalProps } from "./Sidebar.types";
 
 function SidebarPresentational({

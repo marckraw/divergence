@@ -3,7 +3,7 @@ import type { KeyboardEvent, MouseEvent } from "react";
 import {
   filterFilesByQuery,
   joinRootWithRelativePath,
-} from "../../../lib/utils/fileQuickSwitcher";
+} from "../lib/fileQuickSwitcher.pure";
 import { listProjectFiles } from "../api/fileQuickSwitcher.api";
 import FileQuickSwitcherPresentational from "./FileQuickSwitcher.presentational";
 import type { FileQuickSwitcherProps } from "./FileQuickSwitcher.types";

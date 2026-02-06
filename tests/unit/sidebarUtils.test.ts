@@ -9,7 +9,7 @@ import {
   isSessionActive,
   toggleAllExpandedProjects,
   toggleExpandedProjectId,
-} from "../../src/lib/utils/sidebar";
+} from "../../src/widgets/sidebar/lib/sidebar.pure";
 
 const projects: Project[] = [
   { id: 1, name: "A", path: "/a", created_at: "2026-01-01" },

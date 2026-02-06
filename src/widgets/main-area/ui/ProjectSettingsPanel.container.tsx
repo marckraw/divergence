@@ -4,11 +4,11 @@ import {
   DEFAULT_COPY_IGNORED_SKIP,
   DEFAULT_USE_TMUX,
   DEFAULT_USE_WEBGL,
-} from "../../../lib/projectSettings";
-import { normalizeTmuxHistoryLimit } from "../../../lib/appSettings";
-import type { ProjectSettings } from "../../../lib/projectSettings";
-import { useProjectSettings } from "../../../hooks/useProjectSettings";
-import { useRalphyConfig } from "../../../hooks/useRalphyConfig";
+} from "../../../entities/project";
+import { normalizeTmuxHistoryLimit } from "../../../shared/config/appSettings";
+import type { ProjectSettings } from "../../../entities/project";
+import { useProjectSettings } from "../../../entities/project";
+import { useRalphyConfig } from "../../../shared/hooks/useRalphyConfig";
 import {
   formatProviderLabel,
   formatRalphyClaudeSummary,
@@ -16,7 +16,7 @@ import {
   formatRalphyLabelsSummary,
   formatRalphyProjectSummary,
   parseSkipListInput,
-} from "../../../lib/utils/projectSettingsPanel";
+} from "../lib/projectSettingsPanel.pure";
 import ProjectSettingsPanelPresentational from "./ProjectSettingsPanel.presentational";
 
 interface ProjectSettingsPanelProps {

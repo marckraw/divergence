@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../../../lib/motion";
+import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../../../shared/lib/motion";
 import type { CreateDivergenceModalPresentationalProps } from "./CreateDivergenceModal.types";
 
 function CreateDivergenceModalPresentational({

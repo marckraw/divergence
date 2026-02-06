@@ -9,12 +9,12 @@ import type {
   SplitOrientation,
   TerminalSession,
 } from "../../../entities";
-import { buildSplitTmuxSessionName } from "../../../lib/tmux";
+import { buildSplitTmuxSessionName } from "../../../entities/terminal-session";
 import {
   formatBytes,
   getAggregatedTerminalStatus,
   joinSessionPath,
-} from "../../../lib/utils/mainArea";
+} from "../lib/mainArea.pure";
 import {
   getBranchDiff,
   getWorkingDiff,

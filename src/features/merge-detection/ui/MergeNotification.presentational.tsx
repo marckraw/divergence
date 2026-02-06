@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { FAST_EASE_OUT, SOFT_SPRING, getSlideInRightVariants } from "../../../lib/motion";
+import { FAST_EASE_OUT, SOFT_SPRING, getSlideInRightVariants } from "../../../shared/lib/motion";
 import type { MergeNotificationPresentationalProps } from "./MergeNotification.types";
 
 function MergeNotificationPresentational({

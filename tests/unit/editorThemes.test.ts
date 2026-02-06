@@ -3,7 +3,7 @@ import {
   getEditorThemeMode,
   isEditorThemeId,
   isEditorThemeMode,
-} from "../../src/lib/editorThemes";
+} from "../../src/shared/config/editorThemes";
 
 describe("editor theme helpers", () => {
   it("checks ids", () => {

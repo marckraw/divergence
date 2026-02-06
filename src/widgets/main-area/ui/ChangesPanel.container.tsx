@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangesMode, GitChangeEntry, GitChangeStatus } from "../../../entities";
-import { getRelativePathFromRoot, sortGitChangesByPath } from "../../../lib/utils/changes";
+import { getRelativePathFromRoot, sortGitChangesByPath } from "../lib/changes.pure";
 import {
   listBranchChanges,
   listGitChanges,

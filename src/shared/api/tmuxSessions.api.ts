@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { TmuxSessionEntry } from "../../types";
+import type { TmuxSessionEntry } from "./tmuxSessions.types";
 import {
   buildLegacyTmuxSessionName,
   buildSplitTmuxSessionName,
   buildTmuxSessionName,
-} from "../../lib/tmux";
+} from "../lib/tmux.pure";
 
 interface TmuxDivergenceRef {
   id: number;

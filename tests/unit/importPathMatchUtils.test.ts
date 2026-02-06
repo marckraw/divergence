@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getImportPathMatchFromPrefix } from "../../src/lib/utils/importPathMatch";
+import { getImportPathMatchFromPrefix } from "../../src/shared/lib/importPathMatch.pure";
 
 describe("import path match utils", () => {
   it("matches from import/export forms", () => {

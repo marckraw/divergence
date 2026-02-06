@@ -1,4 +1,4 @@
-import { loadProjectSettings } from "../../../lib/projectSettings";
+import { loadProjectSettings } from "../../../entities/project";
 import type { Divergence } from "../../../entities";
 import { createDivergenceRepository, insertDivergenceRecord } from "../api/createDivergence.api";
 import type { ExecuteCreateDivergenceParams } from "../model/createDivergence.types";

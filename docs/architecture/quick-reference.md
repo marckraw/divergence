@@ -17,6 +17,12 @@ Use these top-level TypeScript layers:
 4. `src/entities`
 5. `src/shared`
 
+Retired roots:
+
+1. `src/components`
+2. `src/hooks`
+3. `src/lib`
+
 ## Dependency Direction
 
 Allowed imports:

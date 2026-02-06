@@ -1,6 +1,6 @@
-import type { UpdateStatus } from "../../../hooks/useUpdater";
-import type { EditorThemeId } from "../../../lib/editorThemes";
-import type { UpdaterPresentation } from "../../../lib/utils/updaterPresentation";
+import type { UpdateStatus } from "../../../shared/hooks/useUpdater";
+import type { EditorThemeId } from "../../../shared/config/editorThemes";
+import type { UpdaterPresentation } from "../lib/updaterPresentation.pure";
 
 export interface UpdaterProp {
   status: UpdateStatus;

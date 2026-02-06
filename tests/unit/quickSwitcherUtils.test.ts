@@ -3,7 +3,7 @@ import type { Divergence, Project } from "../../src/types";
 import {
   buildQuickSwitcherSearchResults,
   filterQuickSwitcherSearchResults,
-} from "../../src/lib/utils/quickSwitcher";
+} from "../../src/features/quick-switcher/lib/quickSwitcher.pure";
 
 const projects: Project[] = [
   { id: 1, name: "Alpha", path: "/alpha", created_at: "2026-01-01" },

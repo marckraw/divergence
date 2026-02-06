@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getErrorMessage } from "../../src/lib/utils/errors";
+import { getErrorMessage } from "../../src/shared/lib/errors.pure";
 
 describe("errors utils", () => {
   it("extracts message from string and Error", () => {

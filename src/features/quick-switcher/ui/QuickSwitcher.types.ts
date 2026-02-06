@@ -1,6 +1,6 @@
 import type { KeyboardEvent, MouseEvent, RefObject } from "react";
 import type { Divergence, Project } from "../../../entities";
-import type { QuickSwitcherSearchResult } from "../../../lib/utils/quickSwitcher";
+import type { QuickSwitcherSearchResult } from "../lib/quickSwitcher.pure";
 
 export interface QuickSwitcherProps {
   projects: Project[];

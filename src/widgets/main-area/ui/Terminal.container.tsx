@@ -3,10 +3,10 @@ import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { IPty } from "tauri-pty";
-import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../lib/appSettings";
+import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../shared/config/appSettings";
 import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
-import { useAppSettings } from "../../../hooks/useAppSettings";
+import { useAppSettings } from "../../../shared/hooks/useAppSettings";
 import {
   spawnInteractiveShellPty,
   spawnTmuxPty,
@@ -14,7 +14,7 @@ import {
 import {
   buildTmuxBootstrapCommand,
   sanitizeTmuxSessionNameForShell,
-} from "../../../lib/utils/terminalTmux";
+} from "../lib/terminalTmux.pure";
 import TerminalPresentational from "./Terminal.presentational";
 
 interface TerminalProps {

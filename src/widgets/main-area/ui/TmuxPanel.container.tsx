@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { useTmuxSessions } from "../../../hooks/useTmuxSessions";
+import { useTmuxSessions } from "../../../entities/terminal-session";
 import type { Project, Divergence } from "../../../entities";
 import {
   filterTmuxSessions,
   getTmuxOwnershipBadge,
-} from "../../../lib/utils/tmuxPanel";
+} from "../lib/tmuxPanel.pure";
 import TmuxPanelPresentational from "./TmuxPanel.presentational";
 
 interface TmuxPanelProps {

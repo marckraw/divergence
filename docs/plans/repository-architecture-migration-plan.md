@@ -4,6 +4,7 @@ Status: Complete (Phases 0-7 complete)
 Owner: Core team  
 Created: 2026-02-06  
 Scope: `src/**` (TypeScript/React), then policy sync in `AGENTS.md` and `CLAUDE.md`
+Post-plan continuation: `docs/plans/phase-8-legacy-cleanup-plan.md` (complete)
 
 ## 1) Why this plan exists
 

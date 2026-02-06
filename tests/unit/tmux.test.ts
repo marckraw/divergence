@@ -4,7 +4,7 @@ import {
   buildSplitTmuxSessionName,
   buildTmuxSessionName,
   sanitizeTmuxLabel,
-} from "../../src/lib/tmux";
+} from "../../src/entities/terminal-session";
 
 describe("tmux helpers", () => {
   it("sanitizes labels", () => {

@@ -6,8 +6,8 @@ import {
   loadAppSettings,
   saveAppSettings,
   broadcastAppSettings,
-} from "../../../lib/appSettings";
-import { getUpdaterPresentation } from "../../../lib/utils/updaterPresentation";
+} from "../../../shared/config/appSettings";
+import { getUpdaterPresentation } from "../lib/updaterPresentation.pure";
 import { getDivergenceBasePath } from "../api/settings.api";
 import SettingsPresentational from "./Settings.presentational";
 import type { SettingsProps, SettingsState } from "./Settings.types";

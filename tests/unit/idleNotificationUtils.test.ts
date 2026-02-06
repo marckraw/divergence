@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIdleNotificationTargetLabel, shouldNotifyIdle } from "../../src/lib/utils/idleNotification";
+import { buildIdleNotificationTargetLabel, shouldNotifyIdle } from "../../src/app/lib/idleNotification.pure";
 
 describe("idle notification utils", () => {
   it("applies gating rules", () => {

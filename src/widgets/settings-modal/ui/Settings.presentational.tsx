@@ -4,8 +4,8 @@ import {
   EDITOR_THEME_OPTIONS_DARK,
   EDITOR_THEME_OPTIONS_LIGHT,
   type EditorThemeId,
-} from "../../../lib/editorThemes";
-import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../../../lib/motion";
+} from "../../../shared/config/editorThemes";
+import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../../../shared/lib/motion";
 import type { SettingsPresentationalProps } from "./Settings.types";
 
 function SettingsPresentational({

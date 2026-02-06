@@ -8,7 +8,7 @@ import {
   normalizePath,
   resolvePath,
   trimTrailingSlash,
-} from "../../src/lib/utils/quickEdit";
+} from "../../src/widgets/main-area/lib/quickEdit.pure";
 
 describe("quick edit utils", () => {
   it("normalizes and trims paths", () => {

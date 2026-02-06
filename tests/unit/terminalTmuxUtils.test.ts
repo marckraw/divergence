@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildTmuxBootstrapCommand,
   sanitizeTmuxSessionNameForShell,
-} from "../../src/lib/utils/terminalTmux";
+} from "../../src/widgets/main-area/lib/terminalTmux.pure";
 
 describe("terminal tmux utils", () => {
   it("sanitizes session names", () => {

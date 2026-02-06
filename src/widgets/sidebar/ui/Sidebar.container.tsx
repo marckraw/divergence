@@ -8,7 +8,7 @@ import {
   getProjectNameFromSelectedPath,
   toggleAllExpandedProjects,
   toggleExpandedProjectId,
-} from "../../../lib/utils/sidebar";
+} from "../lib/sidebar.pure";
 import SidebarPresentational from "./Sidebar.presentational";
 import type {
   SidebarContextMenuState,

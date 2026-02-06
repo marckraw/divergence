@@ -7,7 +7,7 @@ import {
   getTaskStatusClass,
   getTaskStatusLabel,
   normalizeUnknownError,
-} from "../../src/lib/utils/taskCenter";
+} from "../../src/entities/task";
 
 function makeTask(partial: Partial<BackgroundTask>): BackgroundTask {
   return {

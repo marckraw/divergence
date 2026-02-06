@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSkipList } from "../../src/lib/projectSettings";
+import { normalizeSkipList } from "../../src/entities/project";
 
 describe("project settings normalization", () => {
   it("trims, drops empties, and de-duplicates preserving order", () => {

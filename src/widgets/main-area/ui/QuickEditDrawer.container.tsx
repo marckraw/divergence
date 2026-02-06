@@ -25,13 +25,13 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { DEFAULT_EDITOR_THEME, type EditorThemeId } from "../../../lib/editorThemes";
+import { DEFAULT_EDITOR_THEME, type EditorThemeId } from "../../../shared/config/editorThemes";
 import {
   FAST_EASE_OUT,
   SOFT_SPRING,
   getContentSwapVariants,
   getSlideUpVariants,
-} from "../../../lib/motion";
+} from "../../../shared/lib/motion";
 import { TabButton, ToolbarButton } from "../../../shared/ui";
 import {
   buildImportLabel,
@@ -41,9 +41,9 @@ import {
   joinPath,
   normalizePath,
   resolvePath,
-} from "../../../lib/utils/quickEdit";
-import { getLanguageKind } from "../../../lib/utils/languageDetection";
-import { getImportPathMatchFromPrefix } from "../../../lib/utils/importPathMatch";
+} from "../lib/quickEdit.pure";
+import { getLanguageKind } from "../../../shared/lib/languageDetection.pure";
+import { getImportPathMatchFromPrefix } from "../../../shared/lib/importPathMatch.pure";
 import QuickEditDrawerPresentational from "./QuickEditDrawer.presentational";
 
 interface QuickEditDrawerProps {

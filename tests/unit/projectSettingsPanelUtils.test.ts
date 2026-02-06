@@ -6,7 +6,7 @@ import {
   formatRalphyLabelsSummary,
   formatRalphyProjectSummary,
   parseSkipListInput,
-} from "../../src/lib/utils/projectSettingsPanel";
+} from "../../src/widgets/main-area/lib/projectSettingsPanel.pure";
 
 describe("project settings panel utils", () => {
   it("parses skip list input", () => {

@@ -10,19 +10,18 @@ import { executeDeleteDivergence } from "../features/delete-divergence";
 import { executeRemoveProject } from "../features/remove-project";
 import { TaskCenterDrawer, TaskToasts, useTaskCenter } from "../features/task-center";
 import { useAllDivergences } from "../entities/divergence";
-import { useProjects } from "../entities/project";
-import { useProjectSettingsMap } from "../hooks/useProjectSettingsMap";
-import { useAppSettings } from "../hooks/useAppSettings";
-import { useUpdater } from "../hooks/useUpdater";
+import { useProjectSettingsMap, useProjects } from "../entities/project";
+import { useAppSettings } from "../shared/hooks/useAppSettings";
+import { useUpdater } from "../shared/hooks/useUpdater";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "../entities";
-import { notifyCommandFinished } from "../lib/notifications";
-import { resolveProjectForNewDivergence } from "../lib/utils/appSelection";
-import { buildTerminalSession } from "../lib/utils/sessionBuilder";
+import { notifyCommandFinished } from "../shared/lib/notifications";
+import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
+import { buildTerminalSession } from "./lib/sessionBuilder.pure";
 import {
   buildIdleNotificationTargetLabel,
   shouldNotifyIdle,
-} from "../lib/utils/idleNotification";
-import { resolveAppShortcut } from "../lib/utils/appShortcuts";
+} from "./lib/idleNotification.pure";
+import { resolveAppShortcut } from "./lib/appShortcuts.pure";
 
 const NOTIFY_MIN_BUSY_MS = 5000;
 const NOTIFY_IDLE_DELAY_MS = 1500;

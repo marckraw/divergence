@@ -12,6 +12,7 @@ Always run `cargo clippy -- -D warnings` after every finished task.
 Source of truth:
 - `docs/plans/repository-architecture-migration-plan.md`
 - `docs/plans/phase-1-presentational-container-checklist.md`
+- `docs/plans/phase-8-legacy-cleanup-plan.md`
 - `docs/architecture/quick-reference.md`
 
 ### Required folder strategy
@@ -24,6 +25,7 @@ Organize TypeScript code using these layers:
 - `src/widgets`
 
 Do not add new long-term code under flat legacy areas when a layer above exists for that concern.
+Legacy root folders are retired: do not add files under `src/components`, `src/hooks`, or `src/lib`.
 
 ### Required file naming conventions
 

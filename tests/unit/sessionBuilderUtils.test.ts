@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Divergence, Project } from "../../src/types";
-import type { ProjectSettings } from "../../src/lib/projectSettings";
-import { buildTerminalSession } from "../../src/lib/utils/sessionBuilder";
+import type { ProjectSettings } from "../../src/entities/project";
+import { buildTerminalSession } from "../../src/app/lib/sessionBuilder.pure";
 
 const project: Project = {
   id: 1,

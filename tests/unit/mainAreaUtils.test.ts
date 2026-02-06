@@ -3,7 +3,7 @@ import {
   formatBytes,
   getAggregatedTerminalStatus,
   joinSessionPath,
-} from "../../src/lib/utils/mainArea";
+} from "../../src/widgets/main-area/lib/mainArea.pure";
 
 describe("main area utils", () => {
   it("joins session paths", () => {

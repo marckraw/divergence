@@ -6,7 +6,7 @@ import ChangesPanel from "./ChangesPanel.container";
 import TmuxPanel from "./TmuxPanel.container";
 import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
-import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../lib/motion";
+import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared/lib/motion";
 import { TabButton, ToolbarButton } from "../../../shared/ui";
 import type { MainAreaPresentationalProps } from "./MainArea.types";
 

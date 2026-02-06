@@ -5,7 +5,7 @@ import {
   joinFileExplorerPath,
   normalizeFileExplorerEntry,
   sortFileExplorerEntries,
-} from "../../src/lib/utils/fileExplorer";
+} from "../../src/widgets/main-area/lib/fileExplorer.pure";
 
 describe("file explorer utils", () => {
   it("gets base names for unix and windows paths", () => {

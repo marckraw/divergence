@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getUpdaterPresentation } from "../../src/lib/utils/updaterPresentation";
+import { getUpdaterPresentation } from "../../src/widgets/settings-modal/lib/updaterPresentation.pure";
 
 describe("updater presentation utils", () => {
   it("maps idle/checking states", () => {

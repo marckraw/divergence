@@ -7,8 +7,8 @@ import type {
   SplitOrientation,
   TerminalSession,
 } from "../../../entities";
-import type { EditorThemeId } from "../../../lib/editorThemes";
-import type { ProjectSettings } from "../../../lib/projectSettings";
+import type { EditorThemeId } from "../../../shared/config/editorThemes";
+import type { ProjectSettings } from "../../../entities/project";
 
 export interface MainAreaProps {
   projects: Project[];
