@@ -10,7 +10,9 @@
       }
     },
     "eslint": {
-      "detected": false
+      "detected": true,
+      "configPath": "eslint.config.js",
+      "configFormat": "flat"
     },
     "prettier": {
       "detected": false
@@ -20,7 +22,56 @@
       "lockfile": "package-lock.json"
     }
   },
-  "rules": {},
+  "rules": {
+    "custom": [
+      {
+        "type": "regex",
+        "id": "no-side-effects-in-presentational",
+        "severity": "error",
+        "files": "src/**/*.presentational.tsx",
+        "pattern": "\\b(useEffect|useLayoutEffect|useInsertionEffect|invoke|fetch|Database\\.load|spawn)\\b",
+        "message": "Presentational components must be side-effect free"
+      },
+      {
+        "type": "regex",
+        "id": "no-tauri-imports-in-presentational",
+        "severity": "error",
+        "files": "src/**/*.presentational.tsx",
+        "pattern": "@tauri-apps/",
+        "message": "Presentational components must not import Tauri APIs"
+      },
+      {
+        "type": "file-naming",
+        "id": "container-has-presentational-pair",
+        "severity": "warning",
+        "pattern": "src/**/*.container.tsx",
+        "exclude": [
+          "src/app/**"
+        ],
+        "requireCompanion": {
+          "transform": "$1.presentational.tsx"
+        },
+        "message": "Container components should have a colocated presentational pair"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-legacy-components-tree",
+        "severity": "warning",
+        "files": "src/**/*.presentational.tsx",
+        "exclude": [
+          "src/shared/**",
+          "src/entities/**",
+          "src/features/**",
+          "src/widgets/**",
+          "src/app/**"
+        ],
+        "componentType": "presentational",
+        "requiredLocation": "src/components/**",
+        "mustBeIn": true,
+        "message": "During Phase 1 migration, presentational components should live under src/components"
+      }
+    ]
+  },
   "include": [
     "src/**/*"
   ],
@@ -30,7 +81,7 @@
     "build"
   ],
   "integrations": {
-    "respectEslintIgnore": false,
+    "respectEslintIgnore": true,
     "respectPrettierIgnore": false,
     "useTypescriptPaths": true
   }
