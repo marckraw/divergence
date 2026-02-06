@@ -22,7 +22,7 @@ export interface ProjectSettings {
   tmuxHistoryLimit: number | null;
 }
 
-function normalizeSkipList(entries: string[]): string[] {
+export function normalizeSkipList(entries: string[]): string[] {
   const result: string[] = [];
   const seen = new Set<string>();
 

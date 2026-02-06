@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ChangesMode, GitChangeEntry, GitChangeStatus } from "../types";
+import { getRelativePathFromRoot, sortGitChangesByPath } from "../lib/utils/changes";
 
 interface BranchChangesResponse {
   base_ref: string | null;
@@ -28,17 +29,6 @@ const STATUS_STYLES: Record<
   "?": { label: "?", className: "bg-surface", textClassName: "text-subtext" },
 };
 
-function getRelativePath(rootPath: string, absolutePath: string) {
-  if (!absolutePath.startsWith(rootPath)) {
-    return null;
-  }
-  let relative = absolutePath.slice(rootPath.length);
-  if (relative.startsWith("/") || relative.startsWith("\\")) {
-    relative = relative.slice(1);
-  }
-  return relative;
-}
-
 function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChange }: ChangesPanelProps) {
   const [changes, setChanges] = useState<GitChangeEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,7 +37,7 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
 
   const activeRelative = useMemo(() => {
     if (!rootPath || !activeFilePath) return null;
-    return getRelativePath(rootPath, activeFilePath);
+    return getRelativePathFromRoot(rootPath, activeFilePath);
   }, [rootPath, activeFilePath]);
 
   const loadChanges = useCallback(async () => {
@@ -62,12 +52,12 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
       setLoading(true);
       if (mode === "branch") {
         const result = await invoke<BranchChangesResponse>("list_branch_changes", { path: rootPath });
-        const sorted = [...result.changes].sort((a, b) => a.path.localeCompare(b.path));
+        const sorted = sortGitChangesByPath(result.changes);
         setChanges(sorted);
         setBaseRef(result.base_ref);
       } else {
         const result = await invoke<GitChangeEntry[]>("list_git_changes", { path: rootPath });
-        const sorted = [...result].sort((a, b) => a.path.localeCompare(b.path));
+        const sorted = sortGitChangesByPath(result);
         setChanges(sorted);
         setBaseRef(null);
       }

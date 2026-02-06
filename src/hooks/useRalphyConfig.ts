@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getErrorMessage } from "../lib/utils/errors";
 
 export interface RalphyLabelsSummary {
   candidate?: string;
@@ -61,16 +62,7 @@ export function useRalphyConfig(projectPath: string | null) {
       setData(response);
       setError(null);
     } catch (err) {
-      const message = (() => {
-        if (typeof err === "string") {
-          return err;
-        }
-        if (err && typeof err === "object" && "message" in err && typeof (err as { message: unknown }).message === "string") {
-          return (err as { message: string }).message;
-        }
-        return "Failed to load Ralphy configuration";
-      })();
-      setError(message);
+      setError(getErrorMessage(err, "Failed to load Ralphy configuration"));
     } finally {
       setLoading(false);
     }

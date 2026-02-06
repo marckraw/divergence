@@ -1,64 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTmuxSessions } from "../hooks/useTmuxSessions";
-import type { Project, Divergence, TmuxSessionWithOwnership } from "../types";
+import type { Project, Divergence } from "../types";
+import {
+  filterTmuxSessions,
+  getTmuxOwnershipBadge,
+} from "../lib/utils/tmuxPanel";
 
 interface TmuxPanelProps {
   projects: Project[];
   divergencesByProject: Map<number, Divergence[]>;
   projectsLoading: boolean;
   divergencesLoading: boolean;
-}
-
-function ownershipLabel(session: TmuxSessionWithOwnership): {
-  text: string;
-  className: string;
-} {
-  switch (session.ownership.kind) {
-    case "project":
-      return {
-        text: session.ownership.project.name,
-        className: "bg-accent/20 text-accent",
-      };
-    case "divergence":
-      return {
-        text: `${session.ownership.project.name} / ${session.ownership.divergence.branch}`,
-        className: "bg-accent/20 text-accent",
-      };
-    case "orphan":
-      return {
-        text: "orphan",
-        className: "bg-yellow/20 text-yellow",
-      };
-    case "unknown":
-      return {
-        text: "checking",
-        className: "bg-surface text-subtext",
-      };
-  }
-}
-
-function getSearchText(session: TmuxSessionWithOwnership): string {
-  const parts = [session.name, session.attached ? "attached" : "detached"];
-
-  switch (session.ownership.kind) {
-    case "project":
-      parts.push(session.ownership.project.name);
-      break;
-    case "divergence":
-      parts.push(
-        session.ownership.project.name,
-        session.ownership.divergence.branch
-      );
-      break;
-    case "orphan":
-      parts.push("orphan");
-      break;
-    case "unknown":
-      parts.push("checking");
-      break;
-  }
-
-  return parts.join(" ").toLowerCase();
 }
 
 function TmuxPanel({
@@ -79,16 +31,10 @@ function TmuxPanel({
     killOrphans,
     killAll,
   } = useTmuxSessions(projects, divergencesByProject, ownershipReady);
-  const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredSessions = useMemo(() => {
-    if (!normalizedQuery) {
-      return sessions;
-    }
-    return sessions.filter((session) =>
-      getSearchText(session).includes(normalizedQuery)
-    );
-  }, [sessions, normalizedQuery]);
-  const isFiltering = normalizedQuery.length > 0;
+    return filterTmuxSessions(sessions, searchQuery);
+  }, [sessions, searchQuery]);
+  const isFiltering = searchQuery.trim().length > 0;
 
   const handleKillOrphans = useCallback(() => {
     if (!ownershipReady) return;
@@ -243,7 +189,7 @@ function TmuxPanel({
         )}
 
         {filteredSessions.map((session) => {
-          const badge = ownershipLabel(session);
+          const badge = getTmuxOwnershipBadge(session);
           return (
             <div
               key={session.name}

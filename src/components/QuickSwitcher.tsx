@@ -8,18 +8,17 @@ import {
   getPopVariants,
   getContentSwapVariants,
 } from "../lib/motion";
+import {
+  buildQuickSwitcherSearchResults,
+  filterQuickSwitcherSearchResults,
+  type QuickSwitcherSearchResult,
+} from "../lib/utils/quickSwitcher";
 
 interface QuickSwitcherProps {
   projects: Project[];
   divergencesByProject: Map<number, Divergence[]>;
   onSelect: (type: "project" | "divergence", item: Project | Divergence) => void;
   onClose: () => void;
-}
-
-interface SearchResult {
-  type: "project" | "divergence";
-  item: Project | Divergence;
-  projectName?: string;
 }
 
 function QuickSwitcher({ projects, divergencesByProject, onSelect, onClose }: QuickSwitcherProps) {
@@ -42,44 +41,13 @@ function QuickSwitcher({ projects, divergencesByProject, onSelect, onClose }: Qu
     : { type: "spring", stiffness: 300, damping: 32, mass: 0.8 };
 
   // Build searchable list
-  const allItems = useMemo((): SearchResult[] => {
-    const items: SearchResult[] = [];
-
-    for (const project of projects) {
-      items.push({ type: "project", item: project });
-
-      const divergences = divergencesByProject.get(project.id) || [];
-      for (const divergence of divergences) {
-        items.push({
-          type: "divergence",
-          item: divergence,
-          projectName: project.name,
-        });
-      }
-    }
-
-    return items;
+  const allItems = useMemo((): QuickSwitcherSearchResult[] => {
+    return buildQuickSwitcherSearchResults(projects, divergencesByProject);
   }, [projects, divergencesByProject]);
 
   // Filter by query
   const filteredItems = useMemo(() => {
-    if (!query.trim()) {
-      return allItems;
-    }
-
-    const lowerQuery = query.toLowerCase();
-    return allItems.filter((result) => {
-      const name = result.item.name.toLowerCase();
-      if (result.type === "divergence") {
-        const div = result.item as Divergence;
-        return (
-          name.includes(lowerQuery) ||
-          div.branch.toLowerCase().includes(lowerQuery) ||
-          result.projectName?.toLowerCase().includes(lowerQuery)
-        );
-      }
-      return name.includes(lowerQuery);
-    });
+    return filterQuickSwitcherSearchResults(allItems, query);
   }, [allItems, query]);
 
   // Reset selection when filtered items change

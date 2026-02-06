@@ -8,6 +8,11 @@ import {
   getPopVariants,
   getContentSwapVariants,
 } from "../lib/motion";
+import {
+  filterFilesByQuery,
+  getFileQuickSwitcherInfo,
+  joinRootWithRelativePath,
+} from "../lib/utils/fileQuickSwitcher";
 
 interface FileQuickSwitcherProps {
   rootPath: string;
@@ -78,13 +83,7 @@ function FileQuickSwitcher({ rootPath, onSelect, onClose }: FileQuickSwitcherPro
 
   // Filter by query
   const filteredFiles = useMemo(() => {
-    if (!query.trim()) {
-      return files;
-    }
-    const lowerQuery = query.toLowerCase();
-    return files.filter((filePath) =>
-      filePath.toLowerCase().includes(lowerQuery)
-    );
+    return filterFilesByQuery(files, query);
   }, [files, query]);
 
   const displayFiles = filteredFiles.slice(0, MAX_RENDERED);
@@ -121,8 +120,7 @@ function FileQuickSwitcher({ rootPath, onSelect, onClose }: FileQuickSwitcherPro
           e.preventDefault();
           if (displayFiles[selectedIndex]) {
             const relativePath = displayFiles[selectedIndex];
-            const separator = rootPath.includes("\\") ? "\\" : "/";
-            onSelect(`${rootPath}${separator}${relativePath}`);
+            onSelect(joinRootWithRelativePath(rootPath, relativePath));
           }
           break;
         case "Escape":
@@ -133,15 +131,6 @@ function FileQuickSwitcher({ rootPath, onSelect, onClose }: FileQuickSwitcherPro
     },
     [displayFiles, selectedIndex, rootPath, onSelect, onClose]
   );
-
-  const getFileInfo = useCallback((filePath: string) => {
-    const lastSlash = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
-    const fileName = lastSlash >= 0 ? filePath.slice(lastSlash + 1) : filePath;
-    const directory = lastSlash >= 0 ? filePath.slice(0, lastSlash) : "";
-    const dotIndex = fileName.lastIndexOf(".");
-    const extension = dotIndex > 0 ? fileName.slice(dotIndex + 1) : "";
-    return { fileName, directory, extension };
-  }, []);
 
   return (
     <motion.div
@@ -227,7 +216,7 @@ function FileQuickSwitcher({ rootPath, onSelect, onClose }: FileQuickSwitcherPro
           ) : (
             <AnimatePresence initial={false}>
               {displayFiles.map((filePath, index) => {
-                const { fileName, directory, extension } = getFileInfo(filePath);
+                const { fileName, directory, extension } = getFileQuickSwitcherInfo(filePath);
                 return (
                   <motion.div
                     key={filePath}
@@ -243,8 +232,7 @@ function FileQuickSwitcher({ rootPath, onSelect, onClose }: FileQuickSwitcherPro
                         : "hover:bg-surface/50"
                     }`}
                     onClick={() => {
-                      const separator = rootPath.includes("\\") ? "\\" : "/";
-                      onSelect(`${rootPath}${separator}${filePath}`);
+                      onSelect(joinRootWithRelativePath(rootPath, filePath));
                     }}
                     onMouseEnter={() => setSelectedIndex(index)}
                   >

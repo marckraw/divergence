@@ -5,6 +5,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Instant;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -130,8 +131,14 @@ pub async fn delete_divergence(path: String) -> Result<(), String> {
 
     // Remove the directory
     if divergence_path.exists() {
-        fs::remove_dir_all(&divergence_path)
+        let delete_path = divergence_path.clone();
+        let started_at = Instant::now();
+        tauri::async_runtime::spawn_blocking(move || fs::remove_dir_all(&delete_path))
+            .await
+            .map_err(|e| format!("Failed to delete divergence directory: {}", e))?
             .map_err(|e| format!("Failed to delete divergence directory: {}", e))?;
+        let elapsed = started_at.elapsed();
+        println!("Deleted divergence at '{}' in {} ms", path, elapsed.as_millis());
     }
 
     Ok(())

@@ -32,6 +32,17 @@ import {
   getContentSwapVariants,
   getSlideUpVariants,
 } from "../lib/motion";
+import {
+  buildImportLabel,
+  getDiffLineClass,
+  getDirname,
+  isImportCompletionEnabled,
+  joinPath,
+  normalizePath,
+  resolvePath,
+} from "../lib/utils/quickEdit";
+import { getLanguageKind } from "../lib/utils/languageDetection";
+import { getImportPathMatchFromPrefix } from "../lib/utils/importPathMatch";
 
 interface QuickEditDrawerProps {
   isOpen: boolean;
@@ -200,176 +211,50 @@ const themeExtensionsById: Record<EditorThemeId, Extension[]> = {
 };
 
 const getLanguageExtension = (filePath: string | null) => {
-  if (!filePath) {
-    return [];
+  const kind = getLanguageKind(filePath);
+  switch (kind) {
+    case "html":
+      return [html()];
+    case "css":
+      return [css()];
+    case "typescript": {
+      const lower = filePath?.toLowerCase() ?? "";
+      return [javascript({ typescript: true, jsx: lower.endsWith(".tsx") })];
+    }
+    case "javascript": {
+      const lower = filePath?.toLowerCase() ?? "";
+      return [javascript({ jsx: lower.endsWith(".jsx") })];
+    }
+    case "markdown":
+      return [markdown()];
+    case "python":
+      return [python()];
+    case "rust":
+      return [rust()];
+    case "json":
+      return [json()];
+    case "yaml":
+      return [yaml()];
+    case "unknown":
+    default:
+      return [];
   }
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-    return [html()];
-  }
-  if (lower.endsWith(".css") || lower.endsWith(".scss") || lower.endsWith(".sass") || lower.endsWith(".less")) {
-    return [css()];
-  }
-  if (lower.endsWith(".ts") || lower.endsWith(".tsx") || lower.endsWith(".mts") || lower.endsWith(".cts")) {
-    return [javascript({ typescript: true, jsx: lower.endsWith(".tsx") })];
-  }
-  if (lower.endsWith(".js") || lower.endsWith(".jsx") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) {
-    return [javascript({ jsx: lower.endsWith(".jsx") })];
-  }
-  if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".mdx")) {
-    return [markdown()];
-  }
-  if (lower.endsWith(".py") || lower.endsWith(".pyi")) {
-    return [python()];
-  }
-  if (lower.endsWith(".rs")) {
-    return [rust()];
-  }
-  if (lower.endsWith(".json") || lower.endsWith(".jsonc") || lower.endsWith(".json5")) {
-    return [json()];
-  }
-  if (lower.endsWith(".yaml") || lower.endsWith(".yml")) {
-    return [yaml()];
-  }
-  return [];
 };
-
-const IMPORT_COMPLETION_EXTENSIONS = new Set([
-  ".ts",
-  ".tsx",
-  ".mts",
-  ".cts",
-  ".js",
-  ".jsx",
-  ".mjs",
-  ".cjs",
-  ".d.ts",
-]);
-
-const OMIT_EXTENSION_FOR_IMPORT = new Set([
-  "ts",
-  "tsx",
-  "mts",
-  "cts",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "d.ts",
-]);
-
-const IMPORT_PATH_MATCHERS = [
-  /(?:import|export)\s+[^'"]*from\s+["']([^"']*)$/,
-  /import\s+["']([^"']*)$/,
-  /(?:import|require)\(\s*["']([^"']*)$/,
-];
 
 const DIR_CACHE_TTL_MS = 10_000;
 const PACKAGE_CACHE_TTL_MS = 60_000;
 const dirCache = new Map<string, { at: number; entries: { name: string; isDir: boolean }[] }>();
 const packageCache = new Map<string, { at: number; names: string[] }>();
 
-const normalizePath = (value: string) => value.replace(/\\/g, "/");
-
-const trimTrailingSlash = (value: string) => value.replace(/\/+$/g, "");
-
-const getDirname = (value: string) => {
-  const normalized = normalizePath(value);
-  const trimmed = trimTrailingSlash(normalized);
-  const lastSlash = trimmed.lastIndexOf("/");
-  if (lastSlash < 0) {
-    return trimmed;
-  }
-  if (lastSlash === 0) {
-    return "/";
-  }
-  return trimmed.slice(0, lastSlash);
-};
-
-const joinPath = (base: string, segment: string) => {
-  if (!segment) {
-    return base;
-  }
-  const normalizedBase = normalizePath(base);
-  const normalizedSegment = normalizePath(segment);
-  if (normalizedSegment.startsWith("/") || /^[A-Za-z]:\//.test(normalizedSegment)) {
-    return normalizedSegment;
-  }
-  if (normalizedBase.endsWith("/")) {
-    return `${normalizedBase}${normalizedSegment}`;
-  }
-  return `${normalizedBase}/${normalizedSegment}`;
-};
-
-const resolvePath = (base: string, relative: string) => {
-  const normalizedRelative = normalizePath(relative);
-  if (normalizedRelative.startsWith("/") || /^[A-Za-z]:\//.test(normalizedRelative)) {
-    return normalizedRelative;
-  }
-
-  const normalizedBase = normalizePath(base);
-  const hasLeadingSlash = normalizedBase.startsWith("/");
-  let baseParts = normalizedBase.split("/").filter(Boolean);
-  let prefix = hasLeadingSlash ? "/" : "";
-
-  if (baseParts[0]?.endsWith(":")) {
-    prefix = `${baseParts[0]}/`;
-    baseParts = baseParts.slice(1);
-  }
-
-  const relParts = normalizedRelative.split("/").filter(Boolean);
-  const parts = [...baseParts];
-  for (const part of relParts) {
-    if (part === ".") {
-      continue;
-    }
-    if (part === "..") {
-      if (parts.length > 0) {
-        parts.pop();
-      }
-      continue;
-    }
-    parts.push(part);
-  }
-
-  return `${prefix}${parts.join("/")}`;
-};
-
-const isImportCompletionEnabled = (filePath: string | null) => {
-  if (!filePath) {
-    return false;
-  }
-  const lower = filePath.toLowerCase();
-  return Array.from(IMPORT_COMPLETION_EXTENSIONS).some(ext => lower.endsWith(ext));
-};
-
-const buildImportLabel = (name: string) => {
-  const lower = name.toLowerCase();
-  if (lower.endsWith(".d.ts")) {
-    return name.slice(0, -5);
-  }
-  const lastDot = lower.lastIndexOf(".");
-  if (lastDot <= 0) {
-    return name;
-  }
-  const ext = lower.slice(lastDot + 1);
-  if (OMIT_EXTENSION_FOR_IMPORT.has(ext)) {
-    return name.slice(0, lastDot);
-  }
-  return name;
-};
-
 const getImportPathMatch = (context: CompletionContext) => {
   const line = context.state.doc.lineAt(context.pos);
   const before = line.text.slice(0, context.pos - line.from);
-  for (const matcher of IMPORT_PATH_MATCHERS) {
-    const match = before.match(matcher);
-    if (match) {
-      return {
-        value: match[1],
-        from: context.pos - match[1].length,
-      };
-    }
+  const match = getImportPathMatchFromPrefix(before);
+  if (match) {
+    return {
+      value: match.value,
+      from: context.pos - match.matchLength,
+    };
   }
   return null;
 };
@@ -691,36 +576,12 @@ function DiffViewer({
     );
   }
 
-  const getLineClass = (line: string) => {
-    if (
-      line.startsWith("diff ")
-      || line.startsWith("index ")
-      || line.startsWith("--- ")
-      || line.startsWith("+++ ")
-    ) {
-      return "text-subtext/70";
-    }
-    if (line.startsWith("@@")) {
-      return "text-accent";
-    }
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      return "text-green bg-green/10";
-    }
-    if (line.startsWith("-") && !line.startsWith("---")) {
-      return "text-red bg-red/10";
-    }
-    if (line.startsWith("\\ No newline")) {
-      return "text-subtext/70";
-    }
-    return "text-subtext/80";
-  };
-
   return (
     <div className="h-full w-full overflow-auto font-mono text-[11px] leading-5">
       {lines.map((line, index) => (
         <div
           key={`${index}-${line}`}
-          className={`px-3 whitespace-pre ${getLineClass(line)}`}
+          className={`px-3 whitespace-pre ${getDiffLineClass(line)}`}
         >
           {line}
         </div>

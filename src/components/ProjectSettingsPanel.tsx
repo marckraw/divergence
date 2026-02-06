@@ -8,7 +8,15 @@ import {
 import { normalizeTmuxHistoryLimit } from "../lib/appSettings";
 import type { ProjectSettings } from "../lib/projectSettings";
 import { useProjectSettings } from "../hooks/useProjectSettings";
-import { useRalphyConfig, type RalphyConfigSummary } from "../hooks/useRalphyConfig";
+import { useRalphyConfig } from "../hooks/useRalphyConfig";
+import {
+  formatProviderLabel,
+  formatRalphyClaudeSummary,
+  formatRalphyGithubSummary,
+  formatRalphyLabelsSummary,
+  formatRalphyProjectSummary,
+  parseSkipListInput,
+} from "../lib/utils/projectSettingsPanel";
 
 interface ProjectSettingsPanelProps {
   project: Project | null;
@@ -56,83 +64,11 @@ function ProjectSettingsPanel({
     setTmuxHistoryLimit(settings.tmuxHistoryLimit ?? globalTmuxHistoryLimit);
   }, [settings, defaultListText, globalTmuxHistoryLimit]);
 
-  const parseList = (value: string) =>
-    value
-      .split("\n")
-      .map(line => line.trim())
-      .filter(Boolean);
-
-  const formatProvider = (providerType?: string) => {
-    if (!providerType) return "Unknown";
-    return `${providerType.charAt(0).toUpperCase()}${providerType.slice(1)}`;
-  };
-
-  const formatProject = (summary: RalphyConfigSummary) => {
-    const parts: string[] = [];
-    if (summary.project_name) {
-      parts.push(summary.project_name);
-    }
-    if (summary.project_key) {
-      parts.push(summary.project_key);
-    }
-    if (summary.project_id) {
-      parts.push(summary.project_id);
-    }
-    if (summary.team_id) {
-      parts.push(`team ${summary.team_id}`);
-    }
-    return parts.join(" · ");
-  };
-
-  const formatLabels = (summary: RalphyConfigSummary) => {
-    const labels = summary.labels;
-    if (!labels) {
-      return "";
-    }
-    const parts: string[] = [];
-    if (labels.candidate) {
-      parts.push(`candidate: ${labels.candidate}`);
-    }
-    if (labels.ready) {
-      parts.push(`ready: ${labels.ready}`);
-    }
-    if (labels.enriched) {
-      parts.push(`enriched: ${labels.enriched}`);
-    }
-    if (labels.pr_feedback) {
-      parts.push(`pr: ${labels.pr_feedback}`);
-    }
-    return parts.join(" · ");
-  };
-
-  const formatClaude = (summary: RalphyConfigSummary) => {
-    const claude = summary.claude;
-    if (!claude) {
-      return "";
-    }
-    const parts: string[] = [];
-    if (claude.model) {
-      parts.push(claude.model);
-    }
-    if (claude.max_iterations) {
-      parts.push(`${claude.max_iterations} iterations`);
-    }
-    return parts.join(" · ");
-  };
-
-  const formatGithub = (summary: RalphyConfigSummary) => {
-    const github = summary.integrations?.github;
-    if (!github?.owner || !github.repo) {
-      return "";
-    }
-    return `${github.owner}/${github.repo}`;
-  };
-
   const ralphySummary = ralphyConfig?.status === "ok" ? ralphyConfig.summary : null;
-  const ralphyProject = ralphySummary ? formatProject(ralphySummary) : "";
-  const ralphyLabels = ralphySummary ? formatLabels(ralphySummary) : "";
-  const ralphyClaude = ralphySummary ? formatClaude(ralphySummary) : "";
-  const ralphyGithub = ralphySummary ? formatGithub(ralphySummary) : "";
+  const ralphyProject = ralphySummary ? formatRalphyProjectSummary(ralphySummary) : "";
+  const ralphyLabels = ralphySummary ? formatRalphyLabelsSummary(ralphySummary) : "";
+  const ralphyClaude = ralphySummary ? formatRalphyClaudeSummary(ralphySummary) : "";
+  const ralphyGithub = ralphySummary ? formatRalphyGithubSummary(ralphySummary) : "";
 
   const handleSave = async () => {
     if (!projectId) return;
@@ -141,7 +77,7 @@ function ProjectSettingsPanel({
       const historyLimit = useCustomHistoryLimit
         ? normalizeTmuxHistoryLimit(tmuxHistoryLimit, globalTmuxHistoryLimit)
         : null;
-      const saved = await save(parseList(draftSkipList), useTmux, useWebgl, historyLimit);
+      const saved = await save(parseSkipListInput(draftSkipList), useTmux, useWebgl, historyLimit);
       if (saved) {
         onSaved?.(saved);
       }
@@ -297,7 +233,7 @@ function ProjectSettingsPanel({
                 </span>
               </div>
               <div>
-                Provider: <span className="text-text">{formatProvider(ralphySummary.provider_type)}</span>
+                Provider: <span className="text-text">{formatProviderLabel(ralphySummary.provider_type)}</span>
               </div>
               {ralphyProject && (
                 <div>
