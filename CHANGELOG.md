@@ -1,5 +1,11 @@
 # divergence
 
+## 0.8.0
+
+### Minor Changes
+
+- 6ef1241: Fix CI chaperone execution by installing the standalone release binary directly from GitHub Releases instead of using `bunx`. Add SHA256 verification during download for integrity.
+
 ## 0.7.0
 
 ### Minor Changes
