@@ -244,6 +244,11 @@ pub struct BranchChangesResponse {
     pub changes: Vec<GitChangeEntry>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WriteReviewBriefResponse {
+    pub path: String,
+}
+
 fn value_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
     let mut current = value;
     for key in path {
@@ -593,5 +598,32 @@ pub async fn get_branch_diff(
     Ok(GitDiffResponse {
         diff: diff.diff,
         is_binary: diff.is_binary,
+    })
+}
+
+#[tauri::command]
+pub async fn write_review_brief_file(
+    workspace_path: String,
+    markdown: String,
+) -> Result<WriteReviewBriefResponse, String> {
+    let workspace = PathBuf::from(&workspace_path);
+    if !workspace.is_dir() {
+        return Err(format!("Workspace path is not a directory: {}", workspace_path));
+    }
+
+    let review_dir = workspace.join(".divergence");
+    fs::create_dir_all(&review_dir)
+        .map_err(|error| format!("Failed to create review directory: {}", error))?;
+
+    let short_id = &Uuid::new_v4().to_string()[..8];
+    let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+    let file_name = format!("review-brief-{}-{}.md", timestamp, short_id);
+    let file_path = review_dir.join(file_name);
+
+    fs::write(&file_path, markdown)
+        .map_err(|error| format!("Failed to write review brief: {}", error))?;
+
+    Ok(WriteReviewBriefResponse {
+        path: file_path.to_string_lossy().to_string(),
     })
 }

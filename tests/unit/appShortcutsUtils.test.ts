@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveAppShortcut, type AppShortcutContext, type AppShortcutEvent } from "../../src/lib/utils/appShortcuts";
+import { resolveAppShortcut, type AppShortcutContext, type AppShortcutEvent } from "../../src/app/lib/appShortcuts.pure";
 
 const baseEvent: AppShortcutEvent = {
   defaultPrevented: false,

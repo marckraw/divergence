@@ -4,8 +4,8 @@ import {
   annotateTmuxSessions,
   buildTmuxOwnershipMap,
   countOrphanTmuxSessions,
-} from "../../src/lib/utils/tmuxOwnership";
-import { buildTmuxSessionName } from "../../src/lib/tmux";
+} from "../../src/entities/terminal-session";
+import { buildTmuxSessionName } from "../../src/entities/terminal-session";
 
 const project: Project = {
   id: 1,

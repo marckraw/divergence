@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Project, TerminalSession } from "../../src/types";
-import { resolveProjectForNewDivergence } from "../../src/lib/utils/appSelection";
+import { resolveProjectForNewDivergence } from "../../src/app/lib/appSelection.pure";
 
 const projectA: Project = { id: 1, name: "A", path: "/a", created_at: "2026-01-01" };
 const projectB: Project = { id: 2, name: "B", path: "/b", created_at: "2026-01-01" };
@@ -11,6 +11,8 @@ function makeSession(projectId: number): TerminalSession {
     type: "project",
     targetId: projectId,
     projectId,
+    workspaceKey: `project:${projectId}`,
+    sessionRole: "default",
     name: `P${projectId}`,
     path: `/p${projectId}`,
     useTmux: true,

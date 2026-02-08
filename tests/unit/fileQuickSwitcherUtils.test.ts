@@ -3,7 +3,7 @@ import {
   filterFilesByQuery,
   getFileQuickSwitcherInfo,
   joinRootWithRelativePath,
-} from "../../src/lib/utils/fileQuickSwitcher";
+} from "../../src/features/file-quick-switcher/lib/fileQuickSwitcher.pure";
 
 describe("file quick switcher utils", () => {
   it("filters files by query", () => {

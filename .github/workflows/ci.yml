@@ -19,6 +19,40 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+      - name: Install Chaperone
+        env:
+          CHAPERONE_VERSION: v0.1.1
+          CHAPERONE_REPO: marckraw/chaperone-cli
+        run: |
+          case "$(uname -m)" in
+            arm64|aarch64) CHAPERONE_ASSET="chaperone-darwin-arm64" ;;
+            x86_64) CHAPERONE_ASSET="chaperone-darwin-x64" ;;
+            *) echo "Unsupported macOS architecture: $(uname -m)" && exit 1 ;;
+          esac
+
+          curl -fsSL \
+            -o "$RUNNER_TEMP/chaperone" \
+            "https://github.com/${CHAPERONE_REPO}/releases/download/${CHAPERONE_VERSION}/${CHAPERONE_ASSET}"
+          curl -fsSL \
+            -o "$RUNNER_TEMP/SHA256SUMS.txt" \
+            "https://github.com/${CHAPERONE_REPO}/releases/download/${CHAPERONE_VERSION}/SHA256SUMS.txt"
+
+          CHAPERONE_SHA="$(awk "/ ${CHAPERONE_ASSET}\$/ {print \$1}" "$RUNNER_TEMP/SHA256SUMS.txt")"
+          if [ -z "$CHAPERONE_SHA" ]; then
+            echo "Missing SHA256 entry for ${CHAPERONE_ASSET}"
+            exit 1
+          fi
+          echo "${CHAPERONE_SHA}  $RUNNER_TEMP/chaperone" | shasum -a 256 -c -
+
+          chmod +x "$RUNNER_TEMP/chaperone"
+          mkdir -p "$HOME/.local/bin"
+          mv "$RUNNER_TEMP/chaperone" "$HOME/.local/bin/chaperone"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          chaperone version
+
+      - name: Chaperone
+        run: chaperone check --no-progress
+
       - name: TypeScript check
         run: npm run typecheck
 

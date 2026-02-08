@@ -3,13 +3,15 @@ import type { Divergence, Project, TerminalSession } from "../../src/types";
 import {
   areAllExpanded,
   buildSessionId,
+  getSessionsForWorkspace,
   getExpandableProjectIds,
   getProjectNameFromSelectedPath,
   getSessionStatus,
+  isSessionItemActive,
   isSessionActive,
   toggleAllExpandedProjects,
   toggleExpandedProjectId,
-} from "../../src/lib/utils/sidebar";
+} from "../../src/widgets/sidebar/lib/sidebar.pure";
 
 const projects: Project[] = [
   { id: 1, name: "A", path: "/a", created_at: "2026-01-01" },
@@ -55,6 +57,8 @@ describe("sidebar utils", () => {
         type: "project",
         targetId: 1,
         projectId: 1,
+        workspaceKey: "project:1",
+        sessionRole: "default",
         name: "A",
         path: "/a",
         useTmux: true,
@@ -63,10 +67,27 @@ describe("sidebar utils", () => {
         useWebgl: true,
         status: "busy",
       }],
+      ["project-1#review", {
+        id: "project-1#review",
+        type: "project",
+        targetId: 1,
+        projectId: 1,
+        workspaceKey: "project:1",
+        sessionRole: "review-agent",
+        name: "A review",
+        path: "/a",
+        useTmux: true,
+        tmuxSessionName: "x-review",
+        tmuxHistoryLimit: 1000,
+        useWebgl: true,
+        status: "idle",
+      }],
     ]);
 
     expect(getSessionStatus(sessions, "project", 1)).toBe("busy");
     expect(getSessionStatus(sessions, "divergence", 10)).toBeNull();
-    expect(isSessionActive("project-1", "project", 1)).toBe(true);
+    expect(getSessionsForWorkspace(sessions, "project", 1)).toHaveLength(2);
+    expect(isSessionActive("project-1#review", sessions, "project", 1)).toBe(true);
+    expect(isSessionItemActive("project-1#review", "project-1#review")).toBe(true);
   });
 });

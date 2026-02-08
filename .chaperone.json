@@ -10,7 +10,9 @@
       }
     },
     "eslint": {
-      "detected": false
+      "detected": true,
+      "configPath": "eslint.config.js",
+      "configFormat": "flat"
     },
     "prettier": {
       "detected": false
@@ -20,7 +22,145 @@
       "lockfile": "package-lock.json"
     }
   },
-  "rules": {},
+  "rules": {
+    "custom": [
+      {
+        "type": "regex",
+        "id": "no-side-effects-in-presentational",
+        "severity": "error",
+        "files": "src/**/*.presentational.tsx",
+        "pattern": "\\b(useEffect|useLayoutEffect|useInsertionEffect|invoke|fetch|Database\\.load|spawn)\\b",
+        "message": "Presentational components must be side-effect free"
+      },
+      {
+        "type": "regex",
+        "id": "no-tauri-imports-in-presentational",
+        "severity": "error",
+        "files": "src/**/*.presentational.tsx",
+        "pattern": "@tauri-apps/",
+        "message": "Presentational components must not import Tauri APIs"
+      },
+      {
+        "type": "regex",
+        "id": "container-imports-presentational",
+        "severity": "error",
+        "files": "src/**/*.container.tsx",
+        "exclude": [
+          "src/app/**"
+        ],
+        "pattern": "^(?![\\s\\S]*from\\s+[\"']\\./[^\"']+\\.presentational[\"'])[\\s\\S]+$",
+        "message": "Container components should import a colocated *.presentational component (missing import detected)"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-legacy-components-tree",
+        "severity": "error",
+        "files": "src/components/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/components/**",
+        "mustBeIn": true,
+        "message": "During Phase 1 migration, presentational components should live under src/components"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-features-ui",
+        "severity": "error",
+        "files": "src/features/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/features/**/ui/**",
+        "mustBeIn": true,
+        "message": "Feature presentational components should live under a ui/ folder"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-widgets-ui",
+        "severity": "error",
+        "files": "src/widgets/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/widgets/**/ui/**",
+        "mustBeIn": true,
+        "message": "Widget presentational components should live under a ui/ folder"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-entities-ui",
+        "severity": "error",
+        "files": "src/entities/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/entities/**/ui/**",
+        "mustBeIn": true,
+        "message": "Entity presentational components should live under a ui/ folder"
+      },
+      {
+        "type": "component-location",
+        "id": "presentational-in-shared-ui",
+        "severity": "error",
+        "files": "src/shared/**/*.presentational.tsx",
+        "componentType": "presentational",
+        "requiredLocation": "src/shared/ui/**",
+        "mustBeIn": true,
+        "message": "Shared presentational components should live under src/shared/ui"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-layer-imports",
+        "severity": "error",
+        "files": "src/**/*.{ts,tsx}",
+        "pattern": "from\\s+[\"'](?:@/|~/|src/)(?:components|hooks|lib)/",
+        "message": "Legacy root imports from src/components, src/hooks, and src/lib are not allowed"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-components-files",
+        "severity": "error",
+        "files": "src/components/**/*.{ts,tsx}",
+        "pattern": ".+",
+        "message": "src/components is retired; place code in app/shared/entities/features/widgets layers"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-hooks-files",
+        "severity": "error",
+        "files": "src/hooks/**/*.ts",
+        "pattern": ".+",
+        "message": "src/hooks is retired; move hooks to slice-local or shared hooks"
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-lib-files",
+        "severity": "error",
+        "files": "src/lib/**/*.ts",
+        "pattern": ".+",
+        "message": "src/lib is retired; move utilities to app/shared/entities/features/widgets lib folders"
+      },
+      {
+        "type": "package-fields",
+        "id": "pure-function-check-wired-into-unit-tests",
+        "severity": "error",
+        "requiredFields": [
+          "scripts.test:pure",
+          "scripts.test:unit"
+        ],
+        "fieldPatterns": {
+          "scripts.test:pure": "chaperone\\s+check",
+          "scripts.test:unit": "test:pure"
+        },
+        "message": "package.json must enforce pure-function test checks via test:pure and test:unit"
+      },
+      {
+        "type": "symbol-reference",
+        "id": "pure-function-exports-referenced-in-unit-tests",
+        "severity": "error",
+        "sourceFiles": "src/**/*.pure.ts",
+        "targetFiles": "tests/unit/**/*.test.ts",
+        "symbolKinds": [
+          "function-declaration",
+          "function-variable"
+        ],
+        "message": "Exported pure functions must be referenced in unit tests"
+      }
+    ]
+  },
   "include": [
     "src/**/*"
   ],
@@ -30,7 +170,7 @@
     "build"
   ],
   "integrations": {
-    "respectEslintIgnore": false,
+    "respectEslintIgnore": true,
     "respectPrettierIgnore": false,
     "useTypescriptPaths": true
   }

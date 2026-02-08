@@ -3,7 +3,7 @@ import type { GitChangeEntry } from "../../src/types";
 import {
   getRelativePathFromRoot,
   sortGitChangesByPath,
-} from "../../src/lib/utils/changes";
+} from "../../src/widgets/main-area/lib/changes.pure";
 
 describe("changes utils", () => {
   it("gets relative path from root", () => {

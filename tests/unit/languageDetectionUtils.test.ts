@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getLanguageKind } from "../../src/lib/utils/languageDetection";
+import { getLanguageKind } from "../../src/shared/lib/languageDetection.pure";
 
 describe("language detection utils", () => {
   it("detects known language kinds", () => {

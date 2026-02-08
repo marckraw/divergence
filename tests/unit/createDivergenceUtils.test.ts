@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeBranchName,
   validateBranchName,
-} from "../../src/lib/utils/createDivergence";
+} from "../../src/features/create-divergence/lib/createDivergence.pure";
 
 describe("create divergence utils", () => {
   it("normalizes branch name", () => {
