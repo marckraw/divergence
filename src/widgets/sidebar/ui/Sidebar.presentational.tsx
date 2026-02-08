@@ -41,6 +41,7 @@ function SidebarPresentational({
   onContextMenuOpen,
   onContextMenuClose,
   onContextMenuRemoveProject,
+  onContextMenuCreateAdditionalSession,
   onContextMenuDeleteDivergence,
   onContextMenuCloseSession,
   onContextMenuCloseSessionAndKillTmux,
@@ -339,6 +340,11 @@ function SidebarPresentational({
             {contextMenu.type === "project" && (
               <>
                 <MenuButton
+                  onClick={onContextMenuCreateAdditionalSession}
+                >
+                  New Session
+                </MenuButton>
+                <MenuButton
                   onClick={() => {
                     onCreateDivergenceForChange(contextMenu.item as Project);
                     onContextMenuClose();
@@ -355,13 +361,20 @@ function SidebarPresentational({
               </>
             )}
             {contextMenu.type === "divergence" && (
-              <MenuButton
-                tone="danger"
-                onClick={onContextMenuDeleteDivergence}
-                disabled={Boolean(deletingDivergence)}
-              >
-                {deletingDivergence?.id === contextMenu.id ? "Deleting..." : "Delete Divergence"}
-              </MenuButton>
+              <>
+                <MenuButton
+                  onClick={onContextMenuCreateAdditionalSession}
+                >
+                  New Session
+                </MenuButton>
+                <MenuButton
+                  tone="danger"
+                  onClick={onContextMenuDeleteDivergence}
+                  disabled={Boolean(deletingDivergence)}
+                >
+                  {deletingDivergence?.id === contextMenu.id ? "Deleting..." : "Delete Divergence"}
+                </MenuButton>
+              </>
             )}
             {contextMenu.type === "session" && (
               <>

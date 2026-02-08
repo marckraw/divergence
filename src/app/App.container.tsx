@@ -23,7 +23,7 @@ import {
 } from "../features/diff-review";
 import { notifyCommandFinished } from "../shared/lib/notifications";
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
-import { buildTerminalSession } from "./lib/sessionBuilder.pure";
+import { buildTerminalSession, buildWorkspaceKey } from "./lib/sessionBuilder.pure";
 import {
   buildIdleNotificationTargetLabel,
   shouldNotifyIdle,
@@ -188,6 +188,44 @@ function App() {
     return session;
   }, [settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
 
+  const createManualSession = useCallback((
+    type: "project" | "divergence",
+    target: Project | Divergence
+  ): TerminalSession => {
+    const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const sessionId = `${type}-${target.id}#manual-${entropy}`;
+    const workspaceSessions = Array.from(sessionsRef.current.values())
+      .filter((session) => session.type === type && session.targetId === target.id);
+    const manualIndex = workspaceSessions.filter((session) => session.sessionRole === "manual").length + 1;
+
+    const base = buildTerminalSession({
+      type,
+      target,
+      settingsByProjectId,
+      projectsById,
+      globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+    });
+    const session: TerminalSession = {
+      ...base,
+      id: sessionId,
+      workspaceKey: buildWorkspaceKey(type, target.id),
+      sessionRole: "manual",
+      name: `${base.name} • session #${manualIndex}`,
+      tmuxSessionName: base.useTmux
+        ? buildSplitTmuxSessionName(base.tmuxSessionName, `manual-${entropy}`)
+        : base.tmuxSessionName,
+      status: "idle",
+      lastActivity: new Date(),
+    };
+
+    setSessions((previous) => {
+      const next = new Map(previous);
+      next.set(session.id, session);
+      return next;
+    });
+    return session;
+  }, [settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
+
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
     setActiveSessionId(session.id);
@@ -197,6 +235,14 @@ function App() {
     const session = createSession("divergence", divergence);
     setActiveSessionId(session.id);
   }, [createSession]);
+
+  const handleCreateAdditionalSession = useCallback((
+    type: "project" | "divergence",
+    item: Project | Divergence
+  ) => {
+    const session = createManualSession(type, item);
+    setActiveSessionId(session.id);
+  }, [createManualSession]);
 
   const handleCloseSession = useCallback((sessionId: string) => {
     clearNotificationTracking(sessionId);
@@ -648,6 +694,7 @@ function App() {
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onCreateDivergence={handleCreateDivergence}
+          onCreateAdditionalSession={handleCreateAdditionalSession}
           onDeleteDivergence={handleDeleteDivergence}
           isCollapsed={!isSidebarOpen}
         />

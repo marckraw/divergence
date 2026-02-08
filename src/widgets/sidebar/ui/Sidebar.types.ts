@@ -16,6 +16,10 @@ export interface SidebarProps {
   onAddProject: (name: string, path: string) => Promise<void>;
   onRemoveProject: (id: number) => Promise<void>;
   onCreateDivergence: (project: Project, branchName: string, useExistingBranch: boolean) => Promise<Divergence>;
+  onCreateAdditionalSession: (
+    type: "project" | "divergence",
+    item: Project | Divergence
+  ) => void;
   onDeleteDivergence: (divergence: Divergence, origin: string) => Promise<void>;
   isCollapsed: boolean;
 }
@@ -50,6 +54,7 @@ export interface SidebarPresentationalProps extends SidebarProps {
   ) => void;
   onContextMenuClose: () => void;
   onContextMenuRemoveProject: () => Promise<void>;
+  onContextMenuCreateAdditionalSession: () => void;
   onContextMenuDeleteDivergence: () => Promise<void>;
   onContextMenuCloseSession: () => void;
   onContextMenuCloseSessionAndKillTmux: () => Promise<void>;

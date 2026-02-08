@@ -21,6 +21,7 @@ function SidebarContainer({
   divergencesByProject,
   onAddProject,
   onRemoveProject,
+  onCreateAdditionalSession,
   onDeleteDivergence,
   onCloseSession,
   onCloseSessionAndKillTmux,
@@ -114,6 +115,16 @@ function SidebarContainer({
     handleContextMenuClose();
   }, [contextMenu, handleContextMenuClose, onRemoveProject]);
 
+  const handleContextMenuCreateAdditionalSession = useCallback(() => {
+    if (contextMenu?.type === "project" || contextMenu?.type === "divergence") {
+      onCreateAdditionalSession(
+        contextMenu.type,
+        contextMenu.item as Project | Divergence
+      );
+    }
+    handleContextMenuClose();
+  }, [contextMenu, handleContextMenuClose, onCreateAdditionalSession]);
+
   const handleContextMenuDeleteDivergence = useCallback(async () => {
     if (contextMenu?.type === "divergence") {
       const divergence = contextMenu.item as Divergence;
@@ -160,6 +171,7 @@ function SidebarContainer({
       divergencesByProject={divergencesByProject}
       onAddProject={onAddProject}
       onRemoveProject={onRemoveProject}
+      onCreateAdditionalSession={onCreateAdditionalSession}
       onDeleteDivergence={onDeleteDivergence}
       onCloseSession={onCloseSession}
       onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
@@ -175,6 +187,7 @@ function SidebarContainer({
       onContextMenuOpen={handleContextMenuOpen}
       onContextMenuClose={handleContextMenuClose}
       onContextMenuRemoveProject={handleContextMenuRemoveProject}
+      onContextMenuCreateAdditionalSession={handleContextMenuCreateAdditionalSession}
       onContextMenuDeleteDivergence={handleContextMenuDeleteDivergence}
       onContextMenuCloseSession={handleContextMenuCloseSession}
       onContextMenuCloseSessionAndKillTmux={handleContextMenuCloseSessionAndKillTmux}
