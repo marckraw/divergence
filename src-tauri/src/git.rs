@@ -154,6 +154,38 @@ pub struct TmuxSessionInfo {
     pub activity: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct RawTmuxSessionInfo {
+    pub name: String,
+    pub socket_path: String,
+    pub created: String,
+    pub attached: bool,
+    pub window_count: u32,
+    pub activity: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TmuxCommandDiagnostics {
+    pub status_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TmuxDiagnostics {
+    pub resolved_tmux_path: Option<String>,
+    pub login_shell_path: Option<String>,
+    pub login_shell_tmux_path: Option<String>,
+    pub env_path: Option<String>,
+    pub env_shell: Option<String>,
+    pub env_tmux: Option<String>,
+    pub env_tmux_tmpdir: Option<String>,
+    pub login_shell_tmux_tmpdir: Option<String>,
+    pub version: TmuxCommandDiagnostics,
+    pub list_sessions_raw: TmuxCommandDiagnostics,
+}
+
 fn epoch_to_iso8601(epoch: &str) -> String {
     epoch
         .trim()
@@ -215,8 +247,86 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
     Ok(sessions)
 }
 
+pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
+    let output = command_with_tmux()
+        .args([
+            "list-sessions",
+            "-F",
+            "#{session_name}\t#{socket_path}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
+        ])
+        .output();
+
+    let result = match output {
+        Ok(r) => r,
+        Err(err) => {
+            if err.kind() == ErrorKind::NotFound {
+                return Ok(vec![]);
+            }
+            return Err(format!("Failed to execute tmux: {}", err));
+        }
+    };
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        if stderr.contains("no server running") || stderr.contains("failed to connect to server") {
+            return Ok(vec![]);
+        }
+        return Err(format!("Failed to list tmux sessions: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let mut sessions = Vec::new();
+
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() < 6 {
+            continue;
+        }
+        sessions.push(RawTmuxSessionInfo {
+            name: parts[0].to_string(),
+            socket_path: parts[1].to_string(),
+            created: epoch_to_iso8601(parts[2]),
+            attached: parts[3] != "0",
+            window_count: parts[4].trim().parse().unwrap_or(0),
+            activity: epoch_to_iso8601(parts[5]),
+        });
+    }
+
+    Ok(sessions)
+}
+
+pub fn get_tmux_diagnostics() -> TmuxDiagnostics {
+    let login_shell_tmux_context = get_login_shell_tmux_context();
+
+    TmuxDiagnostics {
+        resolved_tmux_path: get_tmux_path().map(|path| path.to_string_lossy().to_string()),
+        login_shell_path: get_login_shell_path(),
+        login_shell_tmux_path: login_shell_tmux_context
+            .tmux_path
+            .map(|path| path.to_string_lossy().to_string()),
+        env_path: std::env::var("PATH").ok(),
+        env_shell: std::env::var("SHELL").ok(),
+        env_tmux: std::env::var("TMUX").ok(),
+        env_tmux_tmpdir: std::env::var("TMUX_TMPDIR").ok(),
+        login_shell_tmux_tmpdir: login_shell_tmux_context.tmux_tmpdir,
+        version: run_tmux_command_for_diagnostics(&["-V"]),
+        list_sessions_raw: run_tmux_command_for_diagnostics(&[
+            "list-sessions",
+            "-F",
+            "#{session_name}\t#{socket_path}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
+        ]),
+    }
+}
+
 static LOGIN_SHELL_PATH: OnceLock<Option<String>> = OnceLock::new();
 static TMUX_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
+static LOGIN_SHELL_TMUX_CONTEXT: OnceLock<LoginShellTmuxContext> = OnceLock::new();
+
+#[derive(Debug, Clone, Default)]
+struct LoginShellTmuxContext {
+    tmux_path: Option<PathBuf>,
+    tmux_tmpdir: Option<String>,
+}
 
 fn command_with_tmux() -> Command {
     if let Some(path) = get_tmux_path() {
@@ -224,9 +334,12 @@ fn command_with_tmux() -> Command {
         if let Some(path) = get_login_shell_path() {
             cmd.env("PATH", path);
         }
+        apply_tmux_context_env(&mut cmd);
         return cmd;
     }
-    command_with_login_path("tmux")
+    let mut cmd = command_with_login_path("tmux");
+    apply_tmux_context_env(&mut cmd);
+    cmd
 }
 
 fn command_with_login_path(program: &str) -> Command {
@@ -254,6 +367,10 @@ fn resolve_tmux_path() -> Option<PathBuf> {
         if is_executable(&candidate) {
             return Some(candidate);
         }
+    }
+
+    if let Some(found) = get_login_shell_tmux_context().tmux_path {
+        return Some(found);
     }
 
     if let Some(path) = get_login_shell_path() {
@@ -312,15 +429,25 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
-fn resolve_login_shell_path() -> Option<String> {
-    let mut candidates = Vec::new();
-    if let Ok(shell) = std::env::var("SHELL") {
-        candidates.push(shell);
+fn run_tmux_command_for_diagnostics(args: &[&str]) -> TmuxCommandDiagnostics {
+    match command_with_tmux().args(args).output() {
+        Ok(result) => TmuxCommandDiagnostics {
+            status_code: result.status.code(),
+            stdout: String::from_utf8_lossy(&result.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&result.stderr).to_string(),
+            error: None,
+        },
+        Err(err) => TmuxCommandDiagnostics {
+            status_code: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            error: Some(err.to_string()),
+        },
     }
-    candidates.push("/bin/zsh".to_string());
-    candidates.push("/bin/bash".to_string());
+}
 
-    for shell in candidates {
+fn resolve_login_shell_path() -> Option<String> {
+    for shell in login_shell_candidates() {
         let output = Command::new(&shell)
             .args(["-l", "-c", "echo -n $PATH"])
             .output();
@@ -339,6 +466,88 @@ fn resolve_login_shell_path() -> Option<String> {
     }
 
     None
+}
+
+fn apply_tmux_context_env(cmd: &mut Command) {
+    if std::env::var_os("TMUX_TMPDIR").is_some() {
+        return;
+    }
+
+    if let Some(tmpdir) = get_login_shell_tmux_context().tmux_tmpdir {
+        cmd.env("TMUX_TMPDIR", tmpdir);
+    }
+}
+
+fn get_login_shell_tmux_context() -> LoginShellTmuxContext {
+    LOGIN_SHELL_TMUX_CONTEXT
+        .get_or_init(resolve_login_shell_tmux_context)
+        .clone()
+}
+
+fn resolve_login_shell_tmux_context() -> LoginShellTmuxContext {
+    const TMUX_BIN_PREFIX: &str = "__DIVERGENCE_TMUX_CTX__TMUX_BIN=";
+    const TMUX_TMPDIR_PREFIX: &str = "__DIVERGENCE_TMUX_CTX__TMUX_TMPDIR=";
+    const SHELL_PROBE_SCRIPT: &str = r#"
+if [ -n "${ZSH_VERSION-}" ]; then
+  _divergence_tmux_bin="$(whence -p tmux 2>/dev/null)"
+elif [ -n "${BASH_VERSION-}" ]; then
+  _divergence_tmux_bin="$(type -P tmux 2>/dev/null)"
+else
+  _divergence_tmux_bin="$(command -v tmux 2>/dev/null)"
+fi
+printf '__DIVERGENCE_TMUX_CTX__TMUX_BIN=%s\n' "$_divergence_tmux_bin"
+printf '__DIVERGENCE_TMUX_CTX__TMUX_TMPDIR=%s\n' "${TMUX_TMPDIR-}"
+"#;
+
+    for shell in login_shell_candidates() {
+        let output = Command::new(&shell)
+            .args(["-l", "-i", "-c", SHELL_PROBE_SCRIPT])
+            .output();
+
+        let Ok(result) = output else {
+            continue;
+        };
+
+        let mut context = LoginShellTmuxContext::default();
+        let combined_output = format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+
+        for line in combined_output.lines() {
+            if let Some(value) = line.strip_prefix(TMUX_BIN_PREFIX) {
+                let candidate = PathBuf::from(value.trim());
+                if is_executable(&candidate) {
+                    context.tmux_path = Some(candidate);
+                }
+                continue;
+            }
+
+            if let Some(value) = line.strip_prefix(TMUX_TMPDIR_PREFIX) {
+                let value = value.trim();
+                if !value.is_empty() {
+                    context.tmux_tmpdir = Some(value.to_string());
+                }
+            }
+        }
+
+        if context.tmux_path.is_some() || context.tmux_tmpdir.is_some() {
+            return context;
+        }
+    }
+
+    LoginShellTmuxContext::default()
+}
+
+fn login_shell_candidates() -> Vec<String> {
+    let mut candidates = Vec::new();
+    if let Ok(shell) = std::env::var("SHELL") {
+        candidates.push(shell);
+    }
+    candidates.push("/bin/zsh".to_string());
+    candidates.push("/bin/bash".to_string());
+    candidates
 }
 
 fn list_ignored_paths(repo_path: &Path) -> Result<Vec<PathBuf>, String> {

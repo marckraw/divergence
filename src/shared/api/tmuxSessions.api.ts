@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { TmuxSessionEntry } from "./tmuxSessions.types";
+import type {
+  RawTmuxSessionEntry,
+  TmuxDiagnosticsEntry,
+  TmuxSessionEntry,
+} from "./tmuxSessions.types";
 import {
   buildLegacyTmuxSessionName,
   buildSplitTmuxSessionName,
@@ -14,6 +18,14 @@ interface TmuxDivergenceRef {
 
 export async function listTmuxSessions(): Promise<TmuxSessionEntry[]> {
   return invoke<TmuxSessionEntry[]>("list_tmux_sessions");
+}
+
+export async function listAllTmuxSessions(): Promise<RawTmuxSessionEntry[]> {
+  return invoke<RawTmuxSessionEntry[]>("list_all_tmux_sessions");
+}
+
+export async function getTmuxDiagnostics(): Promise<TmuxDiagnosticsEntry> {
+  return invoke<TmuxDiagnosticsEntry>("get_tmux_diagnostics");
 }
 
 export async function killTmuxSession(sessionName: string): Promise<void> {
