@@ -1,5 +1,11 @@
 # divergence
 
+## 0.8.1
+
+### Patch Changes
+
+- e88fa00: Improve TMUX reliability in installed builds by aligning backend TMUX resolution with login-interactive shell context, and add TMUX diagnostics commands for troubleshooting session discovery.
+
 ## 0.8.0
 
 ### Minor Changes
