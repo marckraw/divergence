@@ -1,6 +1,7 @@
 import type { Automation } from "../../entities/automation";
 
 const HOUR_MS = 60 * 60 * 1000;
+const AUTOMATION_NAME_MAX_SLUG_LENGTH = 32;
 
 export function normalizeAutomationIntervalHours(intervalHours: number): number {
   if (!Number.isFinite(intervalHours)) {
@@ -26,14 +27,32 @@ export function isAutomationDue(
   return automation.nextRunAtMs <= nowMs;
 }
 
-export function buildAutomationBranchName(automationId: number, nowMs: number = Date.now()): string {
+export function sanitizeAutomationNameForBranch(automationName: string): string {
+  const normalized = automationName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
+  if (!normalized) {
+    return "run";
+  }
+  return normalized.slice(0, AUTOMATION_NAME_MAX_SLUG_LENGTH).replace(/-+$/, "") || "run";
+}
+
+export function buildAutomationBranchName(
+  automationId: number,
+  automationName: string,
+  nowMs: number = Date.now()
+): string {
   const stamp = new Date(nowMs).toISOString()
     .replace(/-/g, "")
     .replace(/:/g, "")
     .replace(/\./g, "")
     .replace("T", "-")
     .replace("Z", "");
-  return `automation/${automationId}-${stamp}`;
+  const nameSlug = sanitizeAutomationNameForBranch(automationName);
+  return `automation/${automationId}-${nameSlug}-${stamp}`;
 }
 
 export function buildAutomationPromptMarkdown(input: {

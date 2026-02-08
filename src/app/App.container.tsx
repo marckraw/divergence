@@ -763,7 +763,7 @@ function App() {
           const projectSettings = await loadProjectSettings(project.id);
 
           setPhase("Creating divergence");
-          const branchName = buildAutomationBranchName(automation.id);
+          const branchName = buildAutomationBranchName(automation.id, automation.name);
           const divergence = await createDivergenceRepository({
             project,
             branchName,
@@ -794,6 +794,19 @@ function App() {
             workspacePath: divergence.path,
             briefPath,
           });
+          const diagnosticsHeader = [
+            `automation=${automation.name}`,
+            `run_id=${runId}`,
+            `trigger=${triggerSource}`,
+            `project=${project.name}`,
+            `branch=${branchName}`,
+            `workspace=${divergence.path}`,
+            `agent=${automation.agent}`,
+            `command=${command}`,
+            "--- live output ---",
+            "",
+          ].join("\n");
+          setOutputTail(diagnosticsHeader);
 
           setPhase(`Running ${automation.agent}`);
           const runningHeartbeat = window.setInterval(() => {
@@ -810,7 +823,11 @@ function App() {
               outputTailChars: 4000,
               outputUpdateIntervalMs: 600,
               onOutputUpdate: (outputTail) => {
-                setOutputTail(outputTail);
+                if (!outputTail.trim()) {
+                  setOutputTail(diagnosticsHeader);
+                  return;
+                }
+                setOutputTail(`${diagnosticsHeader}${outputTail}`);
               },
             });
           } finally {

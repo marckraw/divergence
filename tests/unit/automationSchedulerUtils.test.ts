@@ -5,6 +5,7 @@ import {
   computeAutomationNextRunAtMs,
   isAutomationDue,
   normalizeAutomationIntervalHours,
+  sanitizeAutomationNameForBranch,
 } from "../../src/app/lib/automationScheduler.pure";
 
 describe("automation scheduler utils", () => {
@@ -28,8 +29,10 @@ describe("automation scheduler utils", () => {
 
   it("builds branch name and prompt markdown", () => {
     const timestamp = Date.UTC(2026, 1, 8, 10, 30, 45);
-    const branch = buildAutomationBranchName(17, timestamp);
-    expect(branch).toMatch(/^automation\/17-\d{8}-\d{6}\d{3}$/);
+    expect(sanitizeAutomationNameForBranch("Audit DRY")).toBe("audit-dry");
+    expect(sanitizeAutomationNameForBranch("  !!!  ")).toBe("run");
+    const branch = buildAutomationBranchName(17, "Audit DRY", timestamp);
+    expect(branch).toMatch(/^automation\/17-audit-dry-\d{8}-\d{6}\d{3}$/);
 
     const markdown = buildAutomationPromptMarkdown({
       automationName: "Nightly audit",
