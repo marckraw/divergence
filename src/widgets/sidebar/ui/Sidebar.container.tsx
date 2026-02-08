@@ -17,6 +17,7 @@ import type {
 } from "./Sidebar.types";
 
 function SidebarContainer({
+  mode,
   projects,
   divergencesByProject,
   onAddProject,
@@ -32,6 +33,14 @@ function SidebarContainer({
   const [deletingDivergence, setDeletingDivergence] = useState<SidebarDeleteState | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
+
+  useEffect(() => {
+    if (mode === "work") {
+      setContextMenu(null);
+      setDeletingDivergence(null);
+      setDeleteError(null);
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (hasUserToggledExpansion.current || projects.length === 0) {
@@ -167,6 +176,7 @@ function SidebarContainer({
   return (
     <SidebarPresentational
       {...props}
+      mode={mode}
       projects={projects}
       divergencesByProject={divergencesByProject}
       onAddProject={onAddProject}

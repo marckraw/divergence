@@ -25,6 +25,7 @@ export interface AppState {
 export type {
   BackgroundTask,
   BackgroundTaskControls,
+  BackgroundTaskPhaseEvent,
   BackgroundTaskKind,
   BackgroundTaskRunOptions,
   BackgroundTaskStatus,
@@ -32,3 +33,19 @@ export type {
   BackgroundTaskToast,
   RunBackgroundTask,
 } from "./entities/task";
+export type {
+  Automation,
+  AutomationAgent,
+  AutomationRun,
+  AutomationRunStatus,
+  AutomationRunTriggerSource,
+  CreateAutomationInput,
+  CreateAutomationRunInput,
+  UpdateAutomationInput,
+} from "./entities/automation";
+export type {
+  CreateInboxEventInput,
+  InboxEvent,
+  InboxEventKind,
+  InboxFilter,
+} from "./entities/inbox-event";

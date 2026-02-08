@@ -19,3 +19,19 @@ export type {
   BackgroundTaskToast,
   RunBackgroundTask,
 } from "./task";
+export type {
+  Automation,
+  AutomationAgent,
+  AutomationRun,
+  AutomationRunStatus,
+  AutomationRunTriggerSource,
+  CreateAutomationInput,
+  CreateAutomationRunInput,
+  UpdateAutomationInput,
+} from "./automation";
+export type {
+  CreateInboxEventInput,
+  InboxEvent,
+  InboxEventKind,
+  InboxFilter,
+} from "./inbox-event";

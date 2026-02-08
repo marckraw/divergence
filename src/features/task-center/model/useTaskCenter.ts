@@ -5,6 +5,7 @@ import {
   normalizeUnknownError,
   type BackgroundTask,
   type BackgroundTaskControls,
+  type BackgroundTaskPhaseEvent,
   type BackgroundTaskRunOptions,
   type BackgroundTaskToast,
   type RunBackgroundTask,
@@ -16,10 +17,27 @@ const ERROR_TOAST_TTL_MS = 10000;
 const MAX_TOASTS = 6;
 const MAX_RECENT_TASKS = 30;
 const FOCUS_TTL_MS = 4000;
+const MAX_PHASE_EVENTS = 40;
 
 interface QueueItem {
   fsHeavy: boolean;
   run: () => void;
+}
+
+function appendPhaseEvent(
+  events: BackgroundTaskPhaseEvent[] | undefined,
+  event: BackgroundTaskPhaseEvent
+): BackgroundTaskPhaseEvent[] {
+  const safeEvents = events ?? [];
+  const last = safeEvents[safeEvents.length - 1];
+  if (last && last.phase === event.phase && last.progress === event.progress) {
+    return safeEvents;
+  }
+  const next = [...safeEvents, event];
+  if (next.length <= MAX_PHASE_EVENTS) {
+    return next;
+  }
+  return next.slice(next.length - MAX_PHASE_EVENTS);
 }
 
 interface UseTaskCenterResult {
@@ -28,11 +46,7 @@ interface UseTaskCenterResult {
   recentTasks: BackgroundTask[];
   toasts: BackgroundTaskToast[];
   runningCount: number;
-  isDrawerOpen: boolean;
   focusedTaskId: string | null;
-  openDrawer: () => void;
-  closeDrawer: () => void;
-  toggleDrawer: () => void;
   dismissToast: (toastId: string) => void;
   viewTask: (taskId: string) => void;
   retryTask: (taskId: string) => Promise<void>;
@@ -42,7 +56,6 @@ interface UseTaskCenterResult {
 export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): UseTaskCenterResult {
   const [tasks, setTasks] = useState<BackgroundTask[]>([]);
   const [toasts, setToasts] = useState<BackgroundTaskToast[]>([]);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
 
   const fsQueueRef = useRef<QueueItem[]>([]);
@@ -107,7 +120,6 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
   }, [dismissToast]);
 
   const viewTask = useCallback((taskId: string) => {
-    setIsDrawerOpen(true);
     setFocusedTaskId(taskId);
     if (focusTimerRef.current) {
       clearTimeout(focusTimerRef.current);
@@ -162,6 +174,8 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
       origin: options.origin,
       target: options.target,
       createdAtMs,
+      lastUpdatedAtMs: createdAtMs,
+      phaseEvents: [{ phase: initialPhase, atMs: createdAtMs }],
     };
 
     setTasks((previous) => {
@@ -187,11 +201,37 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
           progress: undefined,
           error: undefined,
           retryable: false,
+          lastUpdatedAtMs: Date.now(),
+          phaseEvents: appendPhaseEvent(task.phaseEvents, {
+            phase: options.initialPhase ?? "Starting",
+            progress: undefined,
+            atMs: Date.now(),
+          }),
         }));
 
         const controls: BackgroundTaskControls = {
           setPhase: (phase: string, progress?: number) => {
-            updateTask(taskId, (task) => ({ ...task, phase, progress }));
+            const nowMs = Date.now();
+            updateTask(taskId, (task) => ({
+              ...task,
+              phase,
+              progress,
+              lastUpdatedAtMs: nowMs,
+              phaseEvents: appendPhaseEvent(task.phaseEvents, {
+                phase,
+                progress,
+                atMs: nowMs,
+              }),
+            }));
+          },
+          setOutputTail: (outputTail: string) => {
+            const nowMs = Date.now();
+            updateTask(taskId, (task) => ({
+              ...task,
+              outputTail,
+              outputUpdatedAtMs: nowMs,
+              lastUpdatedAtMs: nowMs,
+            }));
           },
         };
 
@@ -205,6 +245,12 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
               endedAtMs: Date.now(),
               progress: 100,
               retryable: false,
+              lastUpdatedAtMs: Date.now(),
+              phaseEvents: appendPhaseEvent(task.phaseEvents, {
+                phase: "Done",
+                progress: 100,
+                atMs: Date.now(),
+              }),
             }));
             retryHandlersRef.current.delete(taskId);
             queueToast({
@@ -223,8 +269,12 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
               endedAtMs: Date.now(),
               error: options.errorMessage ?? normalized.message,
               retryable: true,
+              lastUpdatedAtMs: Date.now(),
+              phaseEvents: appendPhaseEvent(task.phaseEvents, {
+                phase: "Failed",
+                atMs: Date.now(),
+              }),
             }));
-            setIsDrawerOpen(true);
             queueToast({
               taskId,
               kind: "error",
@@ -265,29 +315,13 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
 
   const runningCount = runningTasks.length;
 
-  const openDrawer = useCallback(() => {
-    setIsDrawerOpen(true);
-  }, []);
-
-  const closeDrawer = useCallback(() => {
-    setIsDrawerOpen(false);
-  }, []);
-
-  const toggleDrawer = useCallback(() => {
-    setIsDrawerOpen((current) => !current);
-  }, []);
-
   return {
     tasks,
     runningTasks,
     recentTasks,
     toasts,
     runningCount,
-    isDrawerOpen,
     focusedTaskId,
-    openDrawer,
-    closeDrawer,
-    toggleDrawer,
     dismissToast,
     viewTask,
     retryTask,

@@ -2,8 +2,12 @@ mod commands;
 mod db;
 mod git;
 
+#[cfg(desktop)]
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+#[cfg(desktop)]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[allow(unused_imports)]
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,7 +29,60 @@ pub fn run() {
                     eprintln!("Failed to initialize database: {}", e);
                 }
             });
+
+            #[cfg(desktop)]
+            {
+                let show_item =
+                    MenuItem::with_id(app, "tray_show", "Show Divergence", true, None::<&str>)?;
+                let quit_item =
+                    MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
+                let separator = PredefinedMenuItem::separator(app)?;
+                let tray_menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
+
+                let _tray_icon = TrayIconBuilder::with_id("main-tray")
+                    .menu(&tray_menu)
+                    .show_menu_on_left_click(true)
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app_handle = tray.app_handle();
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+            }
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "tray_quit" {
+                app.exit(0);
+                return;
+            }
+            if event.id() == "tray_show" {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+        })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::add_project,
@@ -36,6 +93,7 @@ pub fn run() {
             commands::list_remote_branches,
             commands::delete_divergence,
             commands::get_ralphy_config_summary,
+            commands::fetch_github_pull_requests,
             commands::check_branch_status,
             commands::list_git_changes,
             commands::get_git_diff,

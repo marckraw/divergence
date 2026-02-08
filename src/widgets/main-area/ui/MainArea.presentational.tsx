@@ -31,8 +31,6 @@ function MainAreaPresentational({
   onToggleSidebar,
   isRightPanelOpen,
   onToggleRightPanel,
-  taskRunningCount,
-  onToggleTaskCenter,
   sessionList,
   activeProject,
   activeSplit,
@@ -267,19 +265,9 @@ function MainAreaPresentational({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M15 5v14"
+              d="M15 5v14"
               />
             </svg>
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={onToggleTaskCenter}
-            className="flex items-center gap-1.5"
-            title="Toggle task center"
-          >
-            {taskRunningCount > 0 && (
-              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-            )}
-            Tasks{taskRunningCount > 0 ? ` (${taskRunningCount})` : ""}
           </ToolbarButton>
         </div>
       </div>
