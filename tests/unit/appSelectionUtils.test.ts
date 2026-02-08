@@ -11,6 +11,8 @@ function makeSession(projectId: number): TerminalSession {
     type: "project",
     targetId: projectId,
     projectId,
+    workspaceKey: `project:${projectId}`,
+    sessionRole: "default",
     name: `P${projectId}`,
     path: `/p${projectId}`,
     useTmux: true,

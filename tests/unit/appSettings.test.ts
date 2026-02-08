@@ -53,4 +53,22 @@ describe("normalizeAppSettings", () => {
     expect(normalized.editorThemeForLightMode).toBe(DEFAULT_APP_SETTINGS.editorThemeForLightMode);
     expect(normalized.tmuxHistoryLimit).toBe(7777);
   });
+
+  it("uses default agent command templates when invalid", () => {
+    const normalized = normalizeAppSettings({
+      agentCommandClaude: 7 as never,
+      agentCommandCodex: null as never,
+    });
+
+    expect(normalized.agentCommandClaude).toBe(DEFAULT_APP_SETTINGS.agentCommandClaude);
+    expect(normalized.agentCommandCodex).toBe(DEFAULT_APP_SETTINGS.agentCommandCodex);
+  });
+
+  it("migrates legacy codex interactive template to exec template", () => {
+    const normalized = normalizeAppSettings({
+      agentCommandCodex: "cat \"{briefPath}\" | codex",
+    });
+
+    expect(normalized.agentCommandCodex).toBe(DEFAULT_APP_SETTINGS.agentCommandCodex);
+  });
 });

@@ -9,6 +9,15 @@ export interface BuildTerminalSessionInput {
   settingsByProjectId: Map<number, ProjectSettings>;
   projectsById: Map<number, { name: string }>;
   globalTmuxHistoryLimit: number;
+  sessionId?: string;
+  sessionName?: string;
+  sessionRole?: TerminalSession["sessionRole"];
+  workspaceKey?: string;
+  tmuxSessionName?: string;
+}
+
+export function buildWorkspaceKey(type: "project" | "divergence", targetId: number): string {
+  return `${type}:${targetId}`;
 }
 
 export function buildTerminalSession(input: BuildTerminalSessionInput): TerminalSession {
@@ -25,7 +34,7 @@ export function buildTerminalSession(input: BuildTerminalSessionInput): Terminal
     : projectsById.get(projectId)?.name ?? "project";
 
   const branchName = type === "divergence" ? (target as Divergence).branch : undefined;
-  const tmuxSessionName = buildTmuxSessionName({
+  const tmuxSessionName = input.tmuxSessionName ?? buildTmuxSessionName({
     type,
     projectName,
     projectId,
@@ -34,11 +43,13 @@ export function buildTerminalSession(input: BuildTerminalSessionInput): Terminal
   });
 
   return {
-    id: `${type}-${target.id}`,
+    id: input.sessionId ?? `${type}-${target.id}`,
     type,
     targetId: target.id,
     projectId,
-    name: target.name,
+    workspaceKey: input.workspaceKey ?? buildWorkspaceKey(type, target.id),
+    sessionRole: input.sessionRole ?? "default",
+    name: input.sessionName ?? target.name,
     path: target.path,
     useTmux,
     tmuxSessionName,

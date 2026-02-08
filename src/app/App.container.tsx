@@ -14,6 +14,13 @@ import { useProjectSettingsMap, useProjects } from "../entities/project";
 import { useAppSettings } from "../shared/hooks/useAppSettings";
 import { useUpdater } from "../shared/hooks/useUpdater";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "../entities";
+import { buildSplitTmuxSessionName } from "../entities/terminal-session";
+import { killTmuxSession } from "../shared/api/tmuxSessions.api";
+import {
+  renderReviewAgentCommand,
+  writeReviewBriefFile,
+  type DiffReviewAgent,
+} from "../features/diff-review";
 import { notifyCommandFinished } from "../shared/lib/notifications";
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
 import { buildTerminalSession } from "./lib/sessionBuilder.pure";
@@ -55,6 +62,7 @@ function App() {
   const busySinceRef = useRef<Map<string, number>>(new Map());
   const idleNotifyTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
+  const commandBySessionIdRef = useRef<Map<string, (command: string) => void>>(new Map());
   const {
     runningTasks,
     recentTasks,
@@ -159,7 +167,7 @@ function App() {
     target: Project | Divergence
   ): TerminalSession => {
     const id = `${type}-${target.id}`;
-    const existing = sessions.get(id);
+    const existing = sessionsRef.current.get(id);
     if (existing) {
       return existing;
     }
@@ -172,9 +180,13 @@ function App() {
       globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
     });
 
-    setSessions(prev => new Map(prev).set(id, session));
+    setSessions((previous) => {
+      const next = new Map(previous);
+      next.set(id, session);
+      return next;
+    });
     return session;
-  }, [sessions, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
+  }, [settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
 
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
@@ -209,11 +221,120 @@ function App() {
       next.delete(sessionId);
       return next;
     });
+    commandBySessionIdRef.current.delete(sessionId);
     if (activeSessionId === sessionId) {
       const remainingSessions = Array.from(sessions.keys()).filter(id => id !== sessionId);
       setActiveSessionId(remainingSessions[0] || null);
     }
   }, [activeSessionId, sessions, clearNotificationTracking]);
+
+  const handleCloseSessionAndKillTmux = useCallback(async (sessionId: string) => {
+    const session = sessionsRef.current.get(sessionId);
+    handleCloseSession(sessionId);
+
+    if (!session?.useTmux) {
+      return;
+    }
+
+    const tmuxNames = Array.from(new Set([
+      session.tmuxSessionName,
+      buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2"),
+    ]));
+    for (const tmuxName of tmuxNames) {
+      try {
+        await killTmuxSession(tmuxName);
+      } catch (error) {
+        console.warn(`Failed to kill tmux session ${tmuxName}:`, error);
+      }
+    }
+  }, [handleCloseSession]);
+
+  const handleRegisterTerminalCommand = useCallback((sessionId: string, sendCommand: (command: string) => void) => {
+    commandBySessionIdRef.current.set(sessionId, sendCommand);
+  }, []);
+
+  const handleUnregisterTerminalCommand = useCallback((sessionId: string) => {
+    commandBySessionIdRef.current.delete(sessionId);
+  }, []);
+
+  const waitForSessionCommand = useCallback((sessionId: string, timeoutMs = 8000): Promise<((command: string) => void)> => {
+    const startedAt = Date.now();
+    return new Promise((resolve, reject) => {
+      const poll = () => {
+        const command = commandBySessionIdRef.current.get(sessionId);
+        if (command) {
+          resolve(command);
+          return;
+        }
+        if (Date.now() - startedAt >= timeoutMs) {
+          reject(new Error("Timed out while waiting for terminal command channel."));
+          return;
+        }
+        window.setTimeout(poll, 50);
+      };
+      poll();
+    });
+  }, []);
+
+  const createReviewAgentSession = useCallback((sourceSession: TerminalSession, agent: DiffReviewAgent): TerminalSession => {
+    const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const shortRunId = entropy.split("-")[1]?.padStart(3, "0") ?? "000";
+    const sessionId = `${sourceSession.type}-${sourceSession.targetId}#review-${entropy}`;
+    const tmuxSessionName = sourceSession.useTmux
+      ? buildSplitTmuxSessionName(sourceSession.tmuxSessionName, `review-${entropy}`)
+      : sourceSession.tmuxSessionName;
+    const session: TerminalSession = {
+      ...sourceSession,
+      id: sessionId,
+      sessionRole: "review-agent",
+      name: `${sourceSession.name} • ${agent} #${shortRunId}`,
+      tmuxSessionName,
+      status: "idle",
+      lastActivity: new Date(),
+    };
+
+    setSessions((previous) => {
+      const next = new Map(previous);
+      next.set(session.id, session);
+      return next;
+    });
+    return session;
+  }, []);
+
+  const handleRunReviewAgent = useCallback(async (input: {
+    sourceSessionId: string;
+    workspacePath: string;
+    agent: DiffReviewAgent;
+    briefMarkdown: string;
+  }) => {
+    const sourceSession = sessionsRef.current.get(input.sourceSessionId);
+    if (!sourceSession) {
+      throw new Error("Source session not found.");
+    }
+
+    const { path: briefPath } = await writeReviewBriefFile(input.workspacePath, input.briefMarkdown);
+    const template = input.agent === "claude"
+      ? appSettings.agentCommandClaude
+      : appSettings.agentCommandCodex;
+    if (!template.trim()) {
+      throw new Error(`No ${input.agent} command template configured in settings.`);
+    }
+
+    const command = renderReviewAgentCommand(template, {
+      workspacePath: input.workspacePath,
+      briefPath,
+    });
+    const reviewSession = createReviewAgentSession(sourceSession, input.agent);
+    setActiveSessionId(reviewSession.id);
+
+    const sendCommand = await waitForSessionCommand(reviewSession.id);
+    sendCommand(command);
+  }, [
+    appSettings.agentCommandClaude,
+    appSettings.agentCommandCodex,
+    createReviewAgentSession,
+    waitForSessionCommand,
+  ]);
 
   const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
     setSplitBySessionId(prev => {
@@ -521,6 +642,9 @@ function App() {
           onCreateDivergenceForChange={setCreateDivergenceFor}
           onSelectProject={handleSelectProject}
           onSelectDivergence={handleSelectDivergence}
+          onSelectSession={setActiveSessionId}
+          onCloseSession={handleCloseSession}
+          onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onCreateDivergence={handleCreateDivergence}
@@ -536,6 +660,9 @@ function App() {
         onSelectSession={setActiveSessionId}
         onStatusChange={handleSessionStatusChange}
         onRendererChange={handleSessionRendererChange}
+        onRegisterTerminalCommand={handleRegisterTerminalCommand}
+        onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
+        onRunReviewAgentRequest={handleRunReviewAgent}
         onProjectSettingsSaved={updateProjectSettings}
         splitBySessionId={splitBySessionId}
         onSplitSession={handleSplitSession}
@@ -563,11 +690,14 @@ function App() {
           <QuickSwitcher
             projects={projects}
             divergencesByProject={divergencesByProject}
+            sessions={sessions}
             onSelect={(type, item) => {
               if (type === "project") {
                 handleSelectProject(item as Project);
-              } else {
+              } else if (type === "divergence") {
                 handleSelectDivergence(item as Divergence);
+              } else {
+                setActiveSessionId((item as TerminalSession).id);
               }
               setShowQuickSwitcher(false);
             }}

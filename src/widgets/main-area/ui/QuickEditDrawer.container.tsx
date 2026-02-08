@@ -33,6 +33,14 @@ import {
   getSlideUpVariants,
 } from "../../../shared/lib/motion";
 import { TabButton, ToolbarButton } from "../../../shared/ui";
+import type { ChangesMode } from "../../../entities";
+import {
+  buildAnchorLabel,
+  parseUnifiedDiffLines,
+  type DiffReviewAnchor,
+  type DiffReviewComment,
+  type ParsedDiffLine,
+} from "../../../features/diff-review";
 import {
   buildImportLabel,
   getDiffLineClass,
@@ -55,6 +63,8 @@ interface QuickEditDrawerProps {
   diff?: { text: string; isBinary: boolean } | null;
   diffLoading?: boolean;
   diffError?: string | null;
+  diffMode?: ChangesMode;
+  reviewComments?: DiffReviewComment[];
   defaultTab?: "diff" | "edit";
   allowEdit?: boolean;
   isDirty: boolean;
@@ -67,6 +77,7 @@ interface QuickEditDrawerProps {
   onChange: (next: string) => void;
   onSave: () => void;
   onClose: () => void;
+  onAddDiffComment?: (anchor: DiffReviewAnchor, message: string) => void;
 }
 
 const syntaxTheme = HighlightStyle.define([
@@ -532,17 +543,94 @@ function CodeEditor({
 }
 
 function DiffViewer({
+  filePath,
   diff,
+  mode,
+  reviewComments,
+  onAddComment,
   isBinary,
   isLoading,
   error,
 }: {
+  filePath: string | null;
   diff: string | null;
+  mode: ChangesMode;
+  reviewComments: DiffReviewComment[];
+  onAddComment?: (anchor: DiffReviewAnchor, message: string) => void;
   isBinary: boolean;
   isLoading: boolean;
   error: string | null;
 }) {
-  const lines = useMemo(() => diff?.split("\n") ?? [], [diff]);
+  const lines = useMemo(() => parseUnifiedDiffLines(diff), [diff]);
+  const lineByIndex = useMemo(() => {
+    const mapped = new Map<number, typeof lines[number]>();
+    lines.forEach((line) => {
+      mapped.set(line.index, line);
+    });
+    return mapped;
+  }, [lines]);
+  const commentsByLine = useMemo(() => {
+    const mapped = new Map<number, DiffReviewComment[]>();
+    reviewComments.forEach((comment) => {
+      const list = mapped.get(comment.anchor.displayLineIndex) ?? [];
+      list.push(comment);
+      mapped.set(comment.anchor.displayLineIndex, list);
+    });
+    return mapped;
+  }, [reviewComments]);
+  const [composerLineIndex, setComposerLineIndex] = useState<number | null>(null);
+  const [composerText, setComposerText] = useState("");
+  const [composerAnchor, setComposerAnchor] = useState<DiffReviewAnchor | null>(null);
+  const [rangeStartIndex, setRangeStartIndex] = useState<number | null>(null);
+
+  const openSingleComposer = (line: ParsedDiffLine) => {
+    if (!filePath) {
+      return;
+    }
+
+    setComposerAnchor({
+      filePath,
+      mode,
+      lineKind: line.kind === "added" ? "added" : "removed",
+      oldLine: line.oldLine,
+      newLine: line.newLine,
+      displayLineIndex: line.index,
+      lineText: line.text,
+    });
+    setComposerLineIndex(line.index);
+    setComposerText("");
+    setRangeStartIndex(null);
+  };
+
+  const openRangeComposer = (startIndex: number, endIndex: number) => {
+    if (!filePath) {
+      return;
+    }
+    const from = Math.min(startIndex, endIndex);
+    const to = Math.max(startIndex, endIndex);
+    const startLine = lineByIndex.get(from);
+    const endLine = lineByIndex.get(to);
+    if (!startLine || !endLine) {
+      return;
+    }
+
+    setComposerAnchor({
+      filePath,
+      mode,
+      lineKind: "range",
+      oldLine: startLine.oldLine,
+      newLine: startLine.newLine,
+      endOldLine: endLine.oldLine,
+      endNewLine: endLine.newLine,
+      displayLineIndex: from,
+      endDisplayLineIndex: to,
+      lineText: startLine.text,
+      endLineText: endLine.text,
+    });
+    setComposerLineIndex(from);
+    setComposerText("");
+    setRangeStartIndex(null);
+  };
 
   if (isLoading) {
     return (
@@ -581,14 +669,150 @@ function DiffViewer({
 
   return (
     <div className="h-full w-full overflow-auto font-mono text-[11px] leading-5">
-      {lines.map((line, index) => (
-        <div
-          key={`${index}-${line}`}
-          className={`px-3 whitespace-pre ${getDiffLineClass(line)}`}
-        >
-          {line}
+      {rangeStartIndex !== null && (
+        <div className="sticky top-0 z-10 mx-2 mt-2 mb-1 px-2 py-1 rounded border border-accent/30 bg-accent/10 text-[10px] text-subtext flex items-center justify-between gap-2">
+          <span>
+            Select range end line, then click <span className="text-text">Range End</span>.
+            You can end on the same line for a one-line selection.
+          </span>
+          <button
+            type="button"
+            className="text-subtext hover:text-text"
+            onClick={() => setRangeStartIndex(null)}
+          >
+            Cancel
+          </button>
         </div>
-      ))}
+      )}
+      {lines.map((line) => {
+        const lineComments = commentsByLine.get(line.index) ?? [];
+        const canComment = Boolean(filePath && onAddComment && (line.kind === "added" || line.kind === "removed"));
+        const isComposerOpen = composerLineIndex === line.index;
+        const isRangeStart = rangeStartIndex === line.index;
+        const rowHighlightClass = isRangeStart
+          ? "bg-accent/15 ring-1 ring-accent/40"
+          : isComposerOpen
+            ? "bg-surface/45 ring-1 ring-surface"
+            : rangeStartIndex !== null
+              ? "hover:bg-accent/10"
+              : "hover:bg-surface/35";
+
+        return (
+          <div key={`${line.index}-${line.text}`}>
+            <div className={`group/line flex w-full items-start gap-2 px-2 rounded transition-colors ${rowHighlightClass}`}>
+              <div
+                className={`flex-1 px-1 whitespace-pre ${getDiffLineClass(line.text)}`}
+              >
+                {line.text}
+              </div>
+              {canComment && (
+                <div
+                  className={`flex shrink-0 items-center gap-1 transition-opacity ${
+                    isComposerOpen || isRangeStart ? "opacity-100" : "opacity-0 group-hover/line:opacity-100"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="text-[10px] text-subtext hover:text-text"
+                    onClick={() => openSingleComposer(line)}
+                  >
+                    Single
+                  </button>
+                  {rangeStartIndex === null ? (
+                    <button
+                      type="button"
+                      className="text-[10px] text-subtext hover:text-text"
+                      onClick={() => setRangeStartIndex(line.index)}
+                    >
+                      Range Start
+                    </button>
+                  ) : isRangeStart ? (
+                    <>
+                      <button
+                        type="button"
+                        className="text-[10px] text-subtext hover:text-text"
+                        onClick={() => openRangeComposer(rangeStartIndex, line.index)}
+                      >
+                        Range End
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[10px] text-subtext hover:text-text"
+                        onClick={() => setRangeStartIndex(null)}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-[10px] text-subtext hover:text-text"
+                      onClick={() => openRangeComposer(rangeStartIndex, line.index)}
+                    >
+                      Range End
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            {lineComments.length > 0 && (
+              <div className="ml-6 mb-1 space-y-1">
+                {lineComments.map((comment) => (
+                  <div
+                    key={comment.id}
+                    className="px-2 py-1 rounded bg-surface text-[10px] text-subtext break-words"
+                  >
+                    <span className="text-text/80 mr-1">[{buildAnchorLabel(comment.anchor)}]</span>
+                    {comment.message}
+                  </div>
+                ))}
+              </div>
+            )}
+            {isComposerOpen && canComment && filePath && composerAnchor && (
+              <div className="ml-6 mb-2 mr-3 border border-surface rounded p-2 bg-main/60">
+                <textarea
+                  rows={3}
+                  value={composerText}
+                  onChange={(event) => setComposerText(event.target.value)}
+                  className="w-full px-2 py-1 bg-main border border-surface rounded text-[11px] text-text focus:outline-none focus:border-accent"
+                  placeholder={composerAnchor.lineKind === "range"
+                    ? "Add comment for selected range..."
+                    : "Add comment for this line..."}
+                />
+                <div className="mt-2 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    className="text-[10px] text-subtext hover:text-text"
+                    onClick={() => {
+                      setComposerLineIndex(null);
+                      setComposerText("");
+                      setComposerAnchor(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 text-[10px] bg-accent text-main rounded disabled:opacity-50"
+                    disabled={!composerText.trim()}
+                    onClick={() => {
+                      if (!onAddComment || !composerText.trim() || !composerAnchor) {
+                        return;
+                      }
+                      onAddComment(composerAnchor, composerText.trim());
+                      setComposerLineIndex(null);
+                      setComposerText("");
+                      setComposerAnchor(null);
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -602,6 +826,8 @@ function QuickEditDrawer({
   diff = null,
   diffLoading = false,
   diffError = null,
+  diffMode = "working",
+  reviewComments = [],
   defaultTab = "edit",
   allowEdit = true,
   isDirty,
@@ -614,6 +840,7 @@ function QuickEditDrawer({
   onChange,
   onSave,
   onClose,
+  onAddDiffComment,
 }: QuickEditDrawerProps) {
   const shouldReduceMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<"diff" | "edit">(defaultTab);
@@ -732,7 +959,11 @@ function QuickEditDrawer({
                     transition={contentTransition}
                   >
                     <DiffViewer
+                      filePath={filePath}
                       diff={diff?.text ?? null}
+                      mode={diffMode}
+                      reviewComments={reviewComments}
+                      onAddComment={onAddDiffComment}
                       isBinary={diff?.isBinary ?? false}
                       isLoading={diffLoading}
                       error={diffError}

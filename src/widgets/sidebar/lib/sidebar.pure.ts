@@ -50,11 +50,52 @@ export function getSessionStatus(
   type: SessionType,
   id: number
 ): TerminalSession["status"] | null {
-  return sessions.get(buildSessionId(type, id))?.status ?? null;
+  const workspaceSessions = getSessionsForWorkspace(sessions, type, id);
+  if (workspaceSessions.some((session) => session.status === "busy")) {
+    return "busy";
+  }
+  if (workspaceSessions.some((session) => session.status === "active")) {
+    return "active";
+  }
+  if (workspaceSessions.length > 0) {
+    return "idle";
+  }
+  return null;
 }
 
-export function isSessionActive(activeSessionId: string | null, type: SessionType, id: number): boolean {
-  return activeSessionId === buildSessionId(type, id);
+export function getSessionsForWorkspace(
+  sessions: Map<string, TerminalSession>,
+  type: SessionType,
+  id: number
+): TerminalSession[] {
+  return Array.from(sessions.values())
+    .filter((session) => session.type === type && session.targetId === id)
+    .sort((a, b) => {
+      if (a.sessionRole !== b.sessionRole) {
+        return a.sessionRole === "default" ? -1 : 1;
+      }
+      return a.id.localeCompare(b.id);
+    });
+}
+
+export function isSessionActive(
+  activeSessionId: string | null,
+  sessions: Map<string, TerminalSession>,
+  type: SessionType,
+  id: number
+): boolean {
+  if (!activeSessionId) {
+    return false;
+  }
+  const active = sessions.get(activeSessionId);
+  if (!active) {
+    return false;
+  }
+  return active.type === type && active.targetId === id;
+}
+
+export function isSessionItemActive(activeSessionId: string | null, sessionId: string): boolean {
+  return activeSessionId === sessionId;
 }
 
 export function getProjectNameFromSelectedPath(selectedPath: string): string {

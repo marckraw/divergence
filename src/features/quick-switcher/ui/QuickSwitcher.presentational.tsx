@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { Divergence } from "../../../entities";
+import type { Divergence, TerminalSession } from "../../../entities";
 import {
   FAST_EASE_OUT,
   OVERLAY_FADE,
@@ -70,7 +70,7 @@ function QuickSwitcherPresentational({
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
               onKeyDown={onInputKeyDown}
-              placeholder="Search projects and divergences..."
+              placeholder="Search projects, divergences, and sessions..."
               className="flex-1 bg-transparent text-text placeholder-subtext focus:outline-none"
             />
             <kbd className="text-xs text-subtext bg-surface px-1.5 py-0.5 rounded">
@@ -88,7 +88,7 @@ function QuickSwitcherPresentational({
             <AnimatePresence initial={false}>
               {filteredItems.map((result, index) => (
                 <motion.div
-                  key={`${result.type}-${result.item.id}`}
+                  key={`${result.type}-${result.type === "session" ? (result.item as TerminalSession).id : result.item.id}`}
                   layout={shouldReduceMotion ? undefined : "position"}
                   variants={itemVariants}
                   initial="hidden"
@@ -117,6 +117,20 @@ function QuickSwitcherPresentational({
                         d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                       />
                     </svg>
+                  ) : result.type === "session" ? (
+                    <svg
+                      className="w-5 h-5 text-yellow"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
                   ) : (
                     <svg
                       className="w-5 h-5 text-text"
@@ -137,11 +151,15 @@ function QuickSwitcherPresentational({
                     <div className="text-text truncate">
                       {result.type === "divergence"
                         ? (result.item as Divergence).branch
+                        : result.type === "session"
+                          ? (result.item as TerminalSession).name
                         : result.item.name}
                     </div>
-                    {result.type === "divergence" && result.projectName && (
+                    {(result.type === "divergence" || result.type === "session") && result.projectName && (
                       <div className="text-xs text-subtext truncate">
-                        {result.projectName}
+                        {result.type === "session"
+                          ? `${result.projectName}${result.workspaceName ? ` • ${result.workspaceName}` : ""}`
+                          : result.projectName}
                       </div>
                     )}
                   </div>
@@ -150,6 +168,8 @@ function QuickSwitcherPresentational({
                     className={`text-xs px-2 py-0.5 rounded ${
                       result.type === "divergence"
                         ? "bg-accent/20 text-accent"
+                        : result.type === "session"
+                          ? "bg-yellow/20 text-yellow"
                         : "bg-surface text-subtext"
                     }`}
                   >

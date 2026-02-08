@@ -3,6 +3,8 @@ export interface TerminalSession {
   type: "project" | "divergence";
   targetId: number;
   projectId: number;
+  workspaceKey: string;
+  sessionRole: "default" | "review-agent" | "manual";
   name: string;
   path: string;
   useTmux: boolean;

@@ -10,6 +10,9 @@ export interface SidebarProps {
   onCreateDivergenceForChange: (project: Project | null) => void;
   onSelectProject: (project: Project) => void;
   onSelectDivergence: (divergence: Divergence) => void;
+  onSelectSession: (sessionId: string) => void;
+  onCloseSession: (sessionId: string) => void;
+  onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   onAddProject: (name: string, path: string) => Promise<void>;
   onRemoveProject: (id: number) => Promise<void>;
   onCreateDivergence: (project: Project, branchName: string, useExistingBranch: boolean) => Promise<Divergence>;
@@ -23,11 +26,11 @@ export interface SidebarDeleteState {
 }
 
 export interface SidebarContextMenuState {
-  type: "project" | "divergence";
-  id: number;
+  type: "project" | "divergence" | "session";
+  id: number | string;
   x: number;
   y: number;
-  item: Project | Divergence;
+  item: Project | Divergence | TerminalSession;
 }
 
 export interface SidebarPresentationalProps extends SidebarProps {
@@ -42,10 +45,12 @@ export interface SidebarPresentationalProps extends SidebarProps {
   onToggleAllProjects: () => void;
   onContextMenuOpen: (
     event: MouseEvent,
-    type: "project" | "divergence",
-    item: Project | Divergence
+    type: "project" | "divergence" | "session",
+    item: Project | Divergence | TerminalSession
   ) => void;
   onContextMenuClose: () => void;
   onContextMenuRemoveProject: () => Promise<void>;
   onContextMenuDeleteDivergence: () => Promise<void>;
+  onContextMenuCloseSession: () => void;
+  onContextMenuCloseSessionAndKillTmux: () => Promise<void>;
 }

@@ -208,6 +208,37 @@ function SettingsPresentational({
 
           <div>
             <label className="block text-sm font-medium text-text mb-2">
+              Claude Command Template
+            </label>
+            <input
+              type="text"
+              value={settings.agentCommandClaude}
+              onChange={(event) => onUpdateSetting("agentCommandClaude", event.target.value)}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            />
+            <p className="text-xs text-subtext mt-1">
+              Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.
+              Use <code>codex exec</code> for non-interactive runs.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Codex Command Template
+            </label>
+            <input
+              type="text"
+              value={settings.agentCommandCodex}
+              onChange={(event) => onUpdateSetting("agentCommandCodex", event.target.value)}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            />
+            <p className="text-xs text-subtext mt-1">
+              Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
               Keyboard Shortcuts
             </label>
             <div className="space-y-2 text-sm">

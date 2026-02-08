@@ -9,6 +9,11 @@ import type {
 } from "../../../entities";
 import type { EditorThemeId } from "../../../shared/config/editorThemes";
 import type { ProjectSettings } from "../../../entities/project";
+import type {
+  DiffReviewAgent,
+  DiffReviewAnchor,
+  DiffReviewComment,
+} from "../../../features/diff-review";
 
 export interface MainAreaProps {
   projects: Project[];
@@ -18,6 +23,14 @@ export interface MainAreaProps {
   onSelectSession: (sessionId: string) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
   onRendererChange: (sessionId: string, renderer: "webgl" | "canvas") => void;
+  onRegisterTerminalCommand: (sessionId: string, sendCommand: (command: string) => void) => void;
+  onUnregisterTerminalCommand: (sessionId: string) => void;
+  onRunReviewAgentRequest: (input: {
+    sourceSessionId: string;
+    workspacePath: string;
+    agent: DiffReviewAgent;
+    briefMarkdown: string;
+  }) => Promise<void>;
   onProjectSettingsSaved: (settings: ProjectSettings) => void;
   splitBySessionId: Map<string, { orientation: SplitOrientation }>;
   onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
@@ -39,7 +52,7 @@ export interface MainAreaProps {
   onToggleTaskCenter: () => void;
 }
 
-export type RightPanelTab = "settings" | "files" | "changes" | "tmux";
+export type RightPanelTab = "settings" | "files" | "changes" | "review" | "tmux";
 export type DrawerTab = "diff" | "edit";
 
 export interface MainAreaOpenDiff {
@@ -69,6 +82,11 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   fileSaveError: string | null;
   largeFileWarning: string | null;
   changesMode: ChangesMode;
+  reviewComments: DiffReviewComment[];
+  reviewFinalComment: string;
+  reviewAgent: DiffReviewAgent;
+  reviewRunning: boolean;
+  reviewError: string | null;
   onOpenFile: (path: string, options?: { resetDiff?: boolean }) => Promise<void>;
   onOpenChange: (entry: GitChangeEntry) => Promise<void>;
   onCloseDrawer: () => void;
@@ -76,5 +94,12 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   onChangeFileContent: (next: string) => void;
   onRightPanelTabChange: (tab: RightPanelTab) => void;
   onChangesModeChange: (mode: ChangesMode) => void;
+  onReviewRemoveComment: (commentId: string) => void;
+  onReviewFinalCommentChange: (value: string) => void;
+  onReviewAgentChange: (agent: DiffReviewAgent) => void;
+  onRunReviewAgent: () => Promise<void>;
+  onClearReviewDraft: () => void;
+  onAddDiffComment: (anchor: DiffReviewAnchor, message: string) => void;
+  openFileReviewComments: DiffReviewComment[];
   renderSession: (session: TerminalSession) => ReactNode;
 }

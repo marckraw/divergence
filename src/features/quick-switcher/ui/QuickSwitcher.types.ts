@@ -1,11 +1,15 @@
 import type { KeyboardEvent, MouseEvent, RefObject } from "react";
-import type { Divergence, Project } from "../../../entities";
+import type { Divergence, Project, TerminalSession } from "../../../entities";
 import type { QuickSwitcherSearchResult } from "../lib/quickSwitcher.pure";
 
 export interface QuickSwitcherProps {
   projects: Project[];
   divergencesByProject: Map<number, Divergence[]>;
-  onSelect: (type: "project" | "divergence", item: Project | Divergence) => void;
+  sessions: Map<string, TerminalSession>;
+  onSelect: (
+    type: "project" | "divergence" | "session",
+    item: Project | Divergence | TerminalSession
+  ) => void;
   onClose: () => void;
 }
 

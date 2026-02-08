@@ -19,6 +19,8 @@ export interface AppSettings {
   editorThemeForDarkMode: EditorThemeId;
   tmuxHistoryLimit: number;
   divergenceBasePath?: string;
+  agentCommandClaude: string;
+  agentCommandCodex: string;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -28,7 +30,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
   divergenceBasePath: "",
+  agentCommandClaude: "cat \"{briefPath}\" | claude",
+  agentCommandCodex: "codex exec --full-auto -C \"{workspacePath}\" - < \"{briefPath}\"",
 };
+
+const LEGACY_CODEX_COMMAND_TEMPLATE = "cat \"{briefPath}\" | codex";
 
 export function normalizeTmuxHistoryLimit(
   value: unknown,
@@ -64,12 +70,25 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
       ? input.editorThemeForDarkMode
       : legacyDarkTheme ?? DEFAULT_EDITOR_THEME_DARK;
 
+  const agentCommandClaude = typeof input?.agentCommandClaude === "string"
+    ? input.agentCommandClaude
+    : DEFAULT_APP_SETTINGS.agentCommandClaude;
+
+  const agentCommandCodex = typeof input?.agentCommandCodex === "string"
+    ? input.agentCommandCodex
+    : DEFAULT_APP_SETTINGS.agentCommandCodex;
+  const migratedAgentCommandCodex = agentCommandCodex === LEGACY_CODEX_COMMAND_TEMPLATE
+    ? DEFAULT_APP_SETTINGS.agentCommandCodex
+    : agentCommandCodex;
+
   return {
     ...DEFAULT_APP_SETTINGS,
     ...input,
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
     editorThemeForLightMode,
     editorThemeForDarkMode,
+    agentCommandClaude,
+    agentCommandCodex: migratedAgentCommandCodex,
   };
 }
 

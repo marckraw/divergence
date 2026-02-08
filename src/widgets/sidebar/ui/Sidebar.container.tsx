@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Divergence, Project } from "../../../entities";
+import type { Divergence, Project, TerminalSession } from "../../../entities";
 import {
   areAllExpanded,
   getExpandableProjectIds,
@@ -22,6 +22,8 @@ function SidebarContainer({
   onAddProject,
   onRemoveProject,
   onDeleteDivergence,
+  onCloseSession,
+  onCloseSessionAndKillTmux,
   ...props
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
@@ -84,8 +86,8 @@ function SidebarContainer({
 
   const handleContextMenuOpen = useCallback((
     event: MouseEvent,
-    type: "project" | "divergence",
-    item: Project | Divergence
+    type: "project" | "divergence" | "session",
+    item: Project | Divergence | TerminalSession
   ) => {
     event.preventDefault();
     setContextMenu({
@@ -104,7 +106,7 @@ function SidebarContainer({
   const handleContextMenuRemoveProject = useCallback(async () => {
     if (contextMenu?.type === "project") {
       try {
-        await onRemoveProject(contextMenu.id);
+        await onRemoveProject(contextMenu.id as number);
       } catch (error) {
         console.error("Failed to remove project:", error);
       }
@@ -133,6 +135,24 @@ function SidebarContainer({
     handleContextMenuClose();
   }, [contextMenu, handleContextMenuClose, onDeleteDivergence]);
 
+  const handleContextMenuCloseSession = useCallback(() => {
+    if (contextMenu?.type === "session") {
+      onCloseSession(contextMenu.id as string);
+    }
+    handleContextMenuClose();
+  }, [contextMenu, handleContextMenuClose, onCloseSession]);
+
+  const handleContextMenuCloseSessionAndKillTmux = useCallback(async () => {
+    if (contextMenu?.type === "session") {
+      try {
+        await onCloseSessionAndKillTmux(contextMenu.id as string);
+      } catch (error) {
+        console.error("Failed to close session and kill tmux:", error);
+      }
+    }
+    handleContextMenuClose();
+  }, [contextMenu, handleContextMenuClose, onCloseSessionAndKillTmux]);
+
   return (
     <SidebarPresentational
       {...props}
@@ -141,6 +161,8 @@ function SidebarContainer({
       onAddProject={onAddProject}
       onRemoveProject={onRemoveProject}
       onDeleteDivergence={onDeleteDivergence}
+      onCloseSession={onCloseSession}
+      onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
       expandedProjects={expandedProjects}
       deletingDivergence={deletingDivergence}
       deleteError={deleteError}
@@ -154,6 +176,8 @@ function SidebarContainer({
       onContextMenuClose={handleContextMenuClose}
       onContextMenuRemoveProject={handleContextMenuRemoveProject}
       onContextMenuDeleteDivergence={handleContextMenuDeleteDivergence}
+      onContextMenuCloseSession={handleContextMenuCloseSession}
+      onContextMenuCloseSessionAndKillTmux={handleContextMenuCloseSessionAndKillTmux}
     />
   );
 }

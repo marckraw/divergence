@@ -4,7 +4,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { IPty } from "tauri-pty";
 import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../shared/config/appSettings";
-import { writeText, readText } from "@tauri-apps/plugin-clipboard-manager";
 import "@xterm/xterm/css/xterm.css";
 import { useAppSettings } from "../../../shared/hooks/useAppSettings";
 import {
@@ -148,50 +147,6 @@ function Terminal({
     } catch (err) {
       resumeDisabledRef.current = true;
       console.warn(`[${sessionId}] PTY resume not available`, err);
-    }
-  }, [sessionId]);
-
-  const copySelection = useCallback(async (selection: string) => {
-    if (!selection) {
-      return;
-    }
-
-    try {
-      await writeText(selection);
-      return;
-    } catch (err) {
-      console.warn(`[${sessionId}] Clipboard plugin copy failed, trying browser clipboard`, err);
-    }
-
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(selection);
-      } catch (err) {
-        console.warn(`[${sessionId}] Browser clipboard copy failed`, err);
-      }
-    }
-  }, [sessionId]);
-
-  const pasteFromClipboard = useCallback(async () => {
-    try {
-      const text = await readText();
-      if (text && ptyRef.current) {
-        ptyRef.current.write(text);
-      }
-      return;
-    } catch (err) {
-      console.warn(`[${sessionId}] Clipboard plugin paste failed, trying browser clipboard`, err);
-    }
-
-    if (typeof navigator !== "undefined" && navigator.clipboard?.readText) {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text && ptyRef.current) {
-          ptyRef.current.write(text);
-        }
-      } catch (err) {
-        console.warn(`[${sessionId}] Browser clipboard paste failed`, err);
-      }
     }
   }, [sessionId]);
 
@@ -408,33 +363,6 @@ function Terminal({
           pty.resize(e.cols, e.rows);
         });
 
-        terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-          if (event.type !== "keydown") {
-            return true;
-          }
-
-          const isMod = event.metaKey || event.ctrlKey;
-          const key = event.key.toLowerCase();
-
-          // Cmd+C / Ctrl+C: copy selection if present, else let SIGINT through
-          if (isMod && key === "c") {
-            const selection = terminal.getSelection();
-            if (!selection) {
-              return true;
-            }
-            void copySelection(selection);
-            return false;
-          }
-
-          // Cmd+V / Ctrl+V: paste from clipboard
-          if (isMod && key === "v") {
-            void pasteFromClipboard();
-            return false;
-          }
-
-          return true;
-        });
-
         terminal.focus();
 
       } catch (err) {
@@ -493,7 +421,7 @@ function Terminal({
       initializedRef.current = false;
       resumeDisabledRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, copySelection, pasteFromClipboard, themeMode, tmuxHistoryLimit]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, themeMode, tmuxHistoryLimit]);
 
   useEffect(() => {
     const terminal = terminalRef.current;

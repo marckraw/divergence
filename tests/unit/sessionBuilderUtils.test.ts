@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Divergence, Project } from "../../src/types";
 import type { ProjectSettings } from "../../src/entities/project";
-import { buildTerminalSession } from "../../src/app/lib/sessionBuilder.pure";
+import { buildTerminalSession, buildWorkspaceKey } from "../../src/app/lib/sessionBuilder.pure";
 
 const project: Project = {
   id: 1,
@@ -21,6 +21,11 @@ const divergence: Divergence = {
 };
 
 describe("session builder utils", () => {
+  it("builds workspace keys", () => {
+    expect(buildWorkspaceKey("project", 3)).toBe("project:3");
+    expect(buildWorkspaceKey("divergence", 9)).toBe("divergence:9");
+  });
+
   it("builds project session with defaults", () => {
     const session = buildTerminalSession({
       type: "project",
@@ -32,6 +37,8 @@ describe("session builder utils", () => {
 
     expect(session.id).toBe("project-1");
     expect(session.projectId).toBe(1);
+    expect(session.workspaceKey).toBe("project:1");
+    expect(session.sessionRole).toBe("default");
     expect(session.tmuxHistoryLimit).toBe(50000);
     expect(session.useTmux).toBe(true);
   });
@@ -55,6 +62,8 @@ describe("session builder utils", () => {
 
     expect(session.id).toBe("divergence-9");
     expect(session.projectId).toBe(1);
+    expect(session.workspaceKey).toBe("divergence:9");
+    expect(session.sessionRole).toBe("default");
     expect(session.useTmux).toBe(false);
     expect(session.useWebgl).toBe(false);
     expect(session.tmuxHistoryLimit).toBe(12345);

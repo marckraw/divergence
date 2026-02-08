@@ -11,6 +11,7 @@ import type { QuickSwitcherProps } from "./QuickSwitcher.types";
 function QuickSwitcherContainer({
   projects,
   divergencesByProject,
+  sessions,
   onSelect,
   onClose,
 }: QuickSwitcherProps) {
@@ -20,8 +21,8 @@ function QuickSwitcherContainer({
   const listRef = useRef<HTMLDivElement>(null);
 
   const allItems = useMemo((): QuickSwitcherSearchResult[] => {
-    return buildQuickSwitcherSearchResults(projects, divergencesByProject);
-  }, [projects, divergencesByProject]);
+    return buildQuickSwitcherSearchResults(projects, divergencesByProject, sessions);
+  }, [projects, divergencesByProject, sessions]);
 
   const filteredItems = useMemo(() => {
     return filterQuickSwitcherSearchResults(allItems, query);

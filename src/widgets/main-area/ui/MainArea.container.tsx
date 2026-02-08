@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import Terminal from "./Terminal.container";
 import MainAreaPresentational from "./MainArea.presentational";
@@ -11,6 +11,12 @@ import type {
 } from "../../../entities";
 import { buildSplitTmuxSessionName } from "../../../entities/terminal-session";
 import {
+  createReviewBriefForDraft,
+  useDiffReviewDraft,
+  type DiffReviewAnchor,
+  type DiffReviewComment,
+} from "../../../features/diff-review";
+import {
   formatBytes,
   getAggregatedTerminalStatus,
   joinSessionPath,
@@ -20,6 +26,8 @@ import {
   getWorkingDiff,
 } from "../api/mainArea.api";
 
+const EMPTY_REVIEW_COMMENTS: DiffReviewComment[] = [];
+
 function MainAreaContainer({
   projects,
   sessions,
@@ -28,6 +36,9 @@ function MainAreaContainer({
   onSelectSession,
   onStatusChange,
   onRendererChange,
+  onRegisterTerminalCommand,
+  onUnregisterTerminalCommand,
+  onRunReviewAgentRequest,
   splitBySessionId,
   reconnectBySessionId,
   ...props
@@ -57,9 +68,29 @@ function MainAreaContainer({
   const [drawerTab, setDrawerTab] = useState<"diff" | "edit">("edit");
   const [allowEdit, setAllowEdit] = useState(true);
   const [changesMode, setChangesMode] = useState<ChangesMode>("working");
+  const [reviewRunError, setReviewRunError] = useState<string | null>(null);
+  const [reviewRunning, setReviewRunning] = useState(false);
+  const {
+    activeDraft,
+    addComment,
+    removeComment,
+    setFinalComment,
+    setAgent,
+    clearActiveDraft,
+    clearAllDrafts,
+  } = useDiffReviewDraft({ workspacePath: activeRootPath, mode: changesMode });
 
   const isDrawerOpen = Boolean(openFilePath);
   const isDirty = openFileContent !== openFileInitial;
+  const reviewComments = activeDraft?.comments ?? EMPTY_REVIEW_COMMENTS;
+  const reviewFinalComment = activeDraft?.finalComment ?? "";
+  const reviewAgent = activeDraft?.agent ?? "claude";
+  const openFileReviewComments = useMemo(() => {
+    if (!openFilePath) {
+      return [];
+    }
+    return reviewComments.filter((comment) => comment.anchor.filePath === openFilePath);
+  }, [openFilePath, reviewComments]);
 
   useEffect(() => {
     setOpenFilePath(null);
@@ -76,7 +107,10 @@ function MainAreaContainer({
     setDiffError(null);
     setDrawerTab("edit");
     setAllowEdit(true);
-  }, [activeSession?.id]);
+    setReviewRunError(null);
+    setReviewRunning(false);
+    clearAllDrafts();
+  }, [activeSession?.id, clearAllDrafts]);
 
   const handleOpenFile = useCallback(async (
     path: string,
@@ -226,6 +260,33 @@ function MainAreaContainer({
     }
   }, [fileSaveError]);
 
+  const handleAddDiffComment = useCallback((anchor: DiffReviewAnchor, message: string) => {
+    addComment(anchor, message);
+    setRightPanelTab("review");
+  }, [addComment]);
+
+  const handleRunReviewAgent = useCallback(async () => {
+    if (!activeSession || !activeRootPath || !activeDraft) {
+      return;
+    }
+
+    setReviewRunError(null);
+    setReviewRunning(true);
+    try {
+      await onRunReviewAgentRequest({
+        sourceSessionId: activeSession.id,
+        workspacePath: activeRootPath,
+        agent: activeDraft.agent,
+        briefMarkdown: createReviewBriefForDraft(activeDraft),
+      });
+      clearActiveDraft();
+    } catch (error) {
+      setReviewRunError(error instanceof Error ? error.message : "Failed to run agent.");
+    } finally {
+      setReviewRunning(false);
+    }
+  }, [activeDraft, activeRootPath, activeSession, clearActiveDraft, onRunReviewAgentRequest]);
+
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
       onStatusChange(sessionId, status);
@@ -275,6 +336,8 @@ function MainAreaContainer({
             useWebgl={effectiveUseWebgl}
             onRendererChange={handleRendererChange(session.id)}
             onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
+            onRegisterCommand={onRegisterTerminalCommand}
+            onUnregisterCommand={onUnregisterTerminalCommand}
             onClose={() => onCloseSession(session.id)}
           />
         </div>
@@ -301,6 +364,8 @@ function MainAreaContainer({
     handleSplitStatusChange,
     handleStatusChange,
     onCloseSession,
+    onRegisterTerminalCommand,
+    onUnregisterTerminalCommand,
     reconnectBySessionId,
     splitBySessionId,
   ]);
@@ -315,6 +380,9 @@ function MainAreaContainer({
       onSelectSession={onSelectSession}
       onStatusChange={onStatusChange}
       onRendererChange={onRendererChange}
+      onRegisterTerminalCommand={onRegisterTerminalCommand}
+      onUnregisterTerminalCommand={onUnregisterTerminalCommand}
+      onRunReviewAgentRequest={onRunReviewAgentRequest}
       splitBySessionId={splitBySessionId}
       reconnectBySessionId={reconnectBySessionId}
       sessionList={sessionList}
@@ -338,6 +406,11 @@ function MainAreaContainer({
       fileSaveError={fileSaveError}
       largeFileWarning={largeFileWarning}
       changesMode={changesMode}
+      reviewComments={reviewComments}
+      reviewFinalComment={reviewFinalComment}
+      reviewAgent={reviewAgent}
+      reviewRunning={reviewRunning}
+      reviewError={reviewRunError}
       onOpenFile={handleOpenFile}
       onOpenChange={handleOpenChange}
       onCloseDrawer={handleCloseDrawer}
@@ -345,6 +418,13 @@ function MainAreaContainer({
       onChangeFileContent={handleChangeContent}
       onRightPanelTabChange={setRightPanelTab}
       onChangesModeChange={setChangesMode}
+      onReviewRemoveComment={removeComment}
+      onReviewFinalCommentChange={setFinalComment}
+      onReviewAgentChange={setAgent}
+      onRunReviewAgent={handleRunReviewAgent}
+      onClearReviewDraft={clearActiveDraft}
+      onAddDiffComment={handleAddDiffComment}
+      openFileReviewComments={openFileReviewComments}
       renderSession={renderSession}
     />
   );

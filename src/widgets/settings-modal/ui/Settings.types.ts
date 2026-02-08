@@ -23,6 +23,8 @@ export interface SettingsState {
   editorThemeForDarkMode: EditorThemeId;
   divergenceBasePath: string;
   tmuxHistoryLimit: number;
+  agentCommandClaude: string;
+  agentCommandCodex: string;
 }
 
 export type UpdateSettingHandler = <K extends keyof SettingsState>(

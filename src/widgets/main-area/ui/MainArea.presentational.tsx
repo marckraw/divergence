@@ -6,6 +6,7 @@ import ChangesPanel from "./ChangesPanel.container";
 import TmuxPanel from "./TmuxPanel.container";
 import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
+import { ReviewDraftPanel } from "../../../features/diff-review";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared/lib/motion";
 import { TabButton, ToolbarButton } from "../../../shared/ui";
 import type { MainAreaPresentationalProps } from "./MainArea.types";
@@ -53,6 +54,11 @@ function MainAreaPresentational({
   fileSaveError,
   largeFileWarning,
   changesMode,
+  reviewComments,
+  reviewFinalComment,
+  reviewAgent,
+  reviewRunning,
+  reviewError,
   onOpenFile,
   onOpenChange,
   onCloseDrawer,
@@ -60,6 +66,13 @@ function MainAreaPresentational({
   onChangeFileContent,
   onRightPanelTabChange,
   onChangesModeChange,
+  onReviewRemoveComment,
+  onReviewFinalCommentChange,
+  onReviewAgentChange,
+  onRunReviewAgent,
+  onClearReviewDraft,
+  onAddDiffComment,
+  openFileReviewComments,
   renderSession,
 }: MainAreaPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -313,6 +326,12 @@ function MainAreaPresentational({
                     >
                       Tmux
                     </TabButton>
+                    <TabButton
+                      active={rightPanelTab === "review"}
+                      onClick={() => onRightPanelTabChange("review")}
+                    >
+                      Review
+                    </TabButton>
                   </div>
                 </div>
                 <div className="flex-1 min-h-0 overflow-hidden">
@@ -367,6 +386,30 @@ function MainAreaPresentational({
                           mode={changesMode}
                           onModeChange={onChangesModeChange}
                           onOpenChange={onOpenChange}
+                        />
+                      </motion.div>
+                    ) : rightPanelTab === "review" ? (
+                      <motion.div
+                        key="review"
+                        className="h-full"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                      >
+                        <ReviewDraftPanel
+                          workspacePath={activeRootPath}
+                          comments={reviewComments}
+                          finalComment={reviewFinalComment}
+                          selectedAgent={reviewAgent}
+                          isRunning={reviewRunning}
+                          error={reviewError}
+                          onRemoveComment={onReviewRemoveComment}
+                          onFinalCommentChange={onReviewFinalCommentChange}
+                          onAgentChange={onReviewAgentChange}
+                          onRun={onRunReviewAgent}
+                          onClear={onClearReviewDraft}
                         />
                       </motion.div>
                     ) : (
@@ -428,6 +471,9 @@ function MainAreaPresentational({
         diff={openDiff}
         diffLoading={diffLoading}
         diffError={diffError}
+        diffMode={changesMode}
+        reviewComments={openFileReviewComments}
+        onAddDiffComment={onAddDiffComment}
         defaultTab={drawerTab}
         allowEdit={allowEdit}
         isDirty={isDirty}
