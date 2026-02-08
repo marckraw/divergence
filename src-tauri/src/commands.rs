@@ -442,6 +442,38 @@ pub struct TmuxSessionEntry {
     pub activity: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct RawTmuxSessionEntry {
+    pub name: String,
+    pub socket_path: String,
+    pub created: String,
+    pub attached: bool,
+    pub window_count: u32,
+    pub activity: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TmuxCommandDiagnosticsEntry {
+    pub status_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TmuxDiagnosticsEntry {
+    pub resolved_tmux_path: Option<String>,
+    pub login_shell_path: Option<String>,
+    pub login_shell_tmux_path: Option<String>,
+    pub env_path: Option<String>,
+    pub env_shell: Option<String>,
+    pub env_tmux: Option<String>,
+    pub env_tmux_tmpdir: Option<String>,
+    pub login_shell_tmux_tmpdir: Option<String>,
+    pub version: TmuxCommandDiagnosticsEntry,
+    pub list_sessions_raw: TmuxCommandDiagnosticsEntry,
+}
+
 #[tauri::command]
 pub async fn list_tmux_sessions() -> Result<Vec<TmuxSessionEntry>, String> {
     let sessions = git::list_tmux_sessions()?;
@@ -455,6 +487,49 @@ pub async fn list_tmux_sessions() -> Result<Vec<TmuxSessionEntry>, String> {
             activity: s.activity,
         })
         .collect())
+}
+
+#[tauri::command]
+pub async fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionEntry>, String> {
+    let sessions = git::list_all_tmux_sessions()?;
+    Ok(sessions
+        .into_iter()
+        .map(|s| RawTmuxSessionEntry {
+            name: s.name,
+            socket_path: s.socket_path,
+            created: s.created,
+            attached: s.attached,
+            window_count: s.window_count,
+            activity: s.activity,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn get_tmux_diagnostics() -> Result<TmuxDiagnosticsEntry, String> {
+    let diagnostics = git::get_tmux_diagnostics();
+    Ok(TmuxDiagnosticsEntry {
+        resolved_tmux_path: diagnostics.resolved_tmux_path,
+        login_shell_path: diagnostics.login_shell_path,
+        login_shell_tmux_path: diagnostics.login_shell_tmux_path,
+        env_path: diagnostics.env_path,
+        env_shell: diagnostics.env_shell,
+        env_tmux: diagnostics.env_tmux,
+        env_tmux_tmpdir: diagnostics.env_tmux_tmpdir,
+        login_shell_tmux_tmpdir: diagnostics.login_shell_tmux_tmpdir,
+        version: TmuxCommandDiagnosticsEntry {
+            status_code: diagnostics.version.status_code,
+            stdout: diagnostics.version.stdout,
+            stderr: diagnostics.version.stderr,
+            error: diagnostics.version.error,
+        },
+        list_sessions_raw: TmuxCommandDiagnosticsEntry {
+            status_code: diagnostics.list_sessions_raw.status_code,
+            stdout: diagnostics.list_sessions_raw.stdout,
+            stderr: diagnostics.list_sessions_raw.stderr,
+            error: diagnostics.list_sessions_raw.error,
+        },
+    })
 }
 
 #[tauri::command]

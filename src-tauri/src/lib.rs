@@ -42,6 +42,8 @@ pub fn run() {
             commands::get_divergence_base_path,
             commands::kill_tmux_session,
             commands::list_tmux_sessions,
+            commands::list_all_tmux_sessions,
+            commands::get_tmux_diagnostics,
             commands::kill_all_tmux_sessions,
             commands::list_project_files,
             commands::list_branch_changes,
