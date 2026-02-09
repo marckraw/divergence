@@ -216,6 +216,81 @@ pub async fn get_ralphy_config_summary(project_path: String) -> Result<RalphyCon
     })
 }
 
+#[tauri::command]
+pub async fn fetch_github_pull_requests(
+    owner: String,
+    repo: String,
+) -> Result<Vec<GithubPullRequestEvent>, String> {
+    let owner = owner.trim();
+    let repo = repo.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return Err("owner and repo are required".to_string());
+    }
+
+    let token = std::env::var("GITHUB_TOKEN")
+        .or_else(|_| std::env::var("github_token"))
+        .map_err(|_| "GITHUB_TOKEN environment variable is not set.".to_string())?;
+    if token.trim().is_empty() {
+        return Err("GITHUB_TOKEN environment variable is not set.".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let url = format!("https://api.github.com/repos/{}/{}/pulls", owner, repo);
+    let response = client
+        .get(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token.trim()))
+        .header(reqwest::header::USER_AGENT, "divergence-app")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .query(&[
+            ("state", "open"),
+            ("sort", "updated"),
+            ("direction", "desc"),
+            ("per_page", "100"),
+        ])
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let response_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new())
+            .chars()
+            .take(400)
+            .collect::<String>();
+        return Err(format!(
+            "GitHub API request failed with status {}: {}",
+            status.as_u16(),
+            response_body
+        ));
+    }
+
+    let items = response
+        .json::<Vec<GithubPullRequestApiItem>>()
+        .await
+        .map_err(|error| format!("Failed to parse GitHub response: {}", error))?;
+
+    let mut events = Vec::with_capacity(items.len());
+    for item in items {
+        let created_at_ms = parse_rfc3339_millis(&item.created_at)?;
+        let updated_at_ms = parse_rfc3339_millis(&item.updated_at)?;
+        events.push(GithubPullRequestEvent {
+            id: item.id,
+            number: item.number,
+            title: item.title,
+            html_url: item.html_url,
+            user_login: item.user.and_then(|user| user.login),
+            created_at_ms,
+            updated_at_ms,
+        });
+    }
+
+    Ok(events)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BranchStatus {
     pub merged: bool,
@@ -247,6 +322,40 @@ pub struct BranchChangesResponse {
 #[derive(Debug, Serialize)]
 pub struct WriteReviewBriefResponse {
     pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubPullRequestApiUser {
+    login: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubPullRequestApiItem {
+    id: i64,
+    number: i64,
+    title: String,
+    html_url: String,
+    user: Option<GithubPullRequestApiUser>,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubPullRequestEvent {
+    pub id: i64,
+    pub number: i64,
+    pub title: String,
+    pub html_url: String,
+    pub user_login: Option<String>,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+}
+
+fn parse_rfc3339_millis(value: &str) -> Result<i64, String> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|date| date.timestamp_millis())
+        .map_err(|error| format!("Failed to parse GitHub timestamp '{}': {}", value, error))
 }
 
 fn value_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {

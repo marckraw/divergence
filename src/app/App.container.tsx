@@ -1,20 +1,44 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import Sidebar from "../widgets/sidebar";
 import MainArea from "../widgets/main-area";
+import { InboxPanel } from "../features/inbox";
+import { AutomationsPanel } from "../features/automations";
 import QuickSwitcher from "../features/quick-switcher";
 import Settings from "../widgets/settings-modal";
-import { executeCreateDivergence } from "../features/create-divergence";
+import {
+  createDivergenceRepository,
+  executeCreateDivergence,
+  insertDivergenceRecord,
+} from "../features/create-divergence";
 import { MergeNotification, useMergeDetection, type MergeNotificationData } from "../features/merge-detection";
 import { executeDeleteDivergence } from "../features/delete-divergence";
 import { executeRemoveProject } from "../features/remove-project";
-import { TaskCenterDrawer, TaskToasts, useTaskCenter } from "../features/task-center";
+import { TaskCenterPage, TaskToasts, useTaskCenter } from "../features/task-center";
+import type { WorkSidebarMode, WorkSidebarTab } from "../features/work-sidebar";
 import { useAllDivergences } from "../entities/divergence";
-import { useProjectSettingsMap, useProjects } from "../entities/project";
+import { useProjectSettingsMap, useProjects, loadProjectSettings } from "../entities/project";
+import {
+  useAutomations,
+  type Automation,
+  type AutomationRunTriggerSource,
+  insertAutomationRun,
+  markAutomationRunSchedule,
+  updateAutomationRun,
+} from "../entities/automation";
+import {
+  useInboxEvents,
+  insertInboxEvent,
+  getGithubPollState,
+  upsertGithubPollState,
+} from "../entities/inbox-event";
 import { useAppSettings } from "../shared/hooks/useAppSettings";
 import { useUpdater } from "../shared/hooks/useUpdater";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "../entities";
 import { buildSplitTmuxSessionName } from "../entities/terminal-session";
+import { getRalphyConfigSummary } from "../shared/api/ralphyConfig.api";
+import { runLoginShellCommand } from "../shared/api/pty.api";
 import { killTmuxSession } from "../shared/api/tmuxSessions.api";
 import {
   renderReviewAgentCommand,
@@ -29,10 +53,31 @@ import {
   shouldNotifyIdle,
 } from "./lib/idleNotification.pure";
 import { resolveAppShortcut } from "./lib/appShortcuts.pure";
+import {
+  buildAutomationBranchName,
+  buildAutomationPromptMarkdown,
+  computeAutomationNextRunAtMs,
+  isAutomationDue,
+} from "./lib/automationScheduler.pure";
+import {
+  buildGithubInboxBody,
+  buildGithubInboxExternalId,
+  buildGithubInboxTitle,
+  buildGithubRepoTarget,
+  classifyGithubPullRequestEvent,
+} from "./lib/githubInbox.pure";
+import { fetchGithubPullRequests } from "./api/githubPullRequests.api";
+import type { GithubRepoTarget } from "./model/githubPullRequests.types";
 
 const NOTIFY_MIN_BUSY_MS = 5000;
 const NOTIFY_IDLE_DELAY_MS = 1500;
 const NOTIFY_COOLDOWN_MS = 3000;
+const AUTOMATION_SCHEDULER_INTERVAL_MS = 60_000;
+const GITHUB_POLL_INTERVAL_MS = 2 * 60_000;
+const GITHUB_INITIAL_POLL_DELAY_MS = 15_000;
+const AUTOMATION_COMMAND_TIMEOUT_MS = 20 * 60 * 1000;
+const AUTOMATION_OUTPUT_TAIL_CHARS = 4000;
+const AUTOMATION_OUTPUT_UPDATE_INTERVAL_MS = 600;
 
 function App() {
   const updater = useUpdater(true);
@@ -56,6 +101,9 @@ function App() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [sidebarMode, setSidebarMode] = useState<WorkSidebarMode>("projects");
+  const [workTab, setWorkTab] = useState<WorkSidebarTab>("inbox");
+  const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>([]);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
@@ -63,20 +111,44 @@ function App() {
   const idleNotifyTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
   const commandBySessionIdRef = useRef<Map<string, (command: string) => void>>(new Map());
+  const automationsRef = useRef<Automation[]>([]);
+  const githubRepoTargetsRef = useRef<GithubRepoTarget[]>([]);
+  const automationInFlightCountsRef = useRef<Map<number, number>>(new Map());
+  const startupCatchupDoneRef = useRef(false);
+  const githubPollingInFlightRef = useRef(false);
+  const githubTokenWarningShownRef = useRef(false);
   const {
     runningTasks,
     recentTasks,
     toasts,
     runningCount,
-    isDrawerOpen,
     focusedTaskId,
-    closeDrawer,
-    toggleDrawer,
     dismissToast,
     viewTask,
     retryTask,
     runTask,
   } = useTaskCenter(2);
+  const {
+    automations,
+    latestRunByAutomationId,
+    loading: automationsLoading,
+    error: automationsError,
+    refresh: refreshAutomations,
+    createAutomation,
+    updateAutomation: saveAutomation,
+    removeAutomation,
+  } = useAutomations();
+  const {
+    events: inboxEvents,
+    filter: inboxFilter,
+    unreadCount: inboxUnreadCount,
+    loading: inboxLoading,
+    error: inboxError,
+    setFilter: setInboxFilter,
+    refresh: refreshInbox,
+    markRead: markInboxRead,
+    markAllRead: markAllInboxRead,
+  } = useInboxEvents("all");
 
   useEffect(() => {
     sessionsRef.current = sessions;
@@ -86,10 +158,24 @@ function App() {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
+  useEffect(() => {
+    automationsRef.current = automations;
+  }, [automations]);
+
+  useEffect(() => {
+    githubRepoTargetsRef.current = githubRepoTargets;
+  }, [githubRepoTargets]);
+
   // Build projects by ID map for merge detection
   const projectsById = useMemo(() => {
     const map = new Map<number, { name: string }>();
     projects.forEach(p => map.set(p.id, { name: p.name }));
+    return map;
+  }, [projects]);
+
+  const projectById = useMemo(() => {
+    const map = new Map<number, Project>();
+    projects.forEach((project) => map.set(project.id, project));
     return map;
   }, [projects]);
 
@@ -99,6 +185,42 @@ function App() {
     divergencesByProject.forEach(divs => all.push(...divs));
     return all;
   }, [divergencesByProject]);
+
+  const refreshGithubRepoTargets = useCallback(async () => {
+    if (projects.length === 0) {
+      setGithubRepoTargets([]);
+      return;
+    }
+
+    const targets = await Promise.all(projects.map(async (project) => {
+      try {
+        const config = await getRalphyConfigSummary(project.path);
+        if (config.status !== "ok") {
+          return null;
+        }
+        const owner = config.summary.integrations?.github?.owner?.trim();
+        const repo = config.summary.integrations?.github?.repo?.trim();
+        if (!owner || !repo) {
+          return null;
+        }
+        return buildGithubRepoTarget({
+          projectId: project.id,
+          projectName: project.name,
+          owner,
+          repo,
+        });
+      } catch (error) {
+        console.warn(`Failed to load Ralphy config for ${project.name}:`, error);
+        return null;
+      }
+    }));
+
+    setGithubRepoTargets(targets.filter((target): target is GithubRepoTarget => target !== null));
+  }, [projects]);
+
+  useEffect(() => {
+    void refreshGithubRepoTargets();
+  }, [refreshGithubRepoTargets]);
 
   const clearIdleNotifyTimer = useCallback((sessionId: string) => {
     const existing = idleNotifyTimersRef.current.get(sessionId);
@@ -229,11 +351,13 @@ function App() {
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
     setActiveSessionId(session.id);
+    setSidebarMode("projects");
   }, [createSession]);
 
   const handleSelectDivergence = useCallback((divergence: Divergence) => {
     const session = createSession("divergence", divergence);
     setActiveSessionId(session.id);
+    setSidebarMode("projects");
   }, [createSession]);
 
   const handleCreateAdditionalSession = useCallback((
@@ -242,6 +366,7 @@ function App() {
   ) => {
     const session = createManualSession(type, item);
     setActiveSessionId(session.id);
+    setSidebarMode("projects");
   }, [createManualSession]);
 
   const handleCloseSession = useCallback((sessionId: string) => {
@@ -322,6 +447,39 @@ function App() {
     });
   }, []);
 
+  const sendCommandToSession = useCallback(async (
+    sessionId: string,
+    command: string,
+    options?: {
+      timeoutMs?: number;
+      activateIfNeeded?: boolean;
+    }
+  ): Promise<void> => {
+    const existingSendCommand = commandBySessionIdRef.current.get(sessionId);
+    if (existingSendCommand) {
+      existingSendCommand(command);
+      return;
+    }
+
+    const activateIfNeeded = options?.activateIfNeeded ?? true;
+    const timeoutMs = options?.timeoutMs ?? 15_000;
+    const previousActiveSessionId = activeSessionIdRef.current;
+    const shouldActivate = activateIfNeeded && previousActiveSessionId !== sessionId;
+
+    if (shouldActivate) {
+      setActiveSessionId(sessionId);
+    }
+
+    try {
+      const sendCommand = await waitForSessionCommand(sessionId, timeoutMs);
+      sendCommand(command);
+    } finally {
+      if (shouldActivate && activeSessionIdRef.current === sessionId) {
+        setActiveSessionId(previousActiveSessionId);
+      }
+    }
+  }, [waitForSessionCommand]);
+
   const createReviewAgentSession = useCallback((sourceSession: TerminalSession, agent: DiffReviewAgent): TerminalSession => {
     const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const shortRunId = entropy.split("-")[1]?.padStart(3, "0") ?? "000";
@@ -373,13 +531,12 @@ function App() {
     const reviewSession = createReviewAgentSession(sourceSession, input.agent);
     setActiveSessionId(reviewSession.id);
 
-    const sendCommand = await waitForSessionCommand(reviewSession.id);
-    sendCommand(command);
+    await sendCommandToSession(reviewSession.id, command, { activateIfNeeded: false });
   }, [
     appSettings.agentCommandClaude,
     appSettings.agentCommandCodex,
     createReviewAgentSession,
-    waitForSessionCommand,
+    sendCommandToSession,
   ]);
 
   const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
@@ -416,6 +573,19 @@ function App() {
 
   const toggleRightPanel = useCallback(() => {
     setIsRightPanelOpen(prev => !prev);
+  }, []);
+
+  const handleSidebarModeChange = useCallback((mode: WorkSidebarMode) => {
+    setSidebarMode(mode);
+    if (mode === "work") {
+      setShowQuickSwitcher(false);
+      setShowSettings(false);
+    }
+  }, []);
+
+  const handleWorkTabChange = useCallback((tab: WorkSidebarTab) => {
+    setSidebarMode("work");
+    setWorkTab(tab);
   }, []);
 
   const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
@@ -547,6 +717,438 @@ function App() {
     runTask,
   ]);
 
+  const executeAutomationRun = useCallback(async (
+    automation: Automation,
+    triggerSource: AutomationRunTriggerSource
+  ): Promise<void> => {
+    const inFlightCount = automationInFlightCountsRef.current.get(automation.id) ?? 0;
+    if (triggerSource !== "manual" && inFlightCount > 0) {
+      return;
+    }
+
+    const project = projectById.get(automation.projectId);
+    const startedAtMs = Date.now();
+    const runId = await insertAutomationRun({
+      automationId: automation.id,
+      triggerSource,
+      status: "queued",
+      startedAtMs,
+    });
+
+    if (!project) {
+      const endedAtMs = Date.now();
+      const errorMessage = `Project ${automation.projectId} was not found.`;
+      const nextRunAtMs = automation.enabled
+        ? computeAutomationNextRunAtMs(endedAtMs, automation.intervalHours)
+        : null;
+      await Promise.all([
+        updateAutomationRun(runId, {
+          status: "error",
+          startedAtMs,
+          endedAtMs,
+          error: errorMessage,
+        }),
+        markAutomationRunSchedule(automation.id, {
+          lastRunAtMs: endedAtMs,
+          nextRunAtMs,
+        }),
+        insertInboxEvent({
+          kind: "automation_run",
+          source: "automation",
+          automationId: automation.id,
+          automationRunId: runId,
+          projectId: automation.projectId,
+          externalId: `automation:${automation.id}:run:${runId}:error`,
+          title: `Automation failed: ${automation.name}`,
+          body: errorMessage,
+        }),
+      ]);
+      await Promise.all([refreshAutomations(), refreshInbox()]);
+      return;
+    }
+
+    automationInFlightCountsRef.current.set(automation.id, inFlightCount + 1);
+    try {
+      const details = await runTask<{
+        divergenceId: number;
+        divergencePath: string;
+        branch: string;
+        command: string;
+        outputTail: string;
+      }>({
+        kind: "automation_run",
+        title: `Automation: ${automation.name}`,
+        target: {
+          type: "project",
+          projectId: project.id,
+          projectName: project.name,
+          path: project.path,
+          label: `${project.name} / ${automation.name}`,
+        },
+        origin: `automation_${triggerSource}`,
+        fsHeavy: true,
+        initialPhase: "Queued",
+        successMessage: `Automation completed: ${automation.name}`,
+        errorMessage: `Automation failed: ${automation.name}`,
+        run: async ({ setPhase, setOutputTail }) => {
+          await updateAutomationRun(runId, {
+            status: "running",
+            startedAtMs,
+          });
+
+          setPhase("Loading project settings");
+          const projectSettings = await loadProjectSettings(project.id);
+
+          setPhase("Creating divergence");
+          const branchName = buildAutomationBranchName(automation.id, automation.name);
+          const divergence = await createDivergenceRepository({
+            project,
+            branchName,
+            copyIgnoredSkip: projectSettings.copyIgnoredSkip,
+            useExistingBranch: false,
+          });
+
+          setPhase("Saving divergence");
+          const divergenceId = await insertDivergenceRecord(divergence);
+          await refreshDivergences();
+
+          setPhase("Preparing prompt");
+          const markdown = buildAutomationPromptMarkdown({
+            automationName: automation.name,
+            projectName: project.name,
+            triggerSource,
+            prompt: automation.prompt,
+            generatedAtMs: Date.now(),
+          });
+          const { path: briefPath } = await writeReviewBriefFile(divergence.path, markdown);
+          const commandTemplate = automation.agent === "claude"
+            ? appSettings.agentCommandClaude
+            : appSettings.agentCommandCodex;
+          if (!commandTemplate.trim()) {
+            throw new Error(`No ${automation.agent} command template configured in settings.`);
+          }
+          const command = renderReviewAgentCommand(commandTemplate, {
+            workspacePath: divergence.path,
+            briefPath,
+          });
+          const automationLogPath = `${divergence.path}/.divergence/automation-run-${runId}.log`;
+          const diagnosticsHeader = [
+            `automation=${automation.name}`,
+            `run_id=${runId}`,
+            `trigger=${triggerSource}`,
+            `project=${project.name}`,
+            `branch=${branchName}`,
+            `workspace=${divergence.path}`,
+            `agent=${automation.agent}`,
+            `command=${command}`,
+            "--- live output ---",
+            "",
+          ].join("\n");
+          setOutputTail(diagnosticsHeader);
+
+          setPhase(`Running ${automation.agent} (headless)`);
+
+          const commandResult = await runLoginShellCommand({
+            cwd: divergence.path,
+            command,
+            timeoutMs: AUTOMATION_COMMAND_TIMEOUT_MS,
+            outputLimitChars: 20_000,
+            outputTailChars: AUTOMATION_OUTPUT_TAIL_CHARS,
+            outputUpdateIntervalMs: AUTOMATION_OUTPUT_UPDATE_INTERVAL_MS,
+            onOutputUpdate: (outputChunk) => {
+              if (!outputChunk.trim()) {
+                setOutputTail(diagnosticsHeader);
+                return;
+              }
+              setOutputTail(`${diagnosticsHeader}${outputChunk}`);
+            },
+          });
+
+          // Persist output to log file for later inspection
+          const fullOutput = commandResult.output || "";
+          await writeTextFile(
+            automationLogPath,
+            `${diagnosticsHeader}${fullOutput}`
+          ).catch(() => {
+            // Non-critical: log file write failure should not fail the run
+          });
+
+          if (commandResult.exitCode !== 0) {
+            const outputTail = fullOutput.trim();
+            throw new Error(
+              outputTail
+                ? `Agent exited with code ${commandResult.exitCode}:\n${outputTail.slice(-AUTOMATION_OUTPUT_TAIL_CHARS)}`
+                : `Agent exited with code ${commandResult.exitCode}.`
+            );
+          }
+
+          // Final output update to ensure UI shows the complete result
+          const finalOutputTail = fullOutput.length > AUTOMATION_OUTPUT_TAIL_CHARS
+            ? fullOutput.slice(fullOutput.length - AUTOMATION_OUTPUT_TAIL_CHARS)
+            : fullOutput;
+          setOutputTail(
+            finalOutputTail.trim()
+              ? `${diagnosticsHeader}${finalOutputTail}`
+              : diagnosticsHeader
+          );
+
+          return {
+            divergenceId,
+            divergencePath: divergence.path,
+            branch: divergence.branch,
+            command,
+            outputTail: fullOutput.slice(-AUTOMATION_OUTPUT_TAIL_CHARS),
+          };
+        },
+      });
+
+      const endedAtMs = Date.now();
+      const nextRunAtMs = automation.enabled
+        ? computeAutomationNextRunAtMs(endedAtMs, automation.intervalHours)
+        : null;
+      await Promise.all([
+        updateAutomationRun(runId, {
+          status: "success",
+          startedAtMs,
+          endedAtMs,
+          detailsJson: JSON.stringify(details),
+        }),
+        markAutomationRunSchedule(automation.id, {
+          lastRunAtMs: endedAtMs,
+          nextRunAtMs,
+        }),
+        insertInboxEvent({
+          kind: "automation_run",
+          source: "automation",
+          automationId: automation.id,
+          automationRunId: runId,
+          projectId: project.id,
+          externalId: `automation:${automation.id}:run:${runId}:success`,
+          title: `Automation completed: ${automation.name}`,
+          body: [
+            `Project: ${project.name}`,
+            `Agent: ${automation.agent}`,
+            `Trigger: ${triggerSource}`,
+            `Duration: ${Math.round((endedAtMs - startedAtMs) / 1000)}s`,
+            `Branch: ${details.branch}`,
+            `Path: ${details.divergencePath}`,
+          ].join("\n"),
+          payloadJson: JSON.stringify(details),
+        }),
+      ]);
+      await Promise.all([refreshAutomations(), refreshInbox()]);
+    } catch (error) {
+      const endedAtMs = Date.now();
+      const durationSec = Math.round((endedAtMs - startedAtMs) / 1000);
+      const message = error instanceof Error ? error.message : String(error);
+      const nextRunAtMs = automation.enabled
+        ? computeAutomationNextRunAtMs(endedAtMs, automation.intervalHours)
+        : null;
+      const errorBody = [
+        `Project: ${project.name}`,
+        `Agent: ${automation.agent}`,
+        `Trigger: ${triggerSource}`,
+        `Duration: ${durationSec}s`,
+        "",
+        message,
+      ].join("\n");
+      await Promise.all([
+        updateAutomationRun(runId, {
+          status: "error",
+          startedAtMs,
+          endedAtMs,
+          error: message,
+        }),
+        markAutomationRunSchedule(automation.id, {
+          lastRunAtMs: endedAtMs,
+          nextRunAtMs,
+        }),
+        insertInboxEvent({
+          kind: "automation_run",
+          source: "automation",
+          automationId: automation.id,
+          automationRunId: runId,
+          projectId: project.id,
+          externalId: `automation:${automation.id}:run:${runId}:error`,
+          title: `Automation failed: ${automation.name}`,
+          body: errorBody,
+        }),
+      ]);
+      await Promise.all([refreshAutomations(), refreshInbox()]);
+    } finally {
+      const remainingCount = (automationInFlightCountsRef.current.get(automation.id) ?? 1) - 1;
+      if (remainingCount > 0) {
+        automationInFlightCountsRef.current.set(automation.id, remainingCount);
+      } else {
+        automationInFlightCountsRef.current.delete(automation.id);
+      }
+    }
+  }, [
+    appSettings.agentCommandClaude,
+    appSettings.agentCommandCodex,
+    projectById,
+    refreshAutomations,
+    refreshDivergences,
+    refreshInbox,
+    runTask,
+  ]);
+
+  const runDueAutomations = useCallback(async (
+    triggerSource: "schedule" | "startup_catchup"
+  ): Promise<void> => {
+    const nowMs = Date.now();
+    const dueAutomations = automationsRef.current.filter((automation) => {
+      return isAutomationDue(automation, nowMs);
+    });
+
+    for (const automation of dueAutomations) {
+      await executeAutomationRun(automation, triggerSource);
+    }
+  }, [executeAutomationRun]);
+
+  const handleRunAutomationNow = useCallback(async (automationId: number): Promise<void> => {
+    const automation = automationsRef.current.find((item) => item.id === automationId);
+    if (!automation) {
+      throw new Error("Automation not found.");
+    }
+    await executeAutomationRun(automation, "manual");
+  }, [executeAutomationRun]);
+
+  const handleCreateAutomation = useCallback(async (input: Parameters<typeof createAutomation>[0]) => {
+    await createAutomation(input);
+    await refreshAutomations();
+  }, [createAutomation, refreshAutomations]);
+
+  const handleUpdateAutomation = useCallback(async (input: Parameters<typeof saveAutomation>[0]) => {
+    await saveAutomation(input);
+    await refreshAutomations();
+  }, [refreshAutomations, saveAutomation]);
+
+  const handleDeleteAutomation = useCallback(async (automationId: number) => {
+    await removeAutomation(automationId);
+    await refreshAutomations();
+  }, [refreshAutomations, removeAutomation]);
+
+  const handleViewTaskCenterTask = useCallback((taskId: string) => {
+    viewTask(taskId);
+    setIsSidebarOpen(true);
+    setSidebarMode("work");
+    setWorkTab("task_center");
+  }, [viewTask]);
+
+  const pollGithubInbox = useCallback(async (): Promise<void> => {
+    if (githubPollingInFlightRef.current) {
+      return;
+    }
+
+    const repoTargets = githubRepoTargetsRef.current;
+    if (repoTargets.length === 0) {
+      return;
+    }
+
+    githubPollingInFlightRef.current = true;
+    let insertedCount = 0;
+    try {
+      for (const repoTarget of repoTargets) {
+        const nowMs = Date.now();
+        const lastPolledAtMs = await getGithubPollState(repoTarget.repoKey);
+        if (lastPolledAtMs === null) {
+          await upsertGithubPollState(repoTarget.repoKey, nowMs);
+          continue;
+        }
+
+        let pullRequests;
+        try {
+          pullRequests = await fetchGithubPullRequests(repoTarget.owner, repoTarget.repo);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.toLowerCase().includes("github_token")) {
+            if (!githubTokenWarningShownRef.current) {
+              githubTokenWarningShownRef.current = true;
+              console.warn("GitHub polling is disabled because GITHUB_TOKEN is missing.");
+            }
+            return;
+          }
+          console.warn(`GitHub polling failed for ${repoTarget.repoKey}:`, error);
+          continue;
+        }
+
+        for (const pullRequest of pullRequests) {
+          const kind = classifyGithubPullRequestEvent(pullRequest, lastPolledAtMs);
+          if (!kind) {
+            continue;
+          }
+
+          const eventAtMs = kind === "github_pr_opened"
+            ? pullRequest.createdAtMs
+            : pullRequest.updatedAtMs;
+          const insertedId = await insertInboxEvent({
+            kind,
+            source: "github",
+            projectId: repoTarget.projectId,
+            externalId: buildGithubInboxExternalId(
+              repoTarget.repoKey,
+              pullRequest.id,
+              kind,
+              eventAtMs
+            ),
+            title: buildGithubInboxTitle(repoTarget.repoKey, pullRequest.number, kind),
+            body: buildGithubInboxBody(pullRequest),
+            payloadJson: JSON.stringify({
+              projectId: repoTarget.projectId,
+              repoKey: repoTarget.repoKey,
+              pullRequest,
+            }),
+            createdAtMs: eventAtMs,
+          });
+          if (insertedId) {
+            insertedCount += 1;
+          }
+        }
+
+        await upsertGithubPollState(repoTarget.repoKey, nowMs);
+      }
+
+      if (insertedCount > 0) {
+        await refreshInbox();
+      }
+    } finally {
+      githubPollingInFlightRef.current = false;
+    }
+  }, [refreshInbox]);
+
+  useEffect(() => {
+    if (automationsLoading || startupCatchupDoneRef.current) {
+      return;
+    }
+    startupCatchupDoneRef.current = true;
+    void runDueAutomations("startup_catchup");
+  }, [automationsLoading, runDueAutomations]);
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      void runDueAutomations("schedule");
+    }, AUTOMATION_SCHEDULER_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, [runDueAutomations]);
+
+  useEffect(() => {
+    const initialTimerId = window.setTimeout(() => {
+      void pollGithubInbox();
+    }, GITHUB_INITIAL_POLL_DELAY_MS);
+    const timerId = window.setInterval(() => {
+      void pollGithubInbox();
+    }, GITHUB_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearTimeout(initialTimerId);
+      window.clearInterval(timerId);
+    };
+  }, [pollGithubInbox]);
+
   const resolveProjectForNewDivergenceCallback = useCallback((): Project | null => {
     return resolveProjectForNewDivergence({
       activeSessionId,
@@ -581,6 +1183,11 @@ function App() {
         return;
       case "toggle_file_quick_switcher":
         setShowFileQuickSwitcher(prev => !prev);
+        return;
+      case "open_work_inbox":
+        setIsSidebarOpen(true);
+        setSidebarMode("work");
+        setWorkTab("inbox");
         return;
       case "toggle_settings":
         setShowSettings(prev => !prev);
@@ -680,6 +1287,12 @@ function App() {
         }`}
       >
         <Sidebar
+          mode={sidebarMode}
+          workTab={workTab}
+          onModeChange={handleSidebarModeChange}
+          onWorkTabChange={handleWorkTabChange}
+          inboxUnreadCount={inboxUnreadCount}
+          taskRunningCount={runningCount}
           projects={projects}
           divergencesByProject={divergencesByProject}
           sessions={sessions}
@@ -699,37 +1312,75 @@ function App() {
           isCollapsed={!isSidebarOpen}
         />
       </div>
-      <MainArea
-        projects={projects}
-        sessions={sessions}
-        activeSession={activeSession}
-        onCloseSession={handleCloseSession}
-        onSelectSession={setActiveSessionId}
-        onStatusChange={handleSessionStatusChange}
-        onRendererChange={handleSessionRendererChange}
-        onRegisterTerminalCommand={handleRegisterTerminalCommand}
-        onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
-        onRunReviewAgentRequest={handleRunReviewAgent}
-        onProjectSettingsSaved={updateProjectSettings}
-        splitBySessionId={splitBySessionId}
-        onSplitSession={handleSplitSession}
-        onResetSplitSession={handleResetSplitSession}
-        reconnectBySessionId={reconnectBySessionId}
-        onReconnectSession={handleReconnectSession}
-        globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
-        editorTheme={editorTheme}
-        divergencesByProject={divergencesByProject}
-        projectsLoading={projectsLoading}
-        divergencesLoading={divergencesLoading}
-        showFileQuickSwitcher={showFileQuickSwitcher}
-        onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={toggleSidebar}
-        isRightPanelOpen={isRightPanelOpen}
-        onToggleRightPanel={toggleRightPanel}
-        taskRunningCount={runningCount}
-        onToggleTaskCenter={toggleDrawer}
-      />
+      {sidebarMode === "work" ? (
+        <div className="flex-1 min-w-0 h-full">
+          {workTab === "inbox" && (
+            <InboxPanel
+              events={inboxEvents}
+              filter={inboxFilter}
+              loading={inboxLoading}
+              error={inboxError}
+              onFilterChange={setInboxFilter}
+              onRefresh={refreshInbox}
+              onMarkRead={markInboxRead}
+              onMarkAllRead={markAllInboxRead}
+            />
+          )}
+          {workTab === "task_center" && (
+            <TaskCenterPage
+              runningTasks={runningTasks}
+              recentTasks={recentTasks}
+              focusedTaskId={focusedTaskId}
+              onRetryTask={retryTask}
+              onViewTask={handleViewTaskCenterTask}
+            />
+          )}
+          {workTab === "automations" && (
+            <AutomationsPanel
+              projects={projects}
+              automations={automations}
+              latestRunByAutomationId={latestRunByAutomationId}
+              loading={automationsLoading}
+              error={automationsError}
+              onRefresh={refreshAutomations}
+              onCreateAutomation={handleCreateAutomation}
+              onUpdateAutomation={handleUpdateAutomation}
+              onDeleteAutomation={handleDeleteAutomation}
+              onRunAutomationNow={handleRunAutomationNow}
+            />
+          )}
+        </div>
+      ) : (
+        <MainArea
+          projects={projects}
+          sessions={sessions}
+          activeSession={activeSession}
+          onCloseSession={handleCloseSession}
+          onSelectSession={setActiveSessionId}
+          onStatusChange={handleSessionStatusChange}
+          onRendererChange={handleSessionRendererChange}
+          onRegisterTerminalCommand={handleRegisterTerminalCommand}
+          onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
+          onRunReviewAgentRequest={handleRunReviewAgent}
+          onProjectSettingsSaved={updateProjectSettings}
+          splitBySessionId={splitBySessionId}
+          onSplitSession={handleSplitSession}
+          onResetSplitSession={handleResetSplitSession}
+          reconnectBySessionId={reconnectBySessionId}
+          onReconnectSession={handleReconnectSession}
+          globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
+          editorTheme={editorTheme}
+          divergencesByProject={divergencesByProject}
+          projectsLoading={projectsLoading}
+          divergencesLoading={divergencesLoading}
+          showFileQuickSwitcher={showFileQuickSwitcher}
+          onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
+          isSidebarOpen={isSidebarOpen}
+          onToggleSidebar={toggleSidebar}
+          isRightPanelOpen={isRightPanelOpen}
+          onToggleRightPanel={toggleRightPanel}
+        />
+      )}
 
       {/* Quick Switcher */}
       <AnimatePresence>
@@ -744,6 +1395,7 @@ function App() {
               } else if (type === "divergence") {
                 handleSelectDivergence(item as Divergence);
               } else {
+                setSidebarMode("projects");
                 setActiveSessionId((item as TerminalSession).id);
               }
               setShowQuickSwitcher(false);
@@ -777,17 +1429,7 @@ function App() {
       <TaskToasts
         toasts={toasts}
         onDismiss={dismissToast}
-        onViewTask={viewTask}
-      />
-
-      <TaskCenterDrawer
-        isOpen={isDrawerOpen}
-        runningCount={runningCount}
-        runningTasks={runningTasks}
-        recentTasks={recentTasks}
-        focusedTaskId={focusedTaskId}
-        onClose={closeDrawer}
-        onRetryTask={retryTask}
+        onViewTask={handleViewTaskCenterTask}
       />
 
       {/* Update Banner */}

@@ -20,6 +20,7 @@ export interface AppShortcutContext {
 export type AppShortcutAction =
   | { type: "toggle_quick_switcher" }
   | { type: "toggle_file_quick_switcher" }
+  | { type: "open_work_inbox" }
   | { type: "toggle_settings" }
   | { type: "toggle_right_panel" }
   | { type: "toggle_sidebar" }
@@ -52,6 +53,10 @@ export function resolveAppShortcut(
       return null;
     }
     return { type: "toggle_file_quick_switcher" };
+  }
+
+  if (isMeta && keyLower === "i") {
+    return { type: "open_work_inbox" };
   }
 
   if (isMeta && event.key === ",") {

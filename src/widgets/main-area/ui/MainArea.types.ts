@@ -48,8 +48,6 @@ export interface MainAreaProps {
   onToggleSidebar: () => void;
   isRightPanelOpen: boolean;
   onToggleRightPanel: () => void;
-  taskRunningCount: number;
-  onToggleTaskCenter: () => void;
 }
 
 export type RightPanelTab = "settings" | "files" | "changes" | "review" | "tmux";

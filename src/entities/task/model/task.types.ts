@@ -1,9 +1,16 @@
 export type BackgroundTaskKind =
   | "create_divergence"
   | "delete_divergence"
-  | "remove_project";
+  | "remove_project"
+  | "automation_run";
 
 export type BackgroundTaskStatus = "queued" | "running" | "success" | "error";
+
+export interface BackgroundTaskPhaseEvent {
+  phase: string;
+  progress?: number;
+  atMs: number;
+}
 
 export interface BackgroundTaskTarget {
   type: "project" | "divergence" | "system";
@@ -22,6 +29,10 @@ export interface BackgroundTask {
   title: string;
   phase: string;
   progress?: number;
+  lastUpdatedAtMs?: number;
+  phaseEvents?: BackgroundTaskPhaseEvent[];
+  outputTail?: string;
+  outputUpdatedAtMs?: number;
   fsHeavy: boolean;
   retryable: boolean;
   origin: string;
@@ -42,6 +53,7 @@ export interface BackgroundTaskToast {
 
 export interface BackgroundTaskControls {
   setPhase: (phase: string, progress?: number) => void;
+  setOutputTail: (outputTail: string) => void;
 }
 
 export interface BackgroundTaskRunOptions<T> {

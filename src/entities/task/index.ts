@@ -1,6 +1,7 @@
 export type {
   BackgroundTask,
   BackgroundTaskControls,
+  BackgroundTaskPhaseEvent,
   BackgroundTaskKind,
   BackgroundTaskRunOptions,
   BackgroundTaskStatus,

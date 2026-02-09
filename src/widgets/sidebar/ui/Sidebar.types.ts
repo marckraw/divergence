@@ -1,7 +1,14 @@
 import type { MouseEvent } from "react";
 import type { Project, Divergence, TerminalSession } from "../../../entities";
+import type { WorkSidebarMode, WorkSidebarTab } from "../../../features/work-sidebar";
 
 export interface SidebarProps {
+  mode: WorkSidebarMode;
+  workTab: WorkSidebarTab;
+  onModeChange: (mode: WorkSidebarMode) => void;
+  onWorkTabChange: (tab: WorkSidebarTab) => void;
+  inboxUnreadCount: number;
+  taskRunningCount: number;
   projects: Project[];
   divergencesByProject: Map<number, Divergence[]>;
   sessions: Map<string, TerminalSession>;

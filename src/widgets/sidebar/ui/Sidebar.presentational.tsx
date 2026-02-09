@@ -16,8 +16,21 @@ import {
   isSessionActive,
 } from "../lib/sidebar.pure";
 import type { SidebarPresentationalProps } from "./Sidebar.types";
+import type { WorkSidebarTab } from "../../../features/work-sidebar";
+
+const WORK_NAV_ITEMS: Array<{ id: WorkSidebarTab; label: string }> = [
+  { id: "inbox", label: "Inbox" },
+  { id: "task_center", label: "Task Center" },
+  { id: "automations", label: "Automations" },
+];
 
 function SidebarPresentational({
+  mode,
+  workTab,
+  onModeChange,
+  onWorkTabChange,
+  inboxUnreadCount,
+  taskRunningCount,
   projects,
   divergencesByProject,
   sessions,
@@ -63,7 +76,7 @@ function SidebarPresentational({
   return (
     <>
       <aside className={`w-full h-full bg-sidebar flex flex-col ${isCollapsed ? "" : "border-r border-surface"}`}>
-        <div className="p-4 border-b border-surface">
+        <div className="p-4 border-b border-surface space-y-3">
           <h1 className="text-lg font-semibold text-text flex items-center gap-2">
             <svg
               className="w-6 h-6 text-accent"
@@ -80,10 +93,30 @@ function SidebarPresentational({
             </svg>
             Divergence
           </h1>
+          <div className="inline-flex rounded-md bg-main p-1">
+            <button
+              type="button"
+              onClick={() => onModeChange("projects")}
+              className={`px-2 py-1 text-xs rounded ${
+                mode === "projects" ? "bg-accent text-main" : "text-subtext hover:text-text"
+              }`}
+            >
+              Projects
+            </button>
+            <button
+              type="button"
+              onClick={() => onModeChange("work")}
+              className={`px-2 py-1 text-xs rounded ${
+                mode === "work" ? "bg-accent text-main" : "text-subtext hover:text-text"
+              }`}
+            >
+              Work
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-2" onClick={onContextMenuClose}>
-          {deletingDivergence && (
+          {mode === "projects" && deletingDivergence && (
             <div className="px-2 py-2 mb-2 text-xs text-subtext border border-surface rounded-md bg-surface/30 flex items-center gap-2">
               <svg className="w-3 h-3 animate-spin text-accent" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
@@ -92,33 +125,67 @@ function SidebarPresentational({
               <span>Deleting divergence: {deletingDivergence.branch}</span>
             </div>
           )}
-          {deleteError && (
+          {mode === "projects" && deleteError && (
             <div className="px-2 py-2 mb-2 text-xs text-red border border-red/30 rounded-md bg-red/10">
               Failed to delete divergence: {deleteError}
             </div>
           )}
-          <div className="flex items-center justify-between px-2 py-2">
-            <div className="text-xs uppercase text-subtext font-medium">
-              Projects
-            </div>
-            <button
-              className="text-xs text-subtext hover:text-text disabled:opacity-50 disabled:cursor-default"
-              onClick={onToggleAllProjects}
-              disabled={!hasExpandableProjects}
-              title={isAllExpanded ? "Collapse all projects" : "Expand all projects"}
-            >
-              {isAllExpanded ? "Collapse all" : "Expand all"}
-            </button>
-          </div>
+          {mode === "work" ? (
+            <div className="space-y-1">
+              <div className="px-2 py-2 text-xs uppercase text-subtext font-medium">
+                Work
+              </div>
+              {WORK_NAV_ITEMS.map((item) => {
+                const isActive = workTab === item.id;
+                const badgeCount = item.id === "inbox"
+                  ? inboxUnreadCount
+                  : item.id === "task_center"
+                    ? taskRunningCount
+                    : 0;
 
-          {projects.length === 0 ? (
-            <div className="px-2 py-8 text-center text-subtext text-sm">
-              <p>No projects yet</p>
-              <p className="text-xs mt-1">Click "Add Project" to get started</p>
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onWorkTabChange(item.id)}
+                    className={`w-full text-left flex items-center justify-between gap-2 px-2 py-2 rounded transition-colors ${
+                      isActive ? "bg-surface text-text" : "text-subtext hover:text-text hover:bg-surface/50"
+                    }`}
+                  >
+                    <span className="text-sm">{item.label}</span>
+                    {badgeCount > 0 && (
+                      <span className="inline-flex min-w-[18px] h-5 items-center justify-center px-1.5 rounded-full text-[11px] bg-accent/20 text-accent">
+                        {badgeCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           ) : (
-            <div className="space-y-1">
-              {projects.map((project) => {
+            <>
+              <div className="flex items-center justify-between px-2 py-2">
+                <div className="text-xs uppercase text-subtext font-medium">
+                  Projects
+                </div>
+                <button
+                  className="text-xs text-subtext hover:text-text disabled:opacity-50 disabled:cursor-default"
+                  onClick={onToggleAllProjects}
+                  disabled={!hasExpandableProjects}
+                  title={isAllExpanded ? "Collapse all projects" : "Expand all projects"}
+                >
+                  {isAllExpanded ? "Collapse all" : "Expand all"}
+                </button>
+              </div>
+
+              {projects.length === 0 ? (
+                <div className="px-2 py-8 text-center text-subtext text-sm">
+                  <p>No projects yet</p>
+                  <p className="text-xs mt-1">Click "Add Project" to get started</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {projects.map((project) => {
                 const divergences = divergencesByProject.get(project.id) || [];
                 const isExpanded = expandedProjects.has(project.id);
                 const projectStatus = getSessionStatus(sessions, "project", project.id);
@@ -298,32 +365,36 @@ function SidebarPresentational({
                     )}
                   </div>
                 );
-              })}
-            </div>
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        <div className="p-2 border-t border-surface">
-          <button
-            className="w-full px-3 py-2 bg-surface hover:bg-surface/80 text-text text-sm rounded-md flex items-center justify-center gap-2 transition-colors"
-            onClick={onAddProjectClick}
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        {mode === "projects" && (
+          <div className="p-2 border-t border-surface">
+            <button
+              className="w-full px-3 py-2 bg-surface hover:bg-surface/80 text-text text-sm rounded-md flex items-center justify-center gap-2 transition-colors"
+              onClick={onAddProjectClick}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            Add Project
-          </button>
-        </div>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add Project
+            </button>
+          </div>
+        )}
       </aside>
 
       <AnimatePresence>
@@ -401,7 +472,7 @@ function SidebarPresentational({
       </AnimatePresence>
 
       <AnimatePresence>
-        {createDivergenceFor && (
+        {mode === "projects" && createDivergenceFor && (
           <CreateDivergenceModal
             project={createDivergenceFor}
             onClose={() => onCreateDivergenceForChange(null)}

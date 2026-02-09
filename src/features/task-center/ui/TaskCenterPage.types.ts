@@ -1,11 +1,9 @@
 import type { BackgroundTask } from "../../../entities/task";
 
-export interface TaskCenterDrawerProps {
-  isOpen: boolean;
-  runningCount: number;
+export interface TaskCenterPageProps {
   runningTasks: BackgroundTask[];
   recentTasks: BackgroundTask[];
   focusedTaskId: string | null;
-  onClose: () => void;
   onRetryTask: (taskId: string) => Promise<void>;
+  onViewTask: (taskId: string) => void;
 }

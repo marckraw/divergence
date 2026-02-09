@@ -26,6 +26,7 @@ describe("app shortcuts utils", () => {
 
   it("resolves core shortcuts", () => {
     expect(resolveAppShortcut({ ...baseEvent, key: "k" }, baseContext)?.type).toBe("toggle_quick_switcher");
+    expect(resolveAppShortcut({ ...baseEvent, key: "i" }, baseContext)?.type).toBe("open_work_inbox");
     expect(resolveAppShortcut({ ...baseEvent, key: "," }, baseContext)?.type).toBe("toggle_settings");
     expect(resolveAppShortcut({ ...baseEvent, key: "b", shiftKey: true }, baseContext)?.type).toBe("toggle_right_panel");
     expect(resolveAppShortcut({ ...baseEvent, key: "b" }, baseContext)?.type).toBe("toggle_sidebar");
