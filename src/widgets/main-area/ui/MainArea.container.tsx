@@ -156,6 +156,25 @@ function MainAreaContainer({
     }
   }, []);
 
+  const handleRemoveFile = useCallback((path: string) => {
+    if (openFilePath !== path) {
+      return;
+    }
+
+    setOpenFilePath(null);
+    setOpenFileContent("");
+    setOpenFileInitial("");
+    setFileLoadError(null);
+    setFileSaveError(null);
+    setIsReadOnly(false);
+    setLargeFileWarning(null);
+    setOpenDiff(null);
+    setDiffLoading(false);
+    setDiffError(null);
+    setDrawerTab("edit");
+    setAllowEdit(true);
+  }, [openFilePath]);
+
   const handleOpenChange = useCallback(async (entry: GitChangeEntry) => {
     if (!activeRootPath) {
       return;
@@ -412,6 +431,7 @@ function MainAreaContainer({
       reviewRunning={reviewRunning}
       reviewError={reviewRunError}
       onOpenFile={handleOpenFile}
+      onRemoveFile={handleRemoveFile}
       onOpenChange={handleOpenChange}
       onCloseDrawer={handleCloseDrawer}
       onSaveFile={handleSaveFile}

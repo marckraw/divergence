@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { readDir } from "@tauri-apps/plugin-fs";
+import type { MouseEvent } from "react";
+import { readDir, remove } from "@tauri-apps/plugin-fs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants } from "../../../shared/lib/motion";
-import { ToolbarButton } from "../../../shared/ui";
+import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants, getPopVariants } from "../../../shared/lib/motion";
+import { MenuButton, ToolbarButton } from "../../../shared/ui";
 import {
   type FileEntry,
   getBaseName,
@@ -16,12 +17,33 @@ interface FileExplorerProps {
   rootPath: string | null;
   activeFilePath?: string | null;
   onOpenFile: (path: string) => void;
+  onRemoveFile: (path: string) => void;
 }
 
 const LARGE_ENTRY_LIMIT = 1000;
 const MOTION_ENTRY_LIMIT = 200;
 const BADGE_BASE_CLASS =
   "inline-flex items-center justify-center min-w-[22px] h-4 px-1 rounded text-[9px] font-semibold tracking-wide";
+
+interface FileExplorerContextMenuState {
+  entry: FileEntry;
+  parentPath: string;
+  x: number;
+  y: number;
+}
+
+function toErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  if (typeof err === "string") {
+    return err;
+  }
+  if (err && typeof err === "object" && "message" in err) {
+    return String((err as { message?: unknown }).message);
+  }
+  return fallback;
+}
 
 const FileBadge = ({ name }: { name: string }) => {
   const badge = getFileBadgeInfo(name);
@@ -43,14 +65,21 @@ const FolderIcon = () => (
   </svg>
 );
 
-function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProps) {
+function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: FileExplorerProps) {
   const [entriesByPath, setEntriesByPath] = useState<Map<string, FileEntry[]>>(new Map());
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [loadingDirs, setLoadingDirs] = useState<Set<string>>(new Set());
   const [errorsByPath, setErrorsByPath] = useState<Map<string, string>>(new Map());
+  const [removeError, setRemoveError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<FileExplorerContextMenuState | null>(null);
+  const [removingPath, setRemovingPath] = useState<string | null>(null);
   const shouldReduceMotion = useReducedMotion();
   const collapseVariants = useMemo(
     () => getCollapseVariants(shouldReduceMotion),
+    [shouldReduceMotion]
+  );
+  const contextMenuVariants = useMemo(
+    () => getPopVariants(shouldReduceMotion, 8, 0.98),
     [shouldReduceMotion]
   );
   const layoutTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
@@ -75,13 +104,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
         return next;
       });
     } catch (err) {
-      const message = err instanceof Error
-        ? err.message
-        : typeof err === "string"
-          ? err
-          : (err && typeof err === "object" && "message" in err)
-            ? String((err as { message?: unknown }).message)
-            : "Failed to read directory.";
+      const message = toErrorMessage(err, "Failed to read directory.");
       setErrorsByPath(prev => new Map(prev).set(path, message));
     } finally {
       setLoadingDirs(prev => {
@@ -99,6 +122,9 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
     setEntriesByPath(new Map());
     setExpandedDirs(new Set([rootPath]));
     setErrorsByPath(new Map());
+    setContextMenu(null);
+    setRemoveError(null);
+    setRemovingPath(null);
     loadDir(rootPath);
   }, [loadDir, rootPath]);
 
@@ -107,11 +133,17 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
       setEntriesByPath(new Map());
       setExpandedDirs(new Set());
       setErrorsByPath(new Map());
+      setContextMenu(null);
+      setRemoveError(null);
+      setRemovingPath(null);
       return;
     }
     setEntriesByPath(new Map());
     setExpandedDirs(new Set([rootPath]));
     setErrorsByPath(new Map());
+    setContextMenu(null);
+    setRemoveError(null);
+    setRemovingPath(null);
     loadDir(rootPath);
   }, [loadDir, rootPath]);
 
@@ -129,6 +161,57 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
       loadDir(entry.path);
     }
   }, [entriesByPath, loadDir]);
+
+  const handleContextMenuOpen = useCallback((
+    event: MouseEvent<HTMLButtonElement>,
+    entry: FileEntry,
+    parentPath: string
+  ) => {
+    event.preventDefault();
+
+    if (entry.isDir) {
+      setContextMenu(null);
+      return;
+    }
+
+    setContextMenu({
+      entry,
+      parentPath,
+      x: event.clientX,
+      y: event.clientY,
+    });
+    setRemoveError(null);
+  }, []);
+
+  const handleContextMenuClose = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleContextMenuRemoveFile = useCallback(async () => {
+    if (!contextMenu || removingPath) {
+      return;
+    }
+
+    const { entry, parentPath } = contextMenu;
+    const confirmed = window.confirm(`Remove "${entry.name}"? This cannot be undone.`);
+    if (!confirmed) {
+      setContextMenu(null);
+      return;
+    }
+
+    setRemoveError(null);
+    setRemovingPath(entry.path);
+    try {
+      await remove(entry.path);
+      onRemoveFile(entry.path);
+      await loadDir(parentPath);
+      setContextMenu(null);
+    } catch (error) {
+      setRemoveError(toErrorMessage(error, "Failed to remove file."));
+    } finally {
+      setRemovingPath(current => (current === entry.path ? null : current));
+    }
+  }, [contextMenu, loadDir, onRemoveFile, removingPath]);
 
   const renderEntries = (path: string, depth: number) => {
     const entries = entriesByPath.get(path) ?? [];
@@ -169,6 +252,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
                     }`}
                     style={{ paddingLeft: `${depth * 12 + 8}px` }}
                     onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
+                    onContextMenu={(event) => handleContextMenuOpen(event, entry, path)}
                   >
                     {entry.isDir ? (
                       <>
@@ -221,6 +305,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
                   }`}
                   style={{ paddingLeft: `${depth * 12 + 8}px` }}
                   onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
+                  onContextMenu={(event) => handleContextMenuOpen(event, entry, path)}
                 >
                   {entry.isDir ? (
                     <>
@@ -264,7 +349,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
 
   return (
     <FileExplorerPresentational>
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col" onClick={handleContextMenuClose}>
         <div className="px-4 py-3 border-b border-surface flex items-center justify-between">
           <div>
             <p className="text-xs text-subtext/70">Project Files</p>
@@ -277,9 +362,38 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile }: FileExplorerProp
             Refresh
           </ToolbarButton>
         </div>
+        {removeError && (
+          <div className="px-4 py-2 text-xs text-red border-b border-red/20 bg-red/5">
+            {removeError}
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto p-2">
           {renderEntries(rootPath, 0)}
         </div>
+        <AnimatePresence>
+          {contextMenu && (
+            <motion.div
+              className="fixed bg-surface border border-surface rounded-md shadow-lg py-1 z-50"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              variants={contextMenuVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              transition={layoutTransition}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <MenuButton
+                tone="danger"
+                disabled={Boolean(removingPath)}
+                onClick={() => {
+                  void handleContextMenuRemoveFile();
+                }}
+              >
+                {removingPath === contextMenu.entry.path ? "Removing..." : "Remove File"}
+              </MenuButton>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </FileExplorerPresentational>
   );
