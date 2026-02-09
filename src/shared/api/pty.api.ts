@@ -146,6 +146,7 @@ export async function runLoginShellCommand(
 
     const exitDisposable = pty.onExit(({ exitCode }: { exitCode: number }) => {
       settle(() => {
+        output += decoder.decode();
         resolve({
           exitCode,
           output: output.trim(),
