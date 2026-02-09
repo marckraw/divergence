@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import Sidebar from "../widgets/sidebar";
 import MainArea from "../widgets/main-area";
 import { InboxPanel } from "../features/inbox";
@@ -36,8 +37,8 @@ import { useAppSettings } from "../shared/hooks/useAppSettings";
 import { useUpdater } from "../shared/hooks/useUpdater";
 import type { Project, Divergence, TerminalSession, SplitOrientation } from "../entities";
 import { buildSplitTmuxSessionName } from "../entities/terminal-session";
-import { runLoginShellCommand } from "../shared/api/pty.api";
 import { getRalphyConfigSummary } from "../shared/api/ralphyConfig.api";
+import { runLoginShellCommand } from "../shared/api/pty.api";
 import { killTmuxSession } from "../shared/api/tmuxSessions.api";
 import {
   renderReviewAgentCommand,
@@ -74,6 +75,9 @@ const NOTIFY_COOLDOWN_MS = 3000;
 const AUTOMATION_SCHEDULER_INTERVAL_MS = 60_000;
 const GITHUB_POLL_INTERVAL_MS = 2 * 60_000;
 const GITHUB_INITIAL_POLL_DELAY_MS = 15_000;
+const AUTOMATION_COMMAND_TIMEOUT_MS = 20 * 60 * 1000;
+const AUTOMATION_OUTPUT_TAIL_CHARS = 4000;
+const AUTOMATION_OUTPUT_UPDATE_INTERVAL_MS = 600;
 
 function App() {
   const updater = useUpdater(true);
@@ -109,7 +113,7 @@ function App() {
   const commandBySessionIdRef = useRef<Map<string, (command: string) => void>>(new Map());
   const automationsRef = useRef<Automation[]>([]);
   const githubRepoTargetsRef = useRef<GithubRepoTarget[]>([]);
-  const automationsInFlightRef = useRef<Set<number>>(new Set());
+  const automationInFlightCountsRef = useRef<Map<number, number>>(new Map());
   const startupCatchupDoneRef = useRef(false);
   const githubPollingInFlightRef = useRef(false);
   const githubTokenWarningShownRef = useRef(false);
@@ -443,6 +447,39 @@ function App() {
     });
   }, []);
 
+  const sendCommandToSession = useCallback(async (
+    sessionId: string,
+    command: string,
+    options?: {
+      timeoutMs?: number;
+      activateIfNeeded?: boolean;
+    }
+  ): Promise<void> => {
+    const existingSendCommand = commandBySessionIdRef.current.get(sessionId);
+    if (existingSendCommand) {
+      existingSendCommand(command);
+      return;
+    }
+
+    const activateIfNeeded = options?.activateIfNeeded ?? true;
+    const timeoutMs = options?.timeoutMs ?? 15_000;
+    const previousActiveSessionId = activeSessionIdRef.current;
+    const shouldActivate = activateIfNeeded && previousActiveSessionId !== sessionId;
+
+    if (shouldActivate) {
+      setActiveSessionId(sessionId);
+    }
+
+    try {
+      const sendCommand = await waitForSessionCommand(sessionId, timeoutMs);
+      sendCommand(command);
+    } finally {
+      if (shouldActivate && activeSessionIdRef.current === sessionId) {
+        setActiveSessionId(previousActiveSessionId);
+      }
+    }
+  }, [waitForSessionCommand]);
+
   const createReviewAgentSession = useCallback((sourceSession: TerminalSession, agent: DiffReviewAgent): TerminalSession => {
     const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const shortRunId = entropy.split("-")[1]?.padStart(3, "0") ?? "000";
@@ -494,13 +531,12 @@ function App() {
     const reviewSession = createReviewAgentSession(sourceSession, input.agent);
     setActiveSessionId(reviewSession.id);
 
-    const sendCommand = await waitForSessionCommand(reviewSession.id);
-    sendCommand(command);
+    await sendCommandToSession(reviewSession.id, command, { activateIfNeeded: false });
   }, [
     appSettings.agentCommandClaude,
     appSettings.agentCommandCodex,
     createReviewAgentSession,
-    waitForSessionCommand,
+    sendCommandToSession,
   ]);
 
   const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
@@ -685,7 +721,8 @@ function App() {
     automation: Automation,
     triggerSource: AutomationRunTriggerSource
   ): Promise<void> => {
-    if (automationsInFlightRef.current.has(automation.id)) {
+    const inFlightCount = automationInFlightCountsRef.current.get(automation.id) ?? 0;
+    if (triggerSource !== "manual" && inFlightCount > 0) {
       return;
     }
 
@@ -730,7 +767,7 @@ function App() {
       return;
     }
 
-    automationsInFlightRef.current.add(automation.id);
+    automationInFlightCountsRef.current.set(automation.id, inFlightCount + 1);
     try {
       const details = await runTask<{
         divergenceId: number;
@@ -794,6 +831,7 @@ function App() {
             workspacePath: divergence.path,
             briefPath,
           });
+          const automationLogPath = `${divergence.path}/.divergence/automation-run-${runId}.log`;
           const diagnosticsHeader = [
             `automation=${automation.name}`,
             `run_id=${runId}`,
@@ -808,46 +846,58 @@ function App() {
           ].join("\n");
           setOutputTail(diagnosticsHeader);
 
-          setPhase(`Running ${automation.agent}`);
-          const runningHeartbeat = window.setInterval(() => {
-            setPhase(`Running ${automation.agent}`);
-          }, 5000);
+          setPhase(`Running ${automation.agent} (headless)`);
 
-          let commandResult: Awaited<ReturnType<typeof runLoginShellCommand>>;
-          try {
-            commandResult = await runLoginShellCommand({
-              cwd: divergence.path,
-              command,
-              timeoutMs: 1000 * 60 * 20,
-              outputLimitChars: 20_000,
-              outputTailChars: 4000,
-              outputUpdateIntervalMs: 600,
-              onOutputUpdate: (outputTail) => {
-                if (!outputTail.trim()) {
-                  setOutputTail(diagnosticsHeader);
-                  return;
-                }
-                setOutputTail(`${diagnosticsHeader}${outputTail}`);
-              },
-            });
-          } finally {
-            window.clearInterval(runningHeartbeat);
-          }
+          const commandResult = await runLoginShellCommand({
+            cwd: divergence.path,
+            command,
+            timeoutMs: AUTOMATION_COMMAND_TIMEOUT_MS,
+            outputLimitChars: 20_000,
+            outputTailChars: AUTOMATION_OUTPUT_TAIL_CHARS,
+            outputUpdateIntervalMs: AUTOMATION_OUTPUT_UPDATE_INTERVAL_MS,
+            onOutputUpdate: (outputChunk) => {
+              if (!outputChunk.trim()) {
+                setOutputTail(diagnosticsHeader);
+                return;
+              }
+              setOutputTail(`${diagnosticsHeader}${outputChunk}`);
+            },
+          });
+
+          // Persist output to log file for later inspection
+          const fullOutput = commandResult.output || "";
+          await writeTextFile(
+            automationLogPath,
+            `${diagnosticsHeader}${fullOutput}`
+          ).catch(() => {
+            // Non-critical: log file write failure should not fail the run
+          });
+
           if (commandResult.exitCode !== 0) {
-            const outputTail = commandResult.output.trim();
+            const outputTail = fullOutput.trim();
             throw new Error(
               outputTail
-                ? `Agent command exited with code ${commandResult.exitCode}: ${outputTail}`
-                : `Agent command exited with code ${commandResult.exitCode}.`
+                ? `Agent exited with code ${commandResult.exitCode}:\n${outputTail.slice(-AUTOMATION_OUTPUT_TAIL_CHARS)}`
+                : `Agent exited with code ${commandResult.exitCode}.`
             );
           }
+
+          // Final output update to ensure UI shows the complete result
+          const finalOutputTail = fullOutput.length > AUTOMATION_OUTPUT_TAIL_CHARS
+            ? fullOutput.slice(fullOutput.length - AUTOMATION_OUTPUT_TAIL_CHARS)
+            : fullOutput;
+          setOutputTail(
+            finalOutputTail.trim()
+              ? `${diagnosticsHeader}${finalOutputTail}`
+              : diagnosticsHeader
+          );
 
           return {
             divergenceId,
             divergencePath: divergence.path,
             branch: divergence.branch,
             command,
-            outputTail: commandResult.output.slice(-4000),
+            outputTail: fullOutput.slice(-AUTOMATION_OUTPUT_TAIL_CHARS),
           };
         },
       });
@@ -877,6 +927,9 @@ function App() {
           title: `Automation completed: ${automation.name}`,
           body: [
             `Project: ${project.name}`,
+            `Agent: ${automation.agent}`,
+            `Trigger: ${triggerSource}`,
+            `Duration: ${Math.round((endedAtMs - startedAtMs) / 1000)}s`,
             `Branch: ${details.branch}`,
             `Path: ${details.divergencePath}`,
           ].join("\n"),
@@ -886,10 +939,19 @@ function App() {
       await Promise.all([refreshAutomations(), refreshInbox()]);
     } catch (error) {
       const endedAtMs = Date.now();
+      const durationSec = Math.round((endedAtMs - startedAtMs) / 1000);
       const message = error instanceof Error ? error.message : String(error);
       const nextRunAtMs = automation.enabled
         ? computeAutomationNextRunAtMs(endedAtMs, automation.intervalHours)
         : null;
+      const errorBody = [
+        `Project: ${project.name}`,
+        `Agent: ${automation.agent}`,
+        `Trigger: ${triggerSource}`,
+        `Duration: ${durationSec}s`,
+        "",
+        message,
+      ].join("\n");
       await Promise.all([
         updateAutomationRun(runId, {
           status: "error",
@@ -909,12 +971,17 @@ function App() {
           projectId: project.id,
           externalId: `automation:${automation.id}:run:${runId}:error`,
           title: `Automation failed: ${automation.name}`,
-          body: message,
+          body: errorBody,
         }),
       ]);
       await Promise.all([refreshAutomations(), refreshInbox()]);
     } finally {
-      automationsInFlightRef.current.delete(automation.id);
+      const remainingCount = (automationInFlightCountsRef.current.get(automation.id) ?? 1) - 1;
+      if (remainingCount > 0) {
+        automationInFlightCountsRef.current.set(automation.id, remainingCount);
+      } else {
+        automationInFlightCountsRef.current.delete(automation.id);
+      }
     }
   }, [
     appSettings.agentCommandClaude,

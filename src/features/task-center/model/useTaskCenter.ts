@@ -267,7 +267,7 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
               status: "error",
               phase: "Failed",
               endedAtMs: Date.now(),
-              error: options.errorMessage ?? normalized.message,
+              error: normalized.message || options.errorMessage || `${options.title} failed`,
               retryable: true,
               lastUpdatedAtMs: Date.now(),
               phaseEvents: appendPhaseEvent(task.phaseEvents, {

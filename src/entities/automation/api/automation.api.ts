@@ -156,6 +156,7 @@ export async function listAutomationRuns(limit: number = 200): Promise<Automatio
 
 export async function insertAutomationRun(input: CreateAutomationRunInput): Promise<number> {
   const database = await getDb();
+  const startedAtMs = input.startedAtMs ?? null;
   await database.execute(
     `INSERT INTO automation_runs (
       automation_id,
@@ -170,14 +171,36 @@ export async function insertAutomationRun(input: CreateAutomationRunInput): Prom
       input.automationId,
       input.triggerSource,
       input.status,
-      input.startedAtMs ?? null,
+      startedAtMs,
       input.endedAtMs ?? null,
       input.error ?? null,
       input.detailsJson ?? null,
     ]
   );
-  const rows = await database.select<{ id: number }[]>("SELECT last_insert_rowid() AS id");
-  return rows[0]?.id ?? 0;
+
+  // tauri-plugin-sql may not preserve last_insert_rowid() across pooled statements.
+  // Resolve by querying the just-inserted row with stable attributes.
+  if (startedAtMs !== null) {
+    const rows = await database.select<{ id: number }[]>(
+      `SELECT id
+         FROM automation_runs
+        WHERE automation_id = ?
+          AND trigger_source = ?
+          AND started_at_ms = ?
+        ORDER BY id DESC
+        LIMIT 1`,
+      [input.automationId, input.triggerSource, startedAtMs]
+    );
+    if (rows[0]?.id) {
+      return rows[0].id;
+    }
+  }
+
+  const fallbackRows = await database.select<{ id: number }[]>(
+    "SELECT id FROM automation_runs WHERE automation_id = ? ORDER BY id DESC LIMIT 1",
+    [input.automationId]
+  );
+  return fallbackRows[0]?.id ?? 0;
 }
 
 export async function updateAutomationRun(
