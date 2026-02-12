@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod git;
+mod usage_limits;
 
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -118,6 +119,9 @@ pub fn run() {
             commands::query_tmux_pane_status,
             commands::read_file_tail,
             commands::read_file_if_exists,
+            usage_limits::get_usage_limits_status,
+            usage_limits::fetch_claude_usage,
+            usage_limits::fetch_codex_usage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

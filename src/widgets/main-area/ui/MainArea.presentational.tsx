@@ -9,6 +9,7 @@ import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared/lib/motion";
 import { TabButton, ToolbarButton } from "../../../shared/ui";
+import { UsageLimitsButton } from "../../../features/usage-limits";
 import type { MainAreaPresentationalProps } from "./MainArea.types";
 
 function MainAreaPresentational({
@@ -243,6 +244,7 @@ function MainAreaPresentational({
           >
             Reconnect
           </ToolbarButton>
+          <UsageLimitsButton />
           <ToolbarButton
             iconOnly
             onClick={onToggleRightPanel}
