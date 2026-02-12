@@ -24,11 +24,11 @@ export function useMergeDetection(
     try {
       const status = await checkBranchStatus(divergence.path, divergence.branch);
 
-      const hasDiverged = Boolean(divergence.has_diverged)
+      const hasDiverged = divergence.hasDiverged
         || divergedRef.current.has(divergence.id)
         || status.diverged;
 
-      if (status.diverged && !divergence.has_diverged) {
+      if (status.diverged && !divergence.hasDiverged) {
         divergedRef.current.add(divergence.id);
         try {
           await markDivergenceAsDiverged(divergence.id);
@@ -39,7 +39,7 @@ export function useMergeDetection(
 
       if (status.merged && hasDiverged) {
         setMergedDivergences((previous) => new Set(previous).add(divergence.id));
-        const project = projectsById.get(divergence.project_id);
+        const project = projectsById.get(divergence.projectId);
         if (project && onMergeDetected) {
           onMergeDetected({
             divergence,

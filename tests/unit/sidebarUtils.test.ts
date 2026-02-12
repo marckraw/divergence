@@ -14,19 +14,19 @@ import {
 } from "../../src/widgets/sidebar/lib/sidebar.pure";
 
 const projects: Project[] = [
-  { id: 1, name: "A", path: "/a", created_at: "2026-01-01" },
-  { id: 2, name: "B", path: "/b", created_at: "2026-01-01" },
+  { id: 1, name: "A", path: "/a", createdAt: "2026-01-01" },
+  { id: 2, name: "B", path: "/b", createdAt: "2026-01-01" },
 ];
 
 const divergences = new Map<number, Divergence[]>([
   [1, [{
     id: 10,
-    project_id: 1,
+    projectId: 1,
     name: "A div",
     branch: "feat/x",
     path: "/a/x",
-    created_at: "2026-01-01",
-    has_diverged: 0,
+    createdAt: "2026-01-01",
+    hasDiverged: false,
   }]],
 ]);
 

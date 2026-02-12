@@ -12,7 +12,7 @@ import {
 
 interface TmuxDivergenceRef {
   id: number;
-  project_id: number;
+  projectId: number;
   branch: string;
 }
 
@@ -58,7 +58,7 @@ export async function killDivergenceTmuxSessions(
   const divergenceSessionName = buildTmuxSessionName({
     type: "divergence",
     projectName,
-    projectId: divergence.project_id,
+    projectId: divergence.projectId,
     divergenceId: divergence.id,
     branch: divergence.branch,
   });

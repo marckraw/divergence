@@ -9,6 +9,7 @@ use std::time::Instant;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: i64,
     pub name: String,
@@ -17,6 +18,7 @@ pub struct Project {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Divergence {
     pub id: i64,
     pub project_id: i64,
@@ -24,7 +26,7 @@ pub struct Divergence {
     pub branch: String,
     pub path: String,
     pub created_at: String,
-    pub has_diverged: i32,
+    pub has_diverged: bool,
 }
 
 #[tauri::command]
@@ -103,7 +105,7 @@ pub async fn create_divergence(
         branch: branch_name,
         path: divergence_path.to_string_lossy().to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),
-        has_diverged: 0,
+        has_diverged: false,
     })
 }
 

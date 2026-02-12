@@ -1,12 +1,4 @@
-export interface Divergence {
-  id: number;
-  project_id: number;
-  name: string;
-  branch: string;
-  path: string;
-  created_at: string;
-  has_diverged: number;
-}
+export type { Divergence } from "../../../shared/api/schema";
 
 export type GitChangeStatus = "A" | "M" | "D" | "R" | "C" | "U" | "?";
 

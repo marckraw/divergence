@@ -158,6 +158,34 @@
           "function-variable"
         ],
         "message": "Exported pure functions must be referenced in unit tests"
+      },
+      {
+        "type": "regex",
+        "id": "no-direct-sql-plugin-import",
+        "severity": "error",
+        "files": "src/**/*.{ts,tsx}",
+        "exclude": [
+          "src/shared/api/database.api.ts",
+          "src/shared/api/drizzle.api.ts"
+        ],
+        "pattern": "@tauri-apps/plugin-sql",
+        "message": "Direct @tauri-apps/plugin-sql imports are forbidden. Use Drizzle ORM via src/shared/api/drizzle.api.ts"
+      },
+      {
+        "type": "regex",
+        "id": "no-raw-db-import-in-entities",
+        "severity": "error",
+        "files": "src/{entities,features}/**/*.{ts,tsx}",
+        "pattern": "from\\s+[\"'].*database\\.api[\"']",
+        "message": "Entity/feature files must not import from database.api.ts. Use Drizzle ORM via drizzle.api.ts instead."
+      },
+      {
+        "type": "regex",
+        "id": "no-raw-sql-strings",
+        "severity": "error",
+        "files": "src/{entities,features}/**/*.{ts,tsx}",
+        "pattern": "\\b(INSERT\\s+INTO|DELETE\\s+FROM|UPDATE\\s+\\w+\\s+SET|SELECT\\s+.*\\s+FROM|ALTER\\s+TABLE|CREATE\\s+TABLE)\\b",
+        "message": "Raw SQL strings are forbidden in entity/feature files. Use Drizzle ORM query builder."
       }
     ]
   },

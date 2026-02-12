@@ -1,6 +1,1 @@
-export interface Project {
-  id: number;
-  name: string;
-  path: string;
-  created_at: string;
-}
+export type { Project } from "../../../shared/api/schema";
