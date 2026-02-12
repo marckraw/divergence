@@ -1,5 +1,15 @@
 # divergence
 
+## 0.10.0
+
+### Minor Changes
+
+- 39cb60e: Add "View Terminal" button to task inspector for attaching to automation tmux sessions, and "Keep Session Alive" toggle to preserve sessions after agent completion
+
+### Patch Changes
+
+- a880bf3: ability to remove files from file explorer
+
 ## 0.9.0
 
 ### Minor Changes
