@@ -1,5 +1,11 @@
 # divergence
 
+## 0.11.0
+
+### Minor Changes
+
+- 8ee984d: Add resizable left sidebar with drag handle. Drag the edge to resize (180–480px), double-click to reset to default width.
+
 ## 0.10.0
 
 ### Minor Changes
