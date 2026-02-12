@@ -785,6 +785,49 @@ pub async fn get_branch_diff(
     })
 }
 
+#[derive(Debug, Serialize)]
+pub struct TmuxPaneStatusEntry {
+    pub alive: bool,
+    pub exit_code: Option<i32>,
+}
+
+#[tauri::command]
+pub async fn spawn_tmux_automation_session(
+    session_name: String,
+    command: String,
+    cwd: String,
+    log_path: String,
+    env_vars: Vec<(String, String)>,
+) -> Result<(), String> {
+    git::spawn_tmux_automation_session(&session_name, &command, &cwd, &log_path, &env_vars)
+}
+
+#[tauri::command]
+pub async fn query_tmux_pane_status(
+    session_name: String,
+) -> Result<TmuxPaneStatusEntry, String> {
+    let status = git::query_tmux_pane_status(&session_name)?;
+    Ok(TmuxPaneStatusEntry {
+        alive: status.alive,
+        exit_code: status.exit_code,
+    })
+}
+
+#[tauri::command]
+pub async fn read_file_tail(
+    path: String,
+    max_bytes: u64,
+) -> Result<Option<String>, String> {
+    git::read_file_tail(&path, max_bytes)
+}
+
+#[tauri::command]
+pub async fn read_file_if_exists(
+    path: String,
+) -> Result<Option<String>, String> {
+    git::read_file_if_exists(&path)
+}
+
 #[tauri::command]
 pub async fn write_review_brief_file(
     workspace_path: String,

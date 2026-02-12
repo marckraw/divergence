@@ -1058,6 +1058,189 @@ fn is_untracked(repo_path: &Path, rel_path: &str) -> bool {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct TmuxPaneStatus {
+    pub alive: bool,
+    pub exit_code: Option<i32>,
+}
+
+pub fn spawn_tmux_automation_session(
+    session_name: &str,
+    command: &str,
+    cwd: &str,
+    _log_path: &str,
+    env_vars: &[(String, String)],
+) -> Result<(), String> {
+    if !session_name.starts_with("divergence-") {
+        return Err("Automation session name must start with 'divergence-'".to_string());
+    }
+
+    // Write the wrapper command to a temporary script file to avoid quoting hell.
+    // tmux new-session passes its command through a shell layer, and the wrapper
+    // command contains single-quoted paths, shell variables ($, ${}, PIPESTATUS),
+    // pipes, and && chains — making inline quoting extremely fragile.
+    let script_dir = PathBuf::from(cwd).join(".divergence").join("automation-runs");
+    fs::create_dir_all(&script_dir)
+        .map_err(|e| format!("Failed to create automation-runs directory: {}", e))?;
+
+    let script_path = script_dir.join(format!("{}.sh", session_name));
+    fs::write(&script_path, format!("#!/usr/bin/env bash\n{}\n", command))
+        .map_err(|e| format!("Failed to write automation script: {}", e))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755));
+    }
+
+    let script_path_str = script_path.to_string_lossy().to_string();
+    let bash_command = format!("bash -l {}", shell_escape(&script_path_str));
+
+    let mut cmd = command_with_tmux();
+    cmd.args([
+        "new-session",
+        "-d",
+        "-s",
+        session_name,
+        "-x",
+        "200",
+        "-y",
+        "50",
+        "-c",
+        cwd,
+    ]);
+    for (key, value) in env_vars {
+        cmd.args(["-e", &format!("{}={}", key, value)]);
+    }
+    cmd.arg(&bash_command);
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Failed to execute tmux new-session: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to create tmux session: {}", stderr));
+    }
+
+    // Set remain-on-exit so we can inspect results after the process exits
+    let _ = command_with_tmux()
+        .args(["set-option", "-t", session_name, "remain-on-exit", "on"])
+        .output();
+
+    // Note: logging is handled by `tee -a` in the wrapper script itself.
+    // We intentionally do NOT use pipe-pane here because it would race with
+    // tee and produce duplicated/interleaved output in the same log file.
+
+    Ok(())
+}
+
+pub fn query_tmux_pane_status(session_name: &str) -> Result<TmuxPaneStatus, String> {
+    // Remove TMUX env var so tmux doesn't fall back to the current session
+    // when the target session doesn't exist. Without this, if the Tauri process
+    // is started from within a tmux session, tmux silently queries the parent
+    // session instead of erroring, causing stuck "alive" status.
+    let output = command_with_tmux()
+        .env_remove("TMUX")
+        .args([
+            "display-message",
+            "-t",
+            session_name,
+            "-p",
+            "#{pane_dead}|#{pane_dead_status}",
+        ])
+        .output();
+
+    let result = match output {
+        Ok(r) => r,
+        Err(err) => {
+            if err.kind() == ErrorKind::NotFound {
+                return Err("tmux not found".to_string());
+            }
+            return Err(format!("Failed to execute tmux: {}", err));
+        }
+    };
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        if stderr.contains("can't find session")
+            || stderr.contains("no server running")
+            || stderr.contains("failed to connect to server")
+            || stderr.contains("session not found")
+        {
+            return Err("session_not_found".to_string());
+        }
+        return Err(format!("Failed to query tmux pane status: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&result.stdout).trim().to_string();
+    let parts: Vec<&str> = stdout.split('|').collect();
+    if parts.len() < 2 {
+        return Ok(TmuxPaneStatus {
+            alive: true,
+            exit_code: None,
+        });
+    }
+
+    let pane_dead = parts[0] == "1";
+    let exit_code = if pane_dead {
+        parts[1].trim().parse::<i32>().ok()
+    } else {
+        None
+    };
+
+    Ok(TmuxPaneStatus {
+        alive: !pane_dead,
+        exit_code,
+    })
+}
+
+pub fn read_file_tail(path: &str, max_bytes: u64) -> Result<Option<String>, String> {
+    let file_path = Path::new(path);
+    if !file_path.exists() {
+        return Ok(None);
+    }
+
+    let metadata = fs::metadata(file_path)
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    let file_size = metadata.len();
+
+    if file_size == 0 {
+        return Ok(Some(String::new()));
+    }
+
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = fs::File::open(file_path)
+        .map_err(|e| format!("Failed to open file: {}", e))?;
+
+    let read_start = file_size.saturating_sub(max_bytes);
+
+    file.seek(SeekFrom::Start(read_start))
+        .map_err(|e| format!("Failed to seek: {}", e))?;
+
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    Ok(Some(String::from_utf8_lossy(&buffer).to_string()))
+}
+
+pub fn read_file_if_exists(path: &str) -> Result<Option<String>, String> {
+    let file_path = Path::new(path);
+    if !file_path.exists() {
+        return Ok(None);
+    }
+
+    let contents = fs::read_to_string(file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    Ok(Some(contents))
+}
+
+fn shell_escape(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
 pub fn list_branch_changes(repo_path: &Path) -> Result<BranchChanges, String> {
     let base_ref = find_base_ref(repo_path)?;
     let Some(ref base) = base_ref else {

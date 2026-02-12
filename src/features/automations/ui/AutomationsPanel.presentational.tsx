@@ -60,6 +60,8 @@ function AutomationCard({
           </div>
           <div className="text-xs text-subtext mt-1">
             {automation.enabled ? "Enabled" : "Disabled"}
+            {" • "}
+            {automation.keepSessionAlive ? "Interactive" : "Autonomous"}
           </div>
         </div>
         <div className="text-xs text-subtext">
@@ -241,6 +243,22 @@ function AutomationEditorModal({
             />
             Enabled
           </label>
+
+          <div>
+            <label className="inline-flex items-center gap-2 text-xs text-text">
+              <input
+                type="checkbox"
+                checked={form.keepSessionAlive}
+                onChange={(event) => onFormChange("keepSessionAlive", event.target.checked)}
+                className="accent-accent"
+              />
+              Keep terminal session alive after completion
+            </label>
+            <div className="text-[11px] text-subtext ml-5 mt-1">
+              When enabled, the tmux session won't be killed after the agent finishes,
+              allowing you to attach and inspect the results.
+            </div>
+          </div>
 
           {formError && (
             <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">

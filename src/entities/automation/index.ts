@@ -15,7 +15,9 @@ export {
   insertAutomationRun,
   listAutomations,
   listAutomationRuns,
+  listRunningAutomationRuns,
   markAutomationRunSchedule,
   updateAutomation,
   updateAutomationRun,
+  updateAutomationRunTmuxSession,
 } from "./api/automation.api";

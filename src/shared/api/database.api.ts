@@ -58,6 +58,7 @@ async function ensureAutomationColumns(database: Database): Promise<void> {
     const hasNextRunAtMs = columns.some((column) => column.name === "next_run_at_ms");
     const hasCreatedAtMs = columns.some((column) => column.name === "created_at_ms");
     const hasUpdatedAtMs = columns.some((column) => column.name === "updated_at_ms");
+    const hasKeepSessionAlive = columns.some((column) => column.name === "keep_session_alive");
 
     if (!hasLastRunAtMs) {
       await database.execute(
@@ -79,8 +80,51 @@ async function ensureAutomationColumns(database: Database): Promise<void> {
         "ALTER TABLE automations ADD COLUMN updated_at_ms INTEGER NOT NULL DEFAULT 0"
       );
     }
+    if (!hasKeepSessionAlive) {
+      await database.execute(
+        "ALTER TABLE automations ADD COLUMN keep_session_alive INTEGER NOT NULL DEFAULT 0"
+      );
+    }
   } catch (err) {
     console.warn("Failed to ensure automations columns:", err);
+  }
+}
+
+async function ensureAutomationRunColumns(database: Database): Promise<void> {
+  try {
+    const columns = await database.select<{ name: string }[]>(
+      "PRAGMA table_info(automation_runs)"
+    );
+    if (columns.length === 0) {
+      return;
+    }
+    const hasTmuxSessionName = columns.some((column) => column.name === "tmux_session_name");
+    const hasLogFilePath = columns.some((column) => column.name === "log_file_path");
+    const hasResultFilePath = columns.some((column) => column.name === "result_file_path");
+    const hasKeepSessionAlive = columns.some((column) => column.name === "keep_session_alive");
+
+    if (!hasTmuxSessionName) {
+      await database.execute(
+        "ALTER TABLE automation_runs ADD COLUMN tmux_session_name TEXT"
+      );
+    }
+    if (!hasLogFilePath) {
+      await database.execute(
+        "ALTER TABLE automation_runs ADD COLUMN log_file_path TEXT"
+      );
+    }
+    if (!hasResultFilePath) {
+      await database.execute(
+        "ALTER TABLE automation_runs ADD COLUMN result_file_path TEXT"
+      );
+    }
+    if (!hasKeepSessionAlive) {
+      await database.execute(
+        "ALTER TABLE automation_runs ADD COLUMN keep_session_alive INTEGER NOT NULL DEFAULT 0"
+      );
+    }
+  } catch (err) {
+    console.warn("Failed to ensure automation_runs columns:", err);
   }
 }
 
@@ -151,6 +195,7 @@ export async function getDb(): Promise<Database> {
         prompt TEXT NOT NULL,
         interval_hours INTEGER NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
+        keep_session_alive INTEGER NOT NULL DEFAULT 0,
         last_run_at_ms INTEGER,
         next_run_at_ms INTEGER,
         created_at_ms INTEGER NOT NULL,
@@ -163,11 +208,15 @@ export async function getDb(): Promise<Database> {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         automation_id INTEGER NOT NULL,
         trigger_source TEXT NOT NULL CHECK(trigger_source IN ('schedule', 'manual', 'startup_catchup')),
-        status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'success', 'error', 'skipped')),
+        status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'success', 'error', 'skipped', 'cancelled')),
         started_at_ms INTEGER,
         ended_at_ms INTEGER,
         error TEXT,
         details_json TEXT,
+        keep_session_alive INTEGER NOT NULL DEFAULT 0,
+        tmux_session_name TEXT,
+        log_file_path TEXT,
+        result_file_path TEXT,
         FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE CASCADE
       )
     `);
@@ -202,6 +251,7 @@ export async function getDb(): Promise<Database> {
     await ensureProjectSettingsColumns(db);
     await ensureDivergenceColumns(db);
     await ensureAutomationColumns(db);
+    await ensureAutomationRunColumns(db);
     await ensureInboxColumns(db);
   }
   return db;

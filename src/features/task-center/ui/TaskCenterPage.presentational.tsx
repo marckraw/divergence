@@ -134,10 +134,12 @@ function TaskInspectModal({
   task,
   nowMs,
   onClose,
+  onAttachToAutomationSession,
 }: {
   task: BackgroundTask;
   nowMs: number;
   onClose: () => void;
+  onAttachToAutomationSession?: (task: BackgroundTask) => void;
 }) {
   const phaseEvents = (task.phaseEvents ?? []).slice().reverse();
 
@@ -185,6 +187,12 @@ function TaskInspectModal({
               <div className="text-subtext">Started</div>
               <div className="mt-1 text-text">{formatDateTime(task.startedAtMs ?? task.createdAtMs)}</div>
             </div>
+            {task.target.tmuxSessionName && (
+              <div className="rounded border border-surface bg-main p-3 sm:col-span-2">
+                <div className="text-subtext">Tmux session</div>
+                <div className="mt-1 text-text font-mono break-all select-all">{task.target.tmuxSessionName}</div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -226,6 +234,24 @@ function TaskInspectModal({
               </div>
             )}
           </div>
+
+          {task.kind === "automation_run" && task.target.tmuxSessionName && onAttachToAutomationSession && (
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-surface">
+              <button
+                type="button"
+                onClick={() => {
+                  onAttachToAutomationSession(task);
+                  onClose();
+                }}
+                className="px-3 py-1.5 text-xs rounded border border-accent/50 text-accent hover:bg-accent/10"
+              >
+                View Terminal
+              </button>
+              <span className="text-[11px] text-subtext">
+                Attach to the agent's tmux session
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -238,6 +264,7 @@ function TaskCenterPagePresentational({
   focusedTaskId,
   onRetryTask,
   onViewTask,
+  onAttachToAutomationSession,
   nowMs,
 }: TaskCenterPagePresentationalProps) {
   const [inspectTaskId, setInspectTaskId] = useState<string | null>(null);
@@ -308,6 +335,7 @@ function TaskCenterPagePresentational({
           task={inspectedTask}
           nowMs={nowMs}
           onClose={() => setInspectTaskId(null)}
+          onAttachToAutomationSession={onAttachToAutomationSession}
         />
       )}
     </div>

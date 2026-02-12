@@ -15,6 +15,7 @@ interface AutomationRow {
   prompt: string;
   interval_hours: number;
   enabled: number;
+  keep_session_alive: number;
   last_run_at_ms: number | null;
   next_run_at_ms: number | null;
   created_at_ms: number;
@@ -25,11 +26,15 @@ interface AutomationRunRow {
   id: number;
   automation_id: number;
   trigger_source: "schedule" | "manual" | "startup_catchup";
-  status: "queued" | "running" | "success" | "error" | "skipped";
+  status: "queued" | "running" | "success" | "error" | "skipped" | "cancelled";
   started_at_ms: number | null;
   ended_at_ms: number | null;
   error: string | null;
   details_json: string | null;
+  keep_session_alive: number;
+  tmux_session_name: string | null;
+  log_file_path: string | null;
+  result_file_path: string | null;
 }
 
 function mapAutomationRow(row: AutomationRow): Automation {
@@ -41,6 +46,7 @@ function mapAutomationRow(row: AutomationRow): Automation {
     prompt: row.prompt,
     intervalHours: row.interval_hours,
     enabled: Boolean(row.enabled),
+    keepSessionAlive: Boolean(row.keep_session_alive),
     lastRunAtMs: row.last_run_at_ms,
     nextRunAtMs: row.next_run_at_ms,
     createdAtMs: row.created_at_ms,
@@ -58,6 +64,10 @@ function mapAutomationRunRow(row: AutomationRunRow): AutomationRun {
     endedAtMs: row.ended_at_ms,
     error: row.error,
     detailsJson: row.details_json,
+    keepSessionAlive: Boolean(row.keep_session_alive),
+    tmuxSessionName: row.tmux_session_name,
+    logFilePath: row.log_file_path,
+    resultFilePath: row.result_file_path,
   };
 }
 
@@ -81,11 +91,12 @@ export async function insertAutomation(input: CreateAutomationInput): Promise<nu
       prompt,
       interval_hours,
       enabled,
+      keep_session_alive,
       last_run_at_ms,
       next_run_at_ms,
       created_at_ms,
       updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.name,
       input.projectId,
@@ -93,6 +104,7 @@ export async function insertAutomation(input: CreateAutomationInput): Promise<nu
       input.prompt,
       input.intervalHours,
       input.enabled ? 1 : 0,
+      input.keepSessionAlive ? 1 : 0,
       null,
       nextRunAtMs,
       nowMs,
@@ -123,6 +135,7 @@ export async function updateAutomation(input: UpdateAutomationInput): Promise<vo
            prompt = ?,
            interval_hours = ?,
            enabled = ?,
+           keep_session_alive = ?,
            next_run_at_ms = ?,
            updated_at_ms = ?
      WHERE id = ?`,
@@ -133,6 +146,7 @@ export async function updateAutomation(input: UpdateAutomationInput): Promise<vo
       input.prompt,
       input.intervalHours,
       input.enabled ? 1 : 0,
+      input.keepSessionAlive ? 1 : 0,
       nextRunAtMs,
       nowMs,
       input.id,
@@ -165,8 +179,12 @@ export async function insertAutomationRun(input: CreateAutomationRunInput): Prom
       started_at_ms,
       ended_at_ms,
       error,
-      details_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      details_json,
+      keep_session_alive,
+      tmux_session_name,
+      log_file_path,
+      result_file_path
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       input.automationId,
       input.triggerSource,
@@ -175,6 +193,10 @@ export async function insertAutomationRun(input: CreateAutomationRunInput): Prom
       input.endedAtMs ?? null,
       input.error ?? null,
       input.detailsJson ?? null,
+      input.keepSessionAlive ? 1 : 0,
+      input.tmuxSessionName ?? null,
+      input.logFilePath ?? null,
+      input.resultFilePath ?? null,
     ]
   );
 
@@ -230,6 +252,33 @@ export async function updateAutomationRun(
       input.detailsJson ?? null,
       runId,
     ]
+  );
+}
+
+export async function listRunningAutomationRuns(): Promise<AutomationRun[]> {
+  const database = await getDb();
+  const rows = await database.select<AutomationRunRow[]>(
+    "SELECT * FROM automation_runs WHERE status = 'running' ORDER BY id ASC"
+  );
+  return rows.map(mapAutomationRunRow);
+}
+
+export async function updateAutomationRunTmuxSession(
+  runId: number,
+  input: {
+    tmuxSessionName: string;
+    logFilePath: string;
+    resultFilePath: string;
+  }
+): Promise<void> {
+  const database = await getDb();
+  await database.execute(
+    `UPDATE automation_runs
+       SET tmux_session_name = ?,
+           log_file_path = ?,
+           result_file_path = ?
+     WHERE id = ?`,
+    [input.tmuxSessionName, input.logFilePath, input.resultFilePath, runId]
   );
 }
 

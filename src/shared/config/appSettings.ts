@@ -23,6 +23,8 @@ export interface AppSettings {
   agentCommandCodex: string;
 }
 
+type AgentCommandTemplate = "claude" | "codex";
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultShell: "/bin/zsh",
   theme: "dark",
@@ -30,11 +32,47 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
   divergenceBasePath: "",
-  agentCommandClaude: "cat \"{briefPath}\" | claude",
-  agentCommandCodex: "codex exec --full-auto -C \"{workspacePath}\" - < \"{briefPath}\"",
+  agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+  agentCommandCodex:
+    "codex exec --dangerously-bypass-approvals-and-sandbox -C \"{workspacePath}\" - < \"{briefPath}\"",
 };
 
-const LEGACY_CODEX_COMMAND_TEMPLATE = "cat \"{briefPath}\" | codex";
+const LEGACY_CLAUDE_COMMAND_TEMPLATES = [
+  "cat \"{briefPath}\" | claude",
+  "cat {briefPath} | claude",
+  'claude -p "$(cat \\"{briefPath}\\")" --dangerously-skip-permissions',
+];
+const LEGACY_CODEX_COMMAND_TEMPLATES = [
+  "cat \"{briefPath}\" | codex",
+  "codex exec --full-auto -C \"{workspacePath}\" - < \"{briefPath}\"",
+];
+const LEGACY_CLAUDE_PIPE_COMMAND_PATTERN = /^cat\s+["']?\{briefPath\}["']?\s*\|\s*claude(?:\s+.*)?$/;
+const LEGACY_CODEX_PIPE_COMMAND_PATTERN = /^cat\s+["']?\{briefPath\}["']?\s*\|\s*codex(?:\s+.*)?$/;
+const LEGACY_CODEX_FULL_AUTO_COMMAND_PATTERN = /^codex\s+exec\b(?=.*(?:^|\s)--full-auto(?:\s|$)).*$/;
+
+export function migrateAgentCommandTemplate(agent: AgentCommandTemplate, template: string): string {
+  const normalizedTemplate = template.trim();
+
+  if (agent === "claude") {
+    if (
+      LEGACY_CLAUDE_COMMAND_TEMPLATES.includes(normalizedTemplate) ||
+      LEGACY_CLAUDE_PIPE_COMMAND_PATTERN.test(normalizedTemplate)
+    ) {
+      return DEFAULT_APP_SETTINGS.agentCommandClaude;
+    }
+    return template;
+  }
+
+  if (
+    LEGACY_CODEX_COMMAND_TEMPLATES.includes(normalizedTemplate) ||
+    LEGACY_CODEX_PIPE_COMMAND_PATTERN.test(normalizedTemplate) ||
+    LEGACY_CODEX_FULL_AUTO_COMMAND_PATTERN.test(normalizedTemplate)
+  ) {
+    return DEFAULT_APP_SETTINGS.agentCommandCodex;
+  }
+
+  return template;
+}
 
 export function normalizeTmuxHistoryLimit(
   value: unknown,
@@ -73,13 +111,12 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
   const agentCommandClaude = typeof input?.agentCommandClaude === "string"
     ? input.agentCommandClaude
     : DEFAULT_APP_SETTINGS.agentCommandClaude;
+  const migratedAgentCommandClaude = migrateAgentCommandTemplate("claude", agentCommandClaude);
 
   const agentCommandCodex = typeof input?.agentCommandCodex === "string"
     ? input.agentCommandCodex
     : DEFAULT_APP_SETTINGS.agentCommandCodex;
-  const migratedAgentCommandCodex = agentCommandCodex === LEGACY_CODEX_COMMAND_TEMPLATE
-    ? DEFAULT_APP_SETTINGS.agentCommandCodex
-    : agentCommandCodex;
+  const migratedAgentCommandCodex = migrateAgentCommandTemplate("codex", agentCommandCodex);
 
   return {
     ...DEFAULT_APP_SETTINGS,
@@ -87,7 +124,7 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
     editorThemeForLightMode,
     editorThemeForDarkMode,
-    agentCommandClaude,
+    agentCommandClaude: migratedAgentCommandClaude,
     agentCommandCodex: migratedAgentCommandCodex,
   };
 }

@@ -15,6 +15,7 @@ export interface AutomationFormState {
   prompt: string;
   intervalHours: number;
   enabled: boolean;
+  keepSessionAlive: boolean;
 }
 
 export interface AutomationsPanelProps {

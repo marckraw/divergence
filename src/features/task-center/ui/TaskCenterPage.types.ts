@@ -6,4 +6,5 @@ export interface TaskCenterPageProps {
   focusedTaskId: string | null;
   onRetryTask: (taskId: string) => Promise<void>;
   onViewTask: (taskId: string) => void;
+  onAttachToAutomationSession?: (task: BackgroundTask) => void;
 }

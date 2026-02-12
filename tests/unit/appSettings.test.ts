@@ -71,4 +71,28 @@ describe("normalizeAppSettings", () => {
 
     expect(normalized.agentCommandCodex).toBe(DEFAULT_APP_SETTINGS.agentCommandCodex);
   });
+
+  it("migrates codex full-auto template to bypass template", () => {
+    const normalized = normalizeAppSettings({
+      agentCommandCodex: "codex exec --full-auto -C \"{workspacePath}\" - < \"{briefPath}\"",
+    });
+
+    expect(normalized.agentCommandCodex).toBe(DEFAULT_APP_SETTINGS.agentCommandCodex);
+  });
+
+  it("migrates legacy claude interactive template to headless template", () => {
+    const normalized = normalizeAppSettings({
+      agentCommandClaude: "cat \"{briefPath}\" | claude",
+    });
+
+    expect(normalized.agentCommandClaude).toBe(DEFAULT_APP_SETTINGS.agentCommandClaude);
+  });
+
+  it("migrates legacy claude escaped-quote template to single-quote template", () => {
+    const normalized = normalizeAppSettings({
+      agentCommandClaude: 'claude -p "$(cat \\"{briefPath}\\")" --dangerously-skip-permissions',
+    });
+
+    expect(normalized.agentCommandClaude).toBe(DEFAULT_APP_SETTINGS.agentCommandClaude);
+  });
 });

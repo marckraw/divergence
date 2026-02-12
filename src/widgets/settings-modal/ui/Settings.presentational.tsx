@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import type { Automation } from "../../../entities/automation";
 import {
   EDITOR_THEME_OPTIONS_DARK,
   EDITOR_THEME_OPTIONS_LIGHT,
@@ -8,15 +9,298 @@ import {
 import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../../../shared/lib/motion";
 import type { SettingsPresentationalProps } from "./Settings.types";
 
+function formatDateTime(value: number | null | undefined): string {
+  if (!value) {
+    return "Never";
+  }
+  return new Date(value).toLocaleString();
+}
+
+function formatRunStatus(status: string | undefined): string {
+  if (!status) {
+    return "No runs yet";
+  }
+  if (status === "success") {
+    return "Success";
+  }
+  if (status === "error") {
+    return "Failed";
+  }
+  if (status === "running") {
+    return "Running";
+  }
+  if (status === "queued") {
+    return "Queued";
+  }
+  if (status === "skipped") {
+    return "Skipped";
+  }
+  return status;
+}
+
+function AutomationCard({
+  automation,
+  isBusy,
+  latestStatus,
+  latestEndedAtMs,
+  onEdit,
+  onDelete,
+  onRunNow,
+}: {
+  automation: Automation;
+  isBusy: boolean;
+  latestStatus?: string;
+  latestEndedAtMs?: number | null;
+  onEdit: () => void;
+  onDelete: () => Promise<void>;
+  onRunNow: () => Promise<void>;
+}) {
+  return (
+    <div className="rounded-md border border-surface bg-main/60 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm text-text font-semibold truncate">{automation.name}</div>
+          <div className="text-xs text-subtext mt-1">
+            {automation.agent.toUpperCase()} - every {automation.intervalHours}h -{" "}
+            {automation.enabled ? "Enabled" : "Disabled"}
+          </div>
+          <div className="text-xs text-subtext mt-1">
+            Last run: {formatDateTime(latestEndedAtMs ?? automation.lastRunAtMs)}
+          </div>
+        </div>
+        <div className="text-xs text-subtext">{formatRunStatus(latestStatus)}</div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            void onRunNow();
+          }}
+          disabled={isBusy}
+          className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-60"
+        >
+          {isBusy ? "Running..." : "Run now"}
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={isBusy}
+          className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-60"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            void onDelete();
+          }}
+          disabled={isBusy}
+          className="px-2.5 py-1.5 text-xs rounded border border-red/30 text-red hover:bg-red/10 disabled:opacity-60"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AutomationEditorModal({
+  projects,
+  automationForm,
+  automationFormError,
+  isSubmittingAutomation,
+  automationSubmitLabel,
+  onAutomationFormChange,
+  onSubmitAutomationForm,
+  onCloseAutomationEditor,
+}: Pick<
+  SettingsPresentationalProps,
+  | "projects"
+  | "automationForm"
+  | "automationFormError"
+  | "isSubmittingAutomation"
+  | "automationSubmitLabel"
+  | "onAutomationFormChange"
+  | "onSubmitAutomationForm"
+  | "onCloseAutomationEditor"
+>) {
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl rounded-md border border-surface bg-sidebar max-h-[90vh] overflow-y-auto">
+        <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm text-text font-semibold">
+              {automationForm.id === null ? "New automation" : "Edit automation"}
+            </h3>
+            <p className="text-xs text-subtext mt-1">
+              Manual-only mode. Scheduled execution is disabled while we rebuild this feature.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCloseAutomationEditor}
+            className="w-7 h-7 rounded border border-surface text-subtext hover:text-text hover:bg-surface"
+            disabled={isSubmittingAutomation}
+            aria-label="Close"
+          >
+            x
+          </button>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="block text-xs text-subtext mb-1">Name</label>
+            <input
+              type="text"
+              value={automationForm.name}
+              onChange={(event) => onAutomationFormChange("name", event.target.value)}
+              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              placeholder="Manual repo audit"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-subtext mb-1">Project</label>
+            <select
+              value={automationForm.projectId ?? ""}
+              onChange={(event) => {
+                const value = Number(event.target.value);
+                onAutomationFormChange("projectId", Number.isFinite(value) ? value : null);
+              }}
+              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+            >
+              <option value="">Select project</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-subtext mb-1">Agent</label>
+              <select
+                value={automationForm.agent}
+                onChange={(event) => {
+                  onAutomationFormChange("agent", event.target.value as typeof automationForm.agent);
+                }}
+                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              >
+                <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-subtext mb-1">Every (hours)</label>
+              <input
+                type="number"
+                min={1}
+                value={automationForm.intervalHours}
+                onChange={(event) => onAutomationFormChange("intervalHours", Number(event.target.value))}
+                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-subtext mb-1">Prompt</label>
+            <textarea
+              value={automationForm.prompt}
+              onChange={(event) => onAutomationFormChange("prompt", event.target.value)}
+              className="w-full min-h-[160px] px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              placeholder="Audit this repository and summarize high-impact regressions."
+            />
+          </div>
+
+          <label className="inline-flex items-center gap-2 text-xs text-subtext">
+            <input
+              type="checkbox"
+              checked={automationForm.enabled}
+              onChange={(event) => onAutomationFormChange("enabled", event.target.checked)}
+              className="accent-accent"
+            />
+            Enabled (stored only for future scheduler phases)
+          </label>
+
+          <div>
+            <label className="inline-flex items-center gap-2 text-xs text-text">
+              <input
+                type="checkbox"
+                checked={automationForm.keepSessionAlive}
+                onChange={(event) => onAutomationFormChange("keepSessionAlive", event.target.checked)}
+                className="accent-accent"
+              />
+              Keep terminal session alive after completion
+            </label>
+            <div className="text-[11px] text-subtext ml-5 mt-1">
+              When enabled, the tmux session won't be killed after the agent finishes,
+              allowing you to attach and inspect the results.
+            </div>
+          </div>
+
+          {automationFormError && (
+            <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
+              {automationFormError}
+            </div>
+          )}
+        </div>
+
+        <div className="px-4 py-3 border-t border-surface flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onCloseAutomationEditor}
+            className="px-3 py-2 text-xs rounded border border-surface text-text hover:bg-surface"
+            disabled={isSubmittingAutomation}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void onSubmitAutomationForm();
+            }}
+            className="px-3 py-2 text-xs rounded bg-accent text-main hover:bg-accent/80 disabled:opacity-60"
+            disabled={isSubmittingAutomation}
+          >
+            {isSubmittingAutomation ? "Saving..." : automationSubmitLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsPresentational({
   loading,
   settings,
   appVersion,
   updater,
   updaterPresentation,
+  projects,
+  automations,
+  latestRunByAutomationId,
+  automationsLoading,
+  automationsError,
+  automationActionError,
+  automationActionInFlightId,
+  isEditorOpen,
+  automationForm,
+  automationFormError,
+  isSubmittingAutomation,
+  automationSubmitLabel,
   onClose,
   onSave,
   onUpdateSetting,
+  onRefreshAutomations,
+  onOpenCreateAutomation,
+  onEditAutomation,
+  onDeleteAutomation,
+  onRunAutomationNow,
+  onAutomationFormChange,
+  onSubmitAutomationForm,
+  onCloseAutomationEditor,
 }: SettingsPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
   const panelVariants = useMemo(
@@ -60,7 +344,7 @@ function SettingsPresentational({
       transition={FAST_EASE_OUT}
     >
       <motion.div
-        className="bg-sidebar border border-surface rounded-lg shadow-xl w-[500px] max-h-[80vh] overflow-y-auto"
+        className="bg-sidebar border border-surface rounded-lg shadow-xl w-[640px] max-h-[85vh] overflow-y-auto"
         onClick={(event) => event.stopPropagation()}
         variants={panelVariants}
         initial="hidden"
@@ -218,7 +502,6 @@ function SettingsPresentational({
             />
             <p className="text-xs text-subtext mt-1">
               Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.
-              Use <code>codex exec</code> for non-interactive runs.
             </p>
           </div>
 
@@ -237,6 +520,66 @@ function SettingsPresentational({
             </p>
           </div>
 
+          <section className="rounded-md border border-surface p-3 bg-main/40 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-text">Automations (Beta)</h3>
+                <p className="text-xs text-subtext mt-1">
+                  Manual-only mode. Scheduler and Work tab integration are intentionally disabled.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onOpenCreateAutomation}
+                  className="px-2.5 py-1.5 text-xs rounded bg-accent text-main hover:bg-accent/80"
+                >
+                  New automation
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void onRefreshAutomations();
+                  }}
+                  className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
+                  disabled={automationsLoading}
+                >
+                  {automationsLoading ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
+            </div>
+
+            {(automationsError || automationActionError) && (
+              <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
+                {automationsError ?? automationActionError}
+              </div>
+            )}
+
+            {automations.length === 0 && !automationsError && (
+              <div className="px-3 py-6 rounded border border-surface text-center text-sm text-subtext">
+                No automations yet.
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {automations.map((automation) => {
+                const latestRun = latestRunByAutomationId.get(automation.id);
+                return (
+                  <AutomationCard
+                    key={automation.id}
+                    automation={automation}
+                    isBusy={automationActionInFlightId === automation.id}
+                    latestStatus={latestRun?.status}
+                    latestEndedAtMs={latestRun?.endedAtMs}
+                    onEdit={() => onEditAutomation(automation.id)}
+                    onDelete={() => onDeleteAutomation(automation.id)}
+                    onRunNow={() => onRunAutomationNow(automation.id)}
+                  />
+                );
+              })}
+            </div>
+          </section>
+
           <div>
             <label className="block text-sm font-medium text-text mb-2">
               Keyboard Shortcuts
@@ -244,31 +587,31 @@ function SettingsPresentational({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Toggle Sidebar</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ B</kbd>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd B</kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Quick Switcher</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ K</kbd>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd K</kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Open Work Inbox</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ I</kbd>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd I</kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">New Divergence</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ T</kbd>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd T</kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Close Terminal</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ W</kbd>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd W</kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Switch Tab</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ 1-9</kbd>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd 1-9</kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Previous/Next Tab</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">⌘ [ / ]</kbd>
+                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd [ / ]</kbd>
               </div>
             </div>
           </div>
@@ -313,7 +656,7 @@ function SettingsPresentational({
                     onClick={updater.downloadAndInstall}
                     className="px-3 py-1.5 text-sm bg-accent text-main rounded hover:bg-accent/80"
                   >
-                    Install & Restart
+                    Install and Restart
                   </button>
                 )}
               </div>
@@ -336,6 +679,19 @@ function SettingsPresentational({
           </button>
         </div>
       </motion.div>
+
+      {isEditorOpen && (
+        <AutomationEditorModal
+          projects={projects}
+          automationForm={automationForm}
+          automationFormError={automationFormError}
+          isSubmittingAutomation={isSubmittingAutomation}
+          automationSubmitLabel={automationSubmitLabel}
+          onAutomationFormChange={onAutomationFormChange}
+          onSubmitAutomationForm={onSubmitAutomationForm}
+          onCloseAutomationEditor={onCloseAutomationEditor}
+        />
+      )}
     </motion.div>
   );
 }

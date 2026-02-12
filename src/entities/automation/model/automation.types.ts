@@ -8,6 +8,7 @@ export interface Automation {
   prompt: string;
   intervalHours: number;
   enabled: boolean;
+  keepSessionAlive: boolean;
   lastRunAtMs: number | null;
   nextRunAtMs: number | null;
   createdAtMs: number;
@@ -16,7 +17,7 @@ export interface Automation {
 
 export type AutomationRunTriggerSource = "schedule" | "manual" | "startup_catchup";
 
-export type AutomationRunStatus = "queued" | "running" | "success" | "error" | "skipped";
+export type AutomationRunStatus = "queued" | "running" | "success" | "error" | "skipped" | "cancelled";
 
 export interface AutomationRun {
   id: number;
@@ -27,6 +28,10 @@ export interface AutomationRun {
   endedAtMs: number | null;
   error: string | null;
   detailsJson: string | null;
+  keepSessionAlive: boolean;
+  tmuxSessionName: string | null;
+  logFilePath: string | null;
+  resultFilePath: string | null;
 }
 
 export interface CreateAutomationInput {
@@ -36,6 +41,7 @@ export interface CreateAutomationInput {
   prompt: string;
   intervalHours: number;
   enabled: boolean;
+  keepSessionAlive: boolean;
 }
 
 export interface UpdateAutomationInput extends CreateAutomationInput {
@@ -50,4 +56,8 @@ export interface CreateAutomationRunInput {
   endedAtMs?: number | null;
   error?: string | null;
   detailsJson?: string | null;
+  keepSessionAlive?: boolean;
+  tmuxSessionName?: string | null;
+  logFilePath?: string | null;
+  resultFilePath?: string | null;
 }

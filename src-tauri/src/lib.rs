@@ -107,6 +107,10 @@ pub fn run() {
             commands::list_branch_changes,
             commands::get_branch_diff,
             commands::write_review_brief_file,
+            commands::spawn_tmux_automation_session,
+            commands::query_tmux_pane_status,
+            commands::read_file_tail,
+            commands::read_file_if_exists,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
