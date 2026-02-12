@@ -1,5 +1,11 @@
 # divergence
 
+## 0.12.0
+
+### Minor Changes
+
+- 55bdb8e: Replace legacy database initialization with versioned inline migration system. Wrap project deletion in a transaction for atomicity. Complete Drizzle ORM migration.
+
 ## 0.11.0
 
 ### Minor Changes
