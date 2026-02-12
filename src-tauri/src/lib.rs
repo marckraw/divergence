@@ -5,6 +5,7 @@ mod git;
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(desktop)]
+use tauri::image::Image;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[allow(unused_imports)]
 use tauri::{Manager, WindowEvent};
@@ -39,7 +40,13 @@ pub fn run() {
                 let separator = PredefinedMenuItem::separator(app)?;
                 let tray_menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
 
+                let tray_icon_image = Image::from_bytes(include_bytes!(
+                    "../icons/tray-iconTemplate@2x.png"
+                ))?;
+
                 let _tray_icon = TrayIconBuilder::with_id("main-tray")
+                    .icon(tray_icon_image)
+                    .icon_as_template(true)
                     .menu(&tray_menu)
                     .show_menu_on_left_click(true)
                     .on_tray_icon_event(|tray, event| {
