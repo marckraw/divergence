@@ -58,6 +58,7 @@ function MainAreaPresentational({
   reviewRunning,
   reviewError,
   onOpenFile,
+  onRemoveFile,
   onOpenChange,
   onCloseDrawer,
   onSaveFile,
@@ -356,6 +357,7 @@ function MainAreaPresentational({
                           rootPath={activeRootPath}
                           activeFilePath={openFilePath}
                           onOpenFile={onOpenFile}
+                          onRemoveFile={onRemoveFile}
                         />
                       </motion.div>
                     ) : rightPanelTab === "changes" ? (

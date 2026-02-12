@@ -1,16 +1,18 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
 import Sidebar from "../widgets/sidebar";
 import MainArea from "../widgets/main-area";
 import { InboxPanel } from "../features/inbox";
-import { AutomationsPanel } from "../features/automations";
+import {
+  AutomationsPanel,
+  runAutomationNow,
+  reconcileAutomationRuns,
+  useAutomationRunPoller,
+} from "../features/automations";
 import QuickSwitcher from "../features/quick-switcher";
 import Settings from "../widgets/settings-modal";
 import {
-  createDivergenceRepository,
   executeCreateDivergence,
-  insertDivergenceRecord,
 } from "../features/create-divergence";
 import { MergeNotification, useMergeDetection, type MergeNotificationData } from "../features/merge-detection";
 import { executeDeleteDivergence } from "../features/delete-divergence";
@@ -18,15 +20,8 @@ import { executeRemoveProject } from "../features/remove-project";
 import { TaskCenterPage, TaskToasts, useTaskCenter } from "../features/task-center";
 import type { WorkSidebarMode, WorkSidebarTab } from "../features/work-sidebar";
 import { useAllDivergences } from "../entities/divergence";
-import { useProjectSettingsMap, useProjects, loadProjectSettings } from "../entities/project";
-import {
-  useAutomations,
-  type Automation,
-  type AutomationRunTriggerSource,
-  insertAutomationRun,
-  markAutomationRunSchedule,
-  updateAutomationRun,
-} from "../entities/automation";
+import { useProjectSettingsMap, useProjects } from "../entities/project";
+import { useAutomations } from "../entities/automation";
 import {
   useInboxEvents,
   insertInboxEvent,
@@ -35,10 +30,9 @@ import {
 } from "../entities/inbox-event";
 import { useAppSettings } from "../shared/hooks/useAppSettings";
 import { useUpdater } from "../shared/hooks/useUpdater";
-import type { Project, Divergence, TerminalSession, SplitOrientation } from "../entities";
+import type { Project, Divergence, TerminalSession, SplitOrientation, BackgroundTask } from "../entities";
 import { buildSplitTmuxSessionName } from "../entities/terminal-session";
 import { getRalphyConfigSummary } from "../shared/api/ralphyConfig.api";
-import { runLoginShellCommand } from "../shared/api/pty.api";
 import { killTmuxSession } from "../shared/api/tmuxSessions.api";
 import {
   renderReviewAgentCommand,
@@ -54,12 +48,6 @@ import {
 } from "./lib/idleNotification.pure";
 import { resolveAppShortcut } from "./lib/appShortcuts.pure";
 import {
-  buildAutomationBranchName,
-  buildAutomationPromptMarkdown,
-  computeAutomationNextRunAtMs,
-  isAutomationDue,
-} from "./lib/automationScheduler.pure";
-import {
   buildGithubInboxBody,
   buildGithubInboxExternalId,
   buildGithubInboxTitle,
@@ -72,12 +60,8 @@ import type { GithubRepoTarget } from "./model/githubPullRequests.types";
 const NOTIFY_MIN_BUSY_MS = 5000;
 const NOTIFY_IDLE_DELAY_MS = 1500;
 const NOTIFY_COOLDOWN_MS = 3000;
-const AUTOMATION_SCHEDULER_INTERVAL_MS = 60_000;
 const GITHUB_POLL_INTERVAL_MS = 2 * 60_000;
 const GITHUB_INITIAL_POLL_DELAY_MS = 15_000;
-const AUTOMATION_COMMAND_TIMEOUT_MS = 20 * 60 * 1000;
-const AUTOMATION_OUTPUT_TAIL_CHARS = 4000;
-const AUTOMATION_OUTPUT_UPDATE_INTERVAL_MS = 600;
 
 function App() {
   const updater = useUpdater(true);
@@ -111,10 +95,7 @@ function App() {
   const idleNotifyTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
   const commandBySessionIdRef = useRef<Map<string, (command: string) => void>>(new Map());
-  const automationsRef = useRef<Automation[]>([]);
   const githubRepoTargetsRef = useRef<GithubRepoTarget[]>([]);
-  const automationInFlightCountsRef = useRef<Map<number, number>>(new Map());
-  const startupCatchupDoneRef = useRef(false);
   const githubPollingInFlightRef = useRef(false);
   const githubTokenWarningShownRef = useRef(false);
   const {
@@ -150,6 +131,29 @@ function App() {
     markAllRead: markAllInboxRead,
   } = useInboxEvents("all");
 
+  // Automation run poller — monitors running tmux-based automation runs
+  useAutomationRunPoller({
+    onRunCompleted: useCallback((runId: number) => {
+      console.log(`Automation run ${runId} completed successfully.`);
+      void refreshAutomations();
+    }, [refreshAutomations]),
+    onRunFailed: useCallback((runId: number, error: string) => {
+      console.warn(`Automation run ${runId} failed: ${error}`);
+      void refreshAutomations();
+    }, [refreshAutomations]),
+    onOutputUpdate: useCallback(() => {
+      // Output updates are available but not displayed in this phase
+    }, []),
+  });
+
+  // Reconcile automation runs on startup
+  useEffect(() => {
+    void reconcileAutomationRuns().then(() => {
+      void refreshAutomations();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
@@ -157,10 +161,6 @@ function App() {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
-
-  useEffect(() => {
-    automationsRef.current = automations;
-  }, [automations]);
 
   useEffect(() => {
     githubRepoTargetsRef.current = githubRepoTargets;
@@ -717,302 +717,28 @@ function App() {
     runTask,
   ]);
 
-  const executeAutomationRun = useCallback(async (
-    automation: Automation,
-    triggerSource: AutomationRunTriggerSource
-  ): Promise<void> => {
-    const inFlightCount = automationInFlightCountsRef.current.get(automation.id) ?? 0;
-    if (triggerSource !== "manual" && inFlightCount > 0) {
-      return;
-    }
-
-    const project = projectById.get(automation.projectId);
-    const startedAtMs = Date.now();
-    const runId = await insertAutomationRun({
-      automationId: automation.id,
-      triggerSource,
-      status: "queued",
-      startedAtMs,
-    });
-
-    if (!project) {
-      const endedAtMs = Date.now();
-      const errorMessage = `Project ${automation.projectId} was not found.`;
-      const nextRunAtMs = automation.enabled
-        ? computeAutomationNextRunAtMs(endedAtMs, automation.intervalHours)
-        : null;
-      await Promise.all([
-        updateAutomationRun(runId, {
-          status: "error",
-          startedAtMs,
-          endedAtMs,
-          error: errorMessage,
-        }),
-        markAutomationRunSchedule(automation.id, {
-          lastRunAtMs: endedAtMs,
-          nextRunAtMs,
-        }),
-        insertInboxEvent({
-          kind: "automation_run",
-          source: "automation",
-          automationId: automation.id,
-          automationRunId: runId,
-          projectId: automation.projectId,
-          externalId: `automation:${automation.id}:run:${runId}:error`,
-          title: `Automation failed: ${automation.name}`,
-          body: errorMessage,
-        }),
-      ]);
-      await Promise.all([refreshAutomations(), refreshInbox()]);
-      return;
-    }
-
-    automationInFlightCountsRef.current.set(automation.id, inFlightCount + 1);
-    try {
-      const details = await runTask<{
-        divergenceId: number;
-        divergencePath: string;
-        branch: string;
-        command: string;
-        outputTail: string;
-      }>({
-        kind: "automation_run",
-        title: `Automation: ${automation.name}`,
-        target: {
-          type: "project",
-          projectId: project.id,
-          projectName: project.name,
-          path: project.path,
-          label: `${project.name} / ${automation.name}`,
-        },
-        origin: `automation_${triggerSource}`,
-        fsHeavy: true,
-        initialPhase: "Queued",
-        successMessage: `Automation completed: ${automation.name}`,
-        errorMessage: `Automation failed: ${automation.name}`,
-        run: async ({ setPhase, setOutputTail }) => {
-          await updateAutomationRun(runId, {
-            status: "running",
-            startedAtMs,
-          });
-
-          setPhase("Loading project settings");
-          const projectSettings = await loadProjectSettings(project.id);
-
-          setPhase("Creating divergence");
-          const branchName = buildAutomationBranchName(automation.id, automation.name);
-          const divergence = await createDivergenceRepository({
-            project,
-            branchName,
-            copyIgnoredSkip: projectSettings.copyIgnoredSkip,
-            useExistingBranch: false,
-          });
-
-          setPhase("Saving divergence");
-          const divergenceId = await insertDivergenceRecord(divergence);
-          await refreshDivergences();
-
-          setPhase("Preparing prompt");
-          const markdown = buildAutomationPromptMarkdown({
-            automationName: automation.name,
-            projectName: project.name,
-            triggerSource,
-            prompt: automation.prompt,
-            generatedAtMs: Date.now(),
-          });
-          const { path: briefPath } = await writeReviewBriefFile(divergence.path, markdown);
-          const commandTemplate = automation.agent === "claude"
-            ? appSettings.agentCommandClaude
-            : appSettings.agentCommandCodex;
-          if (!commandTemplate.trim()) {
-            throw new Error(`No ${automation.agent} command template configured in settings.`);
-          }
-          const command = renderReviewAgentCommand(commandTemplate, {
-            workspacePath: divergence.path,
-            briefPath,
-          });
-          const automationLogPath = `${divergence.path}/.divergence/automation-run-${runId}.log`;
-          const diagnosticsHeader = [
-            `automation=${automation.name}`,
-            `run_id=${runId}`,
-            `trigger=${triggerSource}`,
-            `project=${project.name}`,
-            `branch=${branchName}`,
-            `workspace=${divergence.path}`,
-            `agent=${automation.agent}`,
-            `command=${command}`,
-            "--- live output ---",
-            "",
-          ].join("\n");
-          setOutputTail(diagnosticsHeader);
-
-          setPhase(`Running ${automation.agent} (headless)`);
-
-          const commandResult = await runLoginShellCommand({
-            cwd: divergence.path,
-            command,
-            timeoutMs: AUTOMATION_COMMAND_TIMEOUT_MS,
-            outputLimitChars: 20_000,
-            outputTailChars: AUTOMATION_OUTPUT_TAIL_CHARS,
-            outputUpdateIntervalMs: AUTOMATION_OUTPUT_UPDATE_INTERVAL_MS,
-            onOutputUpdate: (outputChunk) => {
-              if (!outputChunk.trim()) {
-                setOutputTail(diagnosticsHeader);
-                return;
-              }
-              setOutputTail(`${diagnosticsHeader}${outputChunk}`);
-            },
-          });
-
-          // Persist output to log file for later inspection
-          const fullOutput = commandResult.output || "";
-          await writeTextFile(
-            automationLogPath,
-            `${diagnosticsHeader}${fullOutput}`
-          ).catch(() => {
-            // Non-critical: log file write failure should not fail the run
-          });
-
-          if (commandResult.exitCode !== 0) {
-            const outputTail = fullOutput.trim();
-            throw new Error(
-              outputTail
-                ? `Agent exited with code ${commandResult.exitCode}:\n${outputTail.slice(-AUTOMATION_OUTPUT_TAIL_CHARS)}`
-                : `Agent exited with code ${commandResult.exitCode}.`
-            );
-          }
-
-          // Final output update to ensure UI shows the complete result
-          const finalOutputTail = fullOutput.length > AUTOMATION_OUTPUT_TAIL_CHARS
-            ? fullOutput.slice(fullOutput.length - AUTOMATION_OUTPUT_TAIL_CHARS)
-            : fullOutput;
-          setOutputTail(
-            finalOutputTail.trim()
-              ? `${diagnosticsHeader}${finalOutputTail}`
-              : diagnosticsHeader
-          );
-
-          return {
-            divergenceId,
-            divergencePath: divergence.path,
-            branch: divergence.branch,
-            command,
-            outputTail: fullOutput.slice(-AUTOMATION_OUTPUT_TAIL_CHARS),
-          };
-        },
-      });
-
-      const endedAtMs = Date.now();
-      const nextRunAtMs = automation.enabled
-        ? computeAutomationNextRunAtMs(endedAtMs, automation.intervalHours)
-        : null;
-      await Promise.all([
-        updateAutomationRun(runId, {
-          status: "success",
-          startedAtMs,
-          endedAtMs,
-          detailsJson: JSON.stringify(details),
-        }),
-        markAutomationRunSchedule(automation.id, {
-          lastRunAtMs: endedAtMs,
-          nextRunAtMs,
-        }),
-        insertInboxEvent({
-          kind: "automation_run",
-          source: "automation",
-          automationId: automation.id,
-          automationRunId: runId,
-          projectId: project.id,
-          externalId: `automation:${automation.id}:run:${runId}:success`,
-          title: `Automation completed: ${automation.name}`,
-          body: [
-            `Project: ${project.name}`,
-            `Agent: ${automation.agent}`,
-            `Trigger: ${triggerSource}`,
-            `Duration: ${Math.round((endedAtMs - startedAtMs) / 1000)}s`,
-            `Branch: ${details.branch}`,
-            `Path: ${details.divergencePath}`,
-          ].join("\n"),
-          payloadJson: JSON.stringify(details),
-        }),
-      ]);
-      await Promise.all([refreshAutomations(), refreshInbox()]);
-    } catch (error) {
-      const endedAtMs = Date.now();
-      const durationSec = Math.round((endedAtMs - startedAtMs) / 1000);
-      const message = error instanceof Error ? error.message : String(error);
-      const nextRunAtMs = automation.enabled
-        ? computeAutomationNextRunAtMs(endedAtMs, automation.intervalHours)
-        : null;
-      const errorBody = [
-        `Project: ${project.name}`,
-        `Agent: ${automation.agent}`,
-        `Trigger: ${triggerSource}`,
-        `Duration: ${durationSec}s`,
-        "",
-        message,
-      ].join("\n");
-      await Promise.all([
-        updateAutomationRun(runId, {
-          status: "error",
-          startedAtMs,
-          endedAtMs,
-          error: message,
-        }),
-        markAutomationRunSchedule(automation.id, {
-          lastRunAtMs: endedAtMs,
-          nextRunAtMs,
-        }),
-        insertInboxEvent({
-          kind: "automation_run",
-          source: "automation",
-          automationId: automation.id,
-          automationRunId: runId,
-          projectId: project.id,
-          externalId: `automation:${automation.id}:run:${runId}:error`,
-          title: `Automation failed: ${automation.name}`,
-          body: errorBody,
-        }),
-      ]);
-      await Promise.all([refreshAutomations(), refreshInbox()]);
-    } finally {
-      const remainingCount = (automationInFlightCountsRef.current.get(automation.id) ?? 1) - 1;
-      if (remainingCount > 0) {
-        automationInFlightCountsRef.current.set(automation.id, remainingCount);
-      } else {
-        automationInFlightCountsRef.current.delete(automation.id);
-      }
-    }
-  }, [
-    appSettings.agentCommandClaude,
-    appSettings.agentCommandCodex,
-    projectById,
-    refreshAutomations,
-    refreshDivergences,
-    refreshInbox,
-    runTask,
-  ]);
-
-  const runDueAutomations = useCallback(async (
-    triggerSource: "schedule" | "startup_catchup"
-  ): Promise<void> => {
-    const nowMs = Date.now();
-    const dueAutomations = automationsRef.current.filter((automation) => {
-      return isAutomationDue(automation, nowMs);
-    });
-
-    for (const automation of dueAutomations) {
-      await executeAutomationRun(automation, triggerSource);
-    }
-  }, [executeAutomationRun]);
-
   const handleRunAutomationNow = useCallback(async (automationId: number): Promise<void> => {
-    const automation = automationsRef.current.find((item) => item.id === automationId);
+    const automation = automations.find((item) => item.id === automationId);
     if (!automation) {
       throw new Error("Automation not found.");
     }
-    await executeAutomationRun(automation, "manual");
-  }, [executeAutomationRun]);
+    const project = projectById.get(automation.projectId) ?? null;
+    await runAutomationNow({
+      automation,
+      project,
+      runTask,
+      agentCommandClaude: appSettings.agentCommandClaude,
+      agentCommandCodex: appSettings.agentCommandCodex,
+    });
+    await refreshAutomations();
+  }, [
+    appSettings.agentCommandClaude,
+    appSettings.agentCommandCodex,
+    automations,
+    projectById,
+    refreshAutomations,
+    runTask,
+  ]);
 
   const handleCreateAutomation = useCallback(async (input: Parameters<typeof createAutomation>[0]) => {
     await createAutomation(input);
@@ -1035,6 +761,55 @@ function App() {
     setSidebarMode("work");
     setWorkTab("task_center");
   }, [viewTask]);
+
+  const handleAttachToAutomationSession = useCallback(async (task: BackgroundTask) => {
+    const { tmuxSessionName, projectId, path } = task.target;
+    if (!tmuxSessionName || !projectId || !path) return;
+
+    const project = projectById.get(projectId);
+    if (!project) return;
+
+    // Create a non-tmux terminal session. Instead of using the tmux bootstrap
+    // (which cannot target a specific window), we spawn a plain shell and send
+    // `tmux attach` as a command. This lets us select window 0 first so the
+    // user lands on the main automation output, not a random agent window.
+    const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const sessionId = `project-${projectId}#automation-${entropy}`;
+    const base = buildTerminalSession({
+      type: "project",
+      target: project,
+      settingsByProjectId,
+      projectsById,
+      globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+    });
+    const session: TerminalSession = {
+      ...base,
+      id: sessionId,
+      workspaceKey: buildWorkspaceKey("project", projectId),
+      sessionRole: "manual",
+      name: `${base.name} • automation`,
+      useTmux: false,
+      status: "idle",
+      lastActivity: new Date(),
+    };
+
+    setSessions((prev) => {
+      const next = new Map(prev);
+      next.set(session.id, session);
+      return next;
+    });
+    setActiveSessionId(session.id);
+    setSidebarMode("projects");
+
+    // Attach to the automation's tmux session, targeting window 0 (main output)
+    const escapedName = tmuxSessionName.replace(/'/g, "'\\''");
+    const attachCommand = `tmux select-window -t '${escapedName}':0 2>/dev/null; exec tmux attach -t '${escapedName}'`;
+    try {
+      await sendCommandToSession(session.id, attachCommand, { activateIfNeeded: false });
+    } catch (err) {
+      console.warn("Failed to attach to automation tmux session:", err);
+    }
+  }, [projectById, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, sendCommandToSession]);
 
   const pollGithubInbox = useCallback(async (): Promise<void> => {
     if (githubPollingInFlightRef.current) {
@@ -1116,24 +891,6 @@ function App() {
       githubPollingInFlightRef.current = false;
     }
   }, [refreshInbox]);
-
-  useEffect(() => {
-    if (automationsLoading || startupCatchupDoneRef.current) {
-      return;
-    }
-    startupCatchupDoneRef.current = true;
-    void runDueAutomations("startup_catchup");
-  }, [automationsLoading, runDueAutomations]);
-
-  useEffect(() => {
-    const timerId = window.setInterval(() => {
-      void runDueAutomations("schedule");
-    }, AUTOMATION_SCHEDULER_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [runDueAutomations]);
 
   useEffect(() => {
     const initialTimerId = window.setTimeout(() => {
@@ -1333,6 +1090,7 @@ function App() {
               focusedTaskId={focusedTaskId}
               onRetryTask={retryTask}
               onViewTask={handleViewTaskCenterTask}
+              onAttachToAutomationSession={handleAttachToAutomationSession}
             />
           )}
           {workTab === "automations" && (
@@ -1410,7 +1168,19 @@ function App() {
         {showSettings && (
           <Settings onClose={() => {
             setShowSettings(false);
-          }} updater={updater} />
+          }}
+            updater={updater}
+            projects={projects}
+            automations={automations}
+            latestRunByAutomationId={latestRunByAutomationId}
+            automationsLoading={automationsLoading}
+            automationsError={automationsError}
+            onRefreshAutomations={refreshAutomations}
+            onCreateAutomation={handleCreateAutomation}
+            onUpdateAutomation={handleUpdateAutomation}
+            onDeleteAutomation={handleDeleteAutomation}
+            onRunAutomationNow={handleRunAutomationNow}
+          />
         )}
       </AnimatePresence>
 

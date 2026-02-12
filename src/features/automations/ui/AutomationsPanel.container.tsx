@@ -11,6 +11,7 @@ const EMPTY_FORM: AutomationFormState = {
   prompt: "",
   intervalHours: 5,
   enabled: true,
+  keepSessionAlive: false,
 };
 
 function toFormState(automation: Automation): AutomationFormState {
@@ -22,6 +23,7 @@ function toFormState(automation: Automation): AutomationFormState {
     prompt: automation.prompt,
     intervalHours: automation.intervalHours,
     enabled: automation.enabled,
+    keepSessionAlive: automation.keepSessionAlive,
   };
 }
 
@@ -89,6 +91,7 @@ function AutomationsPanelContainer(props: AutomationsPanelProps) {
           prompt: form.prompt.trim(),
           intervalHours: Math.floor(form.intervalHours),
           enabled: form.enabled,
+          keepSessionAlive: form.keepSessionAlive,
         });
       } else {
         await props.onUpdateAutomation({
@@ -99,6 +102,7 @@ function AutomationsPanelContainer(props: AutomationsPanelProps) {
           prompt: form.prompt.trim(),
           intervalHours: Math.floor(form.intervalHours),
           enabled: form.enabled,
+          keepSessionAlive: form.keepSessionAlive,
         });
       }
       closeEditor();

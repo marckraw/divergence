@@ -39,6 +39,14 @@
           "path": "$HOME/**"
         }
       ]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [
+        {
+          "path": "$HOME/**"
+        }
+      ]
     }
   ]
 }

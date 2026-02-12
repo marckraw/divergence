@@ -15,7 +15,12 @@ function TaskCenterPageContainer(props: TaskCenterPageProps) {
     };
   }, []);
 
-  return <TaskCenterPagePresentational {...props} nowMs={nowMs} />;
+  return (
+    <TaskCenterPagePresentational
+      {...props}
+      nowMs={nowMs}
+    />
+  );
 }
 
 export default TaskCenterPageContainer;
