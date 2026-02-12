@@ -12,7 +12,9 @@ export async function insertProject(name: string, path: string): Promise<void> {
 }
 
 export async function deleteProjectWithRelations(projectId: number): Promise<void> {
-  await db.delete(divergences).where(eq(divergences.projectId, projectId));
-  await db.delete(projectSettings).where(eq(projectSettings.projectId, projectId));
-  await db.delete(projects).where(eq(projects.id, projectId));
+  await db.transaction(async (tx) => {
+    await tx.delete(divergences).where(eq(divergences.projectId, projectId));
+    await tx.delete(projectSettings).where(eq(projectSettings.projectId, projectId));
+    await tx.delete(projects).where(eq(projects.id, projectId));
+  });
 }

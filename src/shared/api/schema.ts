@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 
 // ── Projects ────────────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ export const inboxEvents = sqliteTable(
     createdAtMs: integer("created_at_ms").notNull(),
   },
   (table) => [
-    uniqueIndex("idx_inbox_events_external_id").on(table.externalId),
+    uniqueIndex("idx_inbox_events_external_id").on(table.externalId).where(sql`external_id IS NOT NULL`),
     index("idx_inbox_events_created_at").on(table.createdAtMs),
   ],
 );
