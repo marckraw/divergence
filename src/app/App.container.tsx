@@ -85,6 +85,8 @@ function App() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<WorkSidebarMode>("projects");
   const [workTab, setWorkTab] = useState<WorkSidebarTab>("inbox");
   const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>([]);
@@ -98,6 +100,8 @@ function App() {
   const githubRepoTargetsRef = useRef<GithubRepoTarget[]>([]);
   const githubPollingInFlightRef = useRef(false);
   const githubTokenWarningShownRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragStartWidthRef = useRef(0);
   const {
     runningTasks,
     recentTasks,
@@ -575,6 +579,36 @@ function App() {
     setIsRightPanelOpen(prev => !prev);
   }, []);
 
+  const handleSidebarDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingSidebar(true);
+    dragStartXRef.current = e.clientX;
+    dragStartWidthRef.current = sidebarWidth;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - dragStartXRef.current;
+      const newWidth = Math.min(480, Math.max(180, dragStartWidthRef.current + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSidebar(false);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [sidebarWidth]);
+
+  const handleSidebarDragDoubleClick = useCallback(() => {
+    setSidebarWidth(256);
+  }, []);
+
   const handleSidebarModeChange = useCallback((mode: WorkSidebarMode) => {
     setSidebarMode(mode);
     if (mode === "work") {
@@ -787,7 +821,7 @@ function App() {
       id: sessionId,
       workspaceKey: buildWorkspaceKey("project", projectId),
       sessionRole: "manual",
-      name: `${base.name} • automation`,
+      name: task.target.label || `${base.name} • automation`,
       useTmux: false,
       status: "idle",
       lastActivity: new Date(),
@@ -1039,9 +1073,10 @@ function App() {
   return (
     <div className="flex h-full w-full">
       <div
-        className={`h-full shrink-0 overflow-hidden transition-[width] duration-200 ease-out ${
-          isSidebarOpen ? "w-64" : "w-0"
+        className={`h-full shrink-0 overflow-hidden${
+          isDraggingSidebar ? "" : " transition-[width] duration-200 ease-out"
         }`}
+        style={{ width: isSidebarOpen ? sidebarWidth : 0 }}
       >
         <Sidebar
           mode={sidebarMode}
@@ -1069,6 +1104,13 @@ function App() {
           isCollapsed={!isSidebarOpen}
         />
       </div>
+      {isSidebarOpen && (
+        <div
+          className="h-full w-1 shrink-0 cursor-col-resize bg-transparent hover:bg-accent/30 active:bg-accent/50 transition-colors"
+          onMouseDown={handleSidebarDragStart}
+          onDoubleClick={handleSidebarDragDoubleClick}
+        />
+      )}
       {sidebarMode === "work" ? (
         <div className="flex-1 min-w-0 h-full">
           {workTab === "inbox" && (
