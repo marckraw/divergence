@@ -31,12 +31,12 @@ export async function createDivergenceRepository({
 
 export async function insertDivergenceRecord(divergence: Divergence): Promise<number> {
   const createInput = {
-    project_id: divergence.project_id,
+    projectId: divergence.projectId,
     name: divergence.name,
     branch: divergence.branch,
     path: divergence.path,
-    created_at: divergence.created_at,
-    has_diverged: divergence.has_diverged,
+    createdAt: divergence.createdAt,
+    hasDiverged: divergence.hasDiverged,
   };
   return insertDivergenceAndGetId(createInput);
 }

@@ -156,6 +156,7 @@ async function ensureInboxColumns(database: Database): Promise<void> {
 export async function getDb(): Promise<Database> {
   if (!db) {
     db = await Database.load("sqlite:divergence.db");
+    await db.execute("PRAGMA foreign_keys = ON");
     await db.execute(`
       CREATE TABLE IF NOT EXISTS projects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,6 +245,12 @@ export async function getDb(): Promise<Database> {
     );
     await db.execute(
       "CREATE INDEX IF NOT EXISTS idx_automation_runs_automation_id ON automation_runs(automation_id, id DESC)"
+    );
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_divergences_project_id ON divergences(project_id)"
+    );
+    await db.execute(
+      "CREATE INDEX IF NOT EXISTS idx_automations_project_id ON automations(project_id)"
     );
     await db.execute(
       "CREATE TABLE IF NOT EXISTS github_poll_state (repo_key TEXT PRIMARY KEY, last_polled_at_ms INTEGER NOT NULL)"

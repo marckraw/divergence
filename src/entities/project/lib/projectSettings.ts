@@ -1,4 +1,6 @@
-import { getDb } from "../../../shared/api/database.api";
+import { eq } from "drizzle-orm";
+import { db } from "../../../shared/api/drizzle.api";
+import { projectSettings } from "../../../shared/api/schema";
 import {
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeTmuxHistoryLimit,
@@ -45,18 +47,13 @@ export function normalizeSkipList(entries: string[]): string[] {
 }
 
 export async function loadProjectSettings(projectId: number): Promise<ProjectSettings> {
-  const database = await getDb();
-  const rows = await database.select<{
-    copy_ignored_skip: string;
-    use_tmux?: number;
-    use_webgl?: number;
-    tmux_history_limit?: number | null;
-  }[]>(
-    "SELECT copy_ignored_skip, use_tmux, use_webgl, tmux_history_limit FROM project_settings WHERE project_id = ?",
-    [projectId]
-  );
+  const rows = await db
+    .select()
+    .from(projectSettings)
+    .where(eq(projectSettings.projectId, projectId));
 
-  if (!rows.length || !rows[0]?.copy_ignored_skip) {
+  const row = rows[0];
+  if (!row?.copyIgnoredSkip) {
     return {
       projectId,
       copyIgnoredSkip: DEFAULT_COPY_IGNORED_SKIP,
@@ -67,14 +64,14 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
   }
 
   try {
-    const parsed = JSON.parse(rows[0].copy_ignored_skip);
+    const parsed = JSON.parse(row.copyIgnoredSkip);
     if (Array.isArray(parsed)) {
-      const historyLimit = rows[0].tmux_history_limit;
+      const historyLimit = row.tmuxHistoryLimit;
       return {
         projectId,
         copyIgnoredSkip: normalizeSkipList(parsed.map(String)),
-        useTmux: Boolean(rows[0].use_tmux ?? DEFAULT_USE_TMUX),
-        useWebgl: Boolean(rows[0].use_webgl ?? DEFAULT_USE_WEBGL),
+        useTmux: row.useTmux ?? DEFAULT_USE_TMUX,
+        useWebgl: row.useWebgl ?? DEFAULT_USE_WEBGL,
         tmuxHistoryLimit: historyLimit === null || historyLimit === undefined
           ? null
           : normalizeTmuxHistoryLimit(historyLimit, DEFAULT_TMUX_HISTORY_LIMIT),
@@ -104,25 +101,25 @@ export async function saveProjectSettings(
   const normalizedHistoryLimit = tmuxHistoryLimit === null
     ? null
     : normalizeTmuxHistoryLimit(tmuxHistoryLimit, DEFAULT_TMUX_HISTORY_LIMIT);
-  const database = await getDb();
-  await database.execute(
-    `
-      INSERT INTO project_settings (project_id, copy_ignored_skip, use_tmux, use_webgl, tmux_history_limit)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(project_id) DO UPDATE SET
-        copy_ignored_skip = excluded.copy_ignored_skip,
-        use_tmux = excluded.use_tmux,
-        use_webgl = excluded.use_webgl,
-        tmux_history_limit = excluded.tmux_history_limit
-    `,
-    [
+
+  await db
+    .insert(projectSettings)
+    .values({
       projectId,
-      JSON.stringify(normalized),
-      useTmux ? 1 : 0,
-      useWebgl ? 1 : 0,
-      normalizedHistoryLimit,
-    ]
-  );
+      copyIgnoredSkip: JSON.stringify(normalized),
+      useTmux,
+      useWebgl,
+      tmuxHistoryLimit: normalizedHistoryLimit,
+    })
+    .onConflictDoUpdate({
+      target: projectSettings.projectId,
+      set: {
+        copyIgnoredSkip: JSON.stringify(normalized),
+        useTmux,
+        useWebgl,
+        tmuxHistoryLimit: normalizedHistoryLimit,
+      },
+    });
 
   return {
     projectId,

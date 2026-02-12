@@ -81,9 +81,9 @@ export function useAllDivergences(): UseAllDivergencesResult {
 
       const byProject = new Map<number, Divergence[]>();
       for (const divergence of result) {
-        const existing = byProject.get(divergence.project_id) ?? [];
+        const existing = byProject.get(divergence.projectId) ?? [];
         existing.push(divergence);
-        byProject.set(divergence.project_id, existing);
+        byProject.set(divergence.projectId, existing);
       }
       setDivergencesByProject(byProject);
     } catch (err) {

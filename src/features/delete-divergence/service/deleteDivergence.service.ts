@@ -18,7 +18,7 @@ export async function executeDeleteDivergence({
     title: `Delete divergence: ${divergence.branch}`,
     target: {
       type: "divergence",
-      projectId: divergence.project_id,
+      projectId: divergence.projectId,
       divergenceId: divergence.id,
       projectName,
       branch: divergence.branch,

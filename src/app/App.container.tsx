@@ -720,7 +720,7 @@ function App() {
     divergence: Divergence,
     origin: string
   ): Promise<void> => {
-    const projectName = projectsById.get(divergence.project_id)?.name ?? "project";
+    const projectName = projectsById.get(divergence.projectId)?.name ?? "project";
     await executeDeleteDivergence({
       divergence,
       origin,

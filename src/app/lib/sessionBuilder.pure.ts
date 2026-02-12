@@ -22,7 +22,7 @@ export function buildWorkspaceKey(type: "project" | "divergence", targetId: numb
 
 export function buildTerminalSession(input: BuildTerminalSessionInput): TerminalSession {
   const { type, target, settingsByProjectId, projectsById, globalTmuxHistoryLimit } = input;
-  const projectId = type === "project" ? target.id : (target as Divergence).project_id;
+  const projectId = type === "project" ? target.id : (target as Divergence).projectId;
   const projectSettings = settingsByProjectId.get(projectId);
 
   const useTmux = projectSettings?.useTmux ?? DEFAULT_USE_TMUX;

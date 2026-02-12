@@ -6,8 +6,8 @@ import {
 } from "../../src/features/quick-switcher/lib/quickSwitcher.pure";
 
 const projects: Project[] = [
-  { id: 1, name: "Alpha", path: "/alpha", created_at: "2026-01-01" },
-  { id: 2, name: "Beta", path: "/beta", created_at: "2026-01-01" },
+  { id: 1, name: "Alpha", path: "/alpha", createdAt: "2026-01-01" },
+  { id: 2, name: "Beta", path: "/beta", createdAt: "2026-01-01" },
 ];
 
 const divergences = new Map<number, Divergence[]>([
@@ -16,12 +16,12 @@ const divergences = new Map<number, Divergence[]>([
     [
       {
         id: 10,
-        project_id: 1,
+        projectId: 1,
         name: "Alpha Div",
         branch: "feat/search",
         path: "/alpha/feat-search",
-        created_at: "2026-01-01",
-        has_diverged: 0,
+        createdAt: "2026-01-01",
+        hasDiverged: false,
       },
     ],
   ],

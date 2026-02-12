@@ -10,17 +10,17 @@ const project: Project = {
   id: 1,
   name: "Alpha",
   path: "/alpha",
-  created_at: "2026-01-01",
+  createdAt: "2026-01-01",
 };
 
 const divergence: Divergence = {
   id: 2,
-  project_id: 1,
+  projectId: 1,
   name: "Alpha Div",
   branch: "feat/search",
   path: "/alpha/div",
-  created_at: "2026-01-01",
-  has_diverged: 0,
+  createdAt: "2026-01-01",
+  hasDiverged: false,
 };
 
 function makeSession(ownership: TmuxSessionWithOwnership["ownership"]): TmuxSessionWithOwnership {
