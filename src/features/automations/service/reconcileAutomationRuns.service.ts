@@ -1,8 +1,11 @@
 import {
+  listAutomations,
   listRunningAutomationRuns,
   updateAutomationRun,
   markAutomationRunSchedule,
 } from "../../../entities/automation/api/automation.api";
+import { computeNextScheduledRunAtMs } from "../lib/automationScheduler.pure";
+import type { Automation } from "../../../entities/automation";
 import {
   queryAutomationTmuxPaneStatus,
   readAutomationResultFile,
@@ -14,6 +17,12 @@ export async function reconcileAutomationRuns(): Promise<void> {
   const runningRuns = await listRunningAutomationRuns();
   if (runningRuns.length === 0) {
     return;
+  }
+
+  const allAutomations = await listAutomations();
+  const automationById = new Map<number, Automation>();
+  for (const a of allAutomations) {
+    automationById.set(a.id, a);
   }
 
   for (const run of runningRuns) {
@@ -33,7 +42,8 @@ export async function reconcileAutomationRuns(): Promise<void> {
         run.automationId,
         run.tmuxSessionName,
         run.resultFilePath,
-        run.keepSessionAlive
+        run.keepSessionAlive,
+        automationById,
       );
     } catch (error) {
       console.warn(`Reconciliation error for run ${run.id}:`, error);
@@ -51,8 +61,11 @@ async function reconcileSingleRun(
   automationId: number,
   tmuxSessionName: string,
   resultFilePath: string,
-  keepSessionAlive: boolean
+  keepSessionAlive: boolean,
+  automationById: Map<number, Automation>,
 ): Promise<void> {
+  const automation = automationById.get(automationId);
+
   let paneStatus;
   try {
     paneStatus = await queryAutomationTmuxPaneStatus(tmuxSessionName);
@@ -74,7 +87,9 @@ async function reconcileSingleRun(
           });
           await markAutomationRunSchedule(automationId, {
             lastRunAtMs: endedAtMs,
-            nextRunAtMs: null,
+            nextRunAtMs: automation
+              ? computeNextScheduledRunAtMs(automation, endedAtMs)
+              : null,
           });
           return;
         }
@@ -89,7 +104,9 @@ async function reconcileSingleRun(
       });
       await markAutomationRunSchedule(automationId, {
         lastRunAtMs: endedAtMs,
-        nextRunAtMs: null,
+        nextRunAtMs: automation
+          ? computeNextScheduledRunAtMs(automation, endedAtMs)
+          : null,
       });
       return;
     }
@@ -116,7 +133,9 @@ async function reconcileSingleRun(
       });
       await markAutomationRunSchedule(automationId, {
         lastRunAtMs: endedAtMs,
-        nextRunAtMs: null,
+        nextRunAtMs: automation
+          ? computeNextScheduledRunAtMs(automation, endedAtMs)
+          : null,
       });
 
       if (!keepSessionAlive) {
@@ -142,7 +161,9 @@ async function reconcileSingleRun(
   });
   await markAutomationRunSchedule(automationId, {
     lastRunAtMs: endedAtMs,
-    nextRunAtMs: null,
+    nextRunAtMs: automation
+      ? computeNextScheduledRunAtMs(automation, endedAtMs)
+      : null,
   });
 
   if (!keepSessionAlive) {

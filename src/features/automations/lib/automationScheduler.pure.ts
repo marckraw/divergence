@@ -1,4 +1,4 @@
-import type { Automation } from "../../entities/automation";
+import type { Automation } from "../../../entities/automation";
 
 const HOUR_MS = 60 * 60 * 1000;
 const AUTOMATION_NAME_MAX_SLUG_LENGTH = 32;
@@ -25,6 +25,41 @@ export function isAutomationDue(
     return false;
   }
   return automation.nextRunAtMs <= nowMs;
+}
+
+/**
+ * Fixed-clock scheduling: anchors to the previous scheduled time, not completion time.
+ * If multiple intervals have been missed, advances to the next future slot.
+ *
+ * For manual runs or first runs (nextRunAtMs is null), falls back to nowMs as anchor.
+ */
+export function computeNextScheduledRunAtMs(
+  automation: Pick<Automation, "enabled" | "intervalHours" | "nextRunAtMs">,
+  nowMs: number,
+): number | null {
+  if (!automation.enabled) return null;
+  const intervalMs = normalizeAutomationIntervalHours(automation.intervalHours) * HOUR_MS;
+  const anchor = automation.nextRunAtMs ?? nowMs;
+  let next = anchor + intervalMs;
+  // If we've fallen behind (app closed, long run), advance to next future slot
+  if (next <= nowMs) {
+    const missedIntervals = Math.ceil((nowMs - next) / intervalMs);
+    next += missedIntervals * intervalMs;
+  }
+  return next;
+}
+
+/**
+ * Filters automations to those that are due and not already running.
+ */
+export function findDueAutomations(
+  automations: Automation[],
+  runningAutomationIds: ReadonlySet<number>,
+  nowMs: number,
+): Automation[] {
+  return automations.filter(
+    (a) => isAutomationDue(a, nowMs) && !runningAutomationIds.has(a.id),
+  );
 }
 
 export function sanitizeAutomationNameForBranch(automationName: string): string {

@@ -8,7 +8,9 @@ import {
   runAutomationNow,
   reconcileAutomationRuns,
   useAutomationRunPoller,
+  useAutomationScheduler,
 } from "../features/automations";
+import type { AutomationRunTriggerSource } from "../entities/automation";
 import QuickSwitcher from "../features/quick-switcher";
 import Settings from "../widgets/settings-modal";
 import {
@@ -773,6 +775,38 @@ function App() {
     refreshAutomations,
     runTask,
   ]);
+
+  const handleRunScheduledAutomation = useCallback(async (
+    automationId: number,
+    triggerSource: AutomationRunTriggerSource,
+  ): Promise<void> => {
+    const automation = automations.find((item) => item.id === automationId);
+    if (!automation) return;
+    const project = projectById.get(automation.projectId) ?? null;
+    await runAutomationNow({
+      automation,
+      project,
+      runTask,
+      agentCommandClaude: appSettings.agentCommandClaude,
+      agentCommandCodex: appSettings.agentCommandCodex,
+      triggerSource,
+    });
+    await refreshAutomations();
+  }, [
+    appSettings.agentCommandClaude,
+    appSettings.agentCommandCodex,
+    automations,
+    projectById,
+    refreshAutomations,
+    runTask,
+  ]);
+
+  // Automation scheduler — periodically triggers due automations
+  useAutomationScheduler({
+    automations,
+    projectById,
+    onTriggerRun: handleRunScheduledAutomation,
+  });
 
   const handleCreateAutomation = useCallback(async (input: Parameters<typeof createAutomation>[0]) => {
     await createAutomation(input);

@@ -91,10 +91,11 @@ describe("runAutomationNow service", () => {
         status: "error",
       })
     );
+    // nextRunAtMs should be recomputed: anchor(9000) + 5h = 9000 + 18_000_000 = 18_009_000
     expect(deps.markAutomationRunSchedule).toHaveBeenCalledWith(
       7,
       expect.objectContaining({
-        nextRunAtMs: 9000,
+        nextRunAtMs: 9000 + 5 * 60 * 60 * 1000,
       })
     );
   });
@@ -331,5 +332,65 @@ describe("runAutomationNow service", () => {
     }, deps);
 
     expect(capturedTarget?.tmuxSessionName).toBe("divergence-auto-7-99");
+  });
+
+  it("passes triggerSource through to insertAutomationRun and buildAutomationPromptMarkdown", async () => {
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+      triggerSource: "schedule",
+    }, deps);
+
+    expect(deps.insertAutomationRun).toHaveBeenCalledWith(
+      expect.objectContaining({ triggerSource: "schedule" })
+    );
+    expect(deps.buildAutomationPromptMarkdown).toHaveBeenCalledWith(
+      expect.objectContaining({ triggerSource: "schedule" })
+    );
+  });
+
+  it("uses fixed-clock scheduling: anchors to scheduled time, not completion time", async () => {
+    // Automation scheduled at 9000ms, 5h interval, now() returns 1234 (completion time)
+    // Fixed-clock: next = 9000 + 5*3600000 = 18_009_000 (not 1234 + 5*3600000)
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation({ nextRunAtMs: 9000, intervalHours: 5 }),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(deps.markAutomationRunSchedule).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        nextRunAtMs: 9000 + 5 * 60 * 60 * 1000,
+      })
+    );
+  });
+
+  it("returns null nextRunAtMs when automation is disabled", async () => {
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation({ enabled: false }),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(deps.markAutomationRunSchedule).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        nextRunAtMs: null,
+      })
+    );
   });
 });

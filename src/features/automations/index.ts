@@ -13,6 +13,17 @@ export {
 export { cancelAutomationRun } from "./service/cancelAutomationRun.service";
 export { reconcileAutomationRuns } from "./service/reconcileAutomationRuns.service";
 export { useAutomationRunPoller } from "./model/useAutomationRunPoller";
+export { useAutomationScheduler } from "./model/useAutomationScheduler";
+export {
+  isAutomationDue,
+  computeAutomationNextRunAtMs,
+  computeNextScheduledRunAtMs,
+  findDueAutomations,
+  normalizeAutomationIntervalHours,
+  buildAutomationBranchName,
+  buildAutomationPromptMarkdown,
+  sanitizeAutomationNameForBranch,
+} from "./lib/automationScheduler.pure";
 export type {
   AutomationTmuxStatus,
   AutomationResultFile,

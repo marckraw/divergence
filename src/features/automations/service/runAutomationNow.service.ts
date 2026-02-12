@@ -5,6 +5,7 @@ import {
   updateAutomationRun,
   updateAutomationRunTmuxSession,
   type Automation,
+  type AutomationRunTriggerSource,
 } from "../../../entities/automation";
 import { writeAutomationBriefFile } from "../api/runAutomation.api";
 import {
@@ -22,6 +23,7 @@ import {
   parseAutomationResult,
 } from "../lib/tmuxAutomation.pure";
 import type { AutomationResultFile } from "../lib/tmuxAutomation.types";
+import { computeNextScheduledRunAtMs } from "../lib/automationScheduler.pure";
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const LOG_TAIL_MAX_BYTES = 8_000;
@@ -65,6 +67,7 @@ export interface RunAutomationNowInput {
   runTask: RunBackgroundTask;
   agentCommandClaude: string;
   agentCommandCodex: string;
+  triggerSource?: AutomationRunTriggerSource;
 }
 
 export interface RunAutomationNowResult {
@@ -113,10 +116,11 @@ export async function runAutomationNow(
     ...dependencies,
   };
 
+  const triggerSource = input.triggerSource ?? "manual";
   const startedAtMs = deps.now();
   const runId = await deps.insertAutomationRun({
     automationId: input.automation.id,
-    triggerSource: "manual",
+    triggerSource,
     status: "queued",
     startedAtMs,
     keepSessionAlive: input.automation.keepSessionAlive,
@@ -135,7 +139,7 @@ export async function runAutomationNow(
       }),
       deps.markAutomationRunSchedule(input.automation.id, {
         lastRunAtMs: endedAtMs,
-        nextRunAtMs: input.automation.nextRunAtMs,
+        nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
       }),
     ]);
     return {
@@ -171,7 +175,7 @@ export async function runAutomationNow(
         const markdown = deps.buildAutomationPromptMarkdown({
           automationName: input.automation.name,
           projectName: project.name,
-          triggerSource: "manual",
+          triggerSource,
           prompt: input.automation.prompt,
           generatedAtMs: deps.now(),
         });
@@ -204,7 +208,7 @@ export async function runAutomationNow(
             projectName: project.name,
             projectPath: project.path,
             agent: input.automation.agent,
-            triggerSource: "manual",
+            triggerSource,
             briefPath,
           },
         });
@@ -264,7 +268,7 @@ export async function runAutomationNow(
         // Update schedule
         await deps.markAutomationRunSchedule(input.automation.id, {
           lastRunAtMs: endedAtMs,
-          nextRunAtMs: input.automation.nextRunAtMs,
+          nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
         });
 
         if (result && result.exitCode === 0) {
@@ -309,7 +313,7 @@ export async function runAutomationNow(
         }),
         deps.markAutomationRunSchedule(input.automation.id, {
           lastRunAtMs: endedAtMs,
-          nextRunAtMs: input.automation.nextRunAtMs,
+          nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
         }),
       ]);
     }

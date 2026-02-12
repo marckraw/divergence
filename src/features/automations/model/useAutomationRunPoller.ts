@@ -1,9 +1,11 @@
 import { useEffect, useRef, useCallback } from "react";
 import {
+  listAutomations,
   listRunningAutomationRuns,
   updateAutomationRun,
   markAutomationRunSchedule,
 } from "../../../entities/automation/api/automation.api";
+import { computeNextScheduledRunAtMs } from "../lib/automationScheduler.pure";
 import {
   queryAutomationTmuxPaneStatus,
   readAutomationLogTail,
@@ -114,9 +116,13 @@ async function pollSingleRun(
         endedAtMs,
         error: "Process lost — tmux session disappeared.",
       });
+      const allAutomations = await listAutomations();
+      const automation = allAutomations.find(a => a.id === automationId);
       await markAutomationRunSchedule(automationId, {
         lastRunAtMs: endedAtMs,
-        nextRunAtMs: null,
+        nextRunAtMs: automation
+          ? computeNextScheduledRunAtMs(automation, endedAtMs)
+          : null,
       });
       callbacks.onRunFailed(runId, "Process lost — tmux session disappeared.");
       return;
@@ -155,9 +161,13 @@ async function pollSingleRun(
     endedAtMs,
     error: `Process exited without writing result file${exitCodeInfo}.`,
   });
+  const allAutomationsForNoResult = await listAutomations();
+  const automationForNoResult = allAutomationsForNoResult.find(a => a.id === automationId);
   await markAutomationRunSchedule(automationId, {
     lastRunAtMs: endedAtMs,
-    nextRunAtMs: null,
+    nextRunAtMs: automationForNoResult
+      ? computeNextScheduledRunAtMs(automationForNoResult, endedAtMs)
+      : null,
   });
   callbacks.onRunFailed(runId, `Process exited without writing result file${exitCodeInfo}.`);
 
@@ -190,9 +200,13 @@ async function finalizeRun(
     error: error ?? null,
     detailsJson: JSON.stringify(result),
   });
+  const allAutomationsForFinalize = await listAutomations();
+  const automationForFinalize = allAutomationsForFinalize.find(a => a.id === automationId);
   await markAutomationRunSchedule(automationId, {
     lastRunAtMs: endedAtMs,
-    nextRunAtMs: null,
+    nextRunAtMs: automationForFinalize
+      ? computeNextScheduledRunAtMs(automationForFinalize, endedAtMs)
+      : null,
   });
 
   if (status === "success") {
