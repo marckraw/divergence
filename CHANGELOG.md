@@ -1,5 +1,11 @@
 # divergence
 
+## 0.15.3
+
+### Patch Changes
+
+- e388b0e: Fix infinite loop in automation polling: add 4-hour maximum timeout to pollUntilDone to prevent stuck automation runs from blocking the task queue indefinitely. Also fix DB finalization so timed-out runs are correctly marked as "error" instead of remaining in "running" status.
+
 ## 0.15.2
 
 ### Patch Changes
