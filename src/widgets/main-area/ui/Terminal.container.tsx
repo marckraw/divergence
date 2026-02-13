@@ -114,6 +114,8 @@ function Terminal({
   const initializedRef = useRef(false);
   const onStatusChangeRef = useRef<TerminalProps["onStatusChange"]>(onStatusChange);
   const onRendererChangeRef = useRef<TerminalProps["onRendererChange"]>(onRendererChange);
+  const themeModeRef = useRef<"dark" | "light">(themeMode);
+  const tmuxHistoryLimitRef = useRef(tmuxHistoryLimit);
   const statusRef = useRef<"idle" | "active" | "busy">("idle");
   const lastActiveUpdateRef = useRef(0);
 
@@ -124,6 +126,14 @@ function Terminal({
   useEffect(() => {
     onRendererChangeRef.current = onRendererChange;
   }, [onRendererChange]);
+
+  useEffect(() => {
+    themeModeRef.current = themeMode;
+  }, [themeMode]);
+
+  useEffect(() => {
+    tmuxHistoryLimitRef.current = tmuxHistoryLimit;
+  }, [tmuxHistoryLimit]);
 
   const updateStatus = useCallback((status: "idle" | "active" | "busy") => {
     if (statusRef.current === status) {
@@ -197,7 +207,7 @@ function Terminal({
         cursorBlink: true,
         fontSize: 14,
         fontFamily: '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
-        theme: getTerminalTheme(themeMode),
+        theme: getTerminalTheme(themeModeRef.current),
         scrollback: 10000,
       });
 
@@ -295,7 +305,7 @@ function Terminal({
               cwd,
               tmuxCommand,
               sessionName: safeSessionName,
-              historyLimit: tmuxHistoryLimit ?? DEFAULT_TMUX_HISTORY_LIMIT,
+              historyLimit: tmuxHistoryLimitRef.current ?? DEFAULT_TMUX_HISTORY_LIMIT,
               env: {
                 DIVERGENCE_APP: "1",
               },
@@ -421,7 +431,13 @@ function Terminal({
       initializedRef.current = false;
       resumeDisabledRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, themeMode, tmuxHistoryLimit]);
+  // NOTE: themeMode and tmuxHistoryLimit are intentionally excluded from deps
+  // and accessed via refs. Theme changes are handled by the dedicated effect below
+  // (lines 438-461) without destroying the terminal. tmuxHistoryLimit only applies
+  // at PTY spawn time. Including them here would destroy the entire terminal and
+  // kill the running shell session on every theme toggle or settings change.
+   
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
