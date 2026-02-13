@@ -1,5 +1,11 @@
 # divergence
 
+## 0.13.0
+
+### Minor Changes
+
+- f983828: Add usage limits popover showing real-time Claude Code and Codex API usage with colored utilization bars, reset countdowns, and 60s auto-polling.
+
 ## 0.12.0
 
 ### Minor Changes
