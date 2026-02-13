@@ -41,10 +41,16 @@ export function computeNextScheduledRunAtMs(
   const intervalMs = normalizeAutomationIntervalHours(automation.intervalHours) * HOUR_MS;
   const anchor = automation.nextRunAtMs ?? nowMs;
   let next = anchor + intervalMs;
-  // If we've fallen behind (app closed, long run), advance to next future slot
+  // If we've fallen behind (app closed, long run), advance to next future slot.
+  // Use `< nowMs` first for bulk skip, then `<= nowMs` to guarantee next > nowMs
+  // (avoids Math.ceil(0) == 0 when next lands exactly on nowMs).
   if (next <= nowMs) {
     const missedIntervals = Math.ceil((nowMs - next) / intervalMs);
     next += missedIntervals * intervalMs;
+    // If next still equals nowMs (boundary case), push one more interval ahead
+    if (next <= nowMs) {
+      next += intervalMs;
+    }
   }
   return next;
 }

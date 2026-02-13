@@ -83,6 +83,35 @@ describe("automation scheduler utils", () => {
       expect(result).toBeNull();
     });
 
+    it("never returns a time equal to nowMs (boundary case)", () => {
+      // nextRunAtMs=1000, interval=1h. now=1000 + 2*HOUR_MS exactly.
+      // next = 1000 + HOUR_MS = 1000 + 3600000 = 3601000
+      // catch-up: missedIntervals = ceil((7201000 - 3601000) / 3600000) = ceil(1) = 1
+      // next = 3601000 + 3600000 = 7201000 === nowMs  (BUG: would equal nowMs)
+      // After fix: should push one more interval ahead
+      const anchor = 1000;
+      const nowMs = anchor + 2 * HOUR_MS;
+      const result = computeNextScheduledRunAtMs(
+        { enabled: true, intervalHours: 1, nextRunAtMs: anchor },
+        nowMs,
+      );
+      expect(result).toBeGreaterThan(nowMs);
+      expect(result).toBe(anchor + 3 * HOUR_MS);
+    });
+
+    it("never returns a time equal to nowMs when next lands exactly on nowMs (zero missed)", () => {
+      // next = anchor + interval = nowMs exactly.
+      // Math.ceil(0/intervalMs) = 0, so without fix next stays = nowMs
+      const anchor = 1000;
+      const nowMs = anchor + HOUR_MS;
+      const result = computeNextScheduledRunAtMs(
+        { enabled: true, intervalHours: 1, nextRunAtMs: anchor },
+        nowMs,
+      );
+      expect(result).toBeGreaterThan(nowMs);
+      expect(result).toBe(anchor + 2 * HOUR_MS);
+    });
+
     it("uses nowMs as anchor when nextRunAtMs is null (manual run)", () => {
       const nowMs = Date.UTC(2026, 0, 1, 15, 0, 0);
       const result = computeNextScheduledRunAtMs(
