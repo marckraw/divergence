@@ -54,3 +54,9 @@ coverage/
 # Debug
 debug/
 *.pdb
+
+# Claude Code local settings
+.claude/
+
+# Divergence runtime artifacts
+.divergence/

@@ -16,6 +16,10 @@ export interface BuildTerminalSessionInput {
   tmuxSessionName?: string;
 }
 
+export function generateSessionEntropy(): string {
+  return `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
 export function buildWorkspaceKey(type: "project" | "divergence", targetId: number): string {
   return `${type}:${targetId}`;
 }
