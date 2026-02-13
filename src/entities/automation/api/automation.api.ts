@@ -111,15 +111,15 @@ export async function updateAutomationRun(
     detailsJson?: string | null;
   }
 ): Promise<void> {
-  const updates: Record<string, unknown> = { status: input.status };
-  if (input.startedAtMs !== undefined) updates.startedAtMs = input.startedAtMs;
-  if (input.endedAtMs !== undefined) updates.endedAtMs = input.endedAtMs;
-  if (input.error !== undefined) updates.error = input.error;
-  if (input.detailsJson !== undefined) updates.detailsJson = input.detailsJson;
+  const fields: Record<string, unknown> = { status: input.status };
+  if ("startedAtMs" in input) fields.startedAtMs = input.startedAtMs ?? null;
+  if ("endedAtMs" in input) fields.endedAtMs = input.endedAtMs ?? null;
+  if ("error" in input) fields.error = input.error ?? null;
+  if ("detailsJson" in input) fields.detailsJson = input.detailsJson ?? null;
 
   await db
     .update(automationRuns)
-    .set(updates)
+    .set(fields)
     .where(eq(automationRuns.id, runId));
 }
 
