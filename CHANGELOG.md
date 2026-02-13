@@ -1,5 +1,15 @@
 # divergence
 
+## 0.14.0
+
+### Minor Changes
+
+- f278ae5: Add dismiss/archive functionality for completed automation runs in Task Center. Users can dismiss individual tasks or clear all recent tasks at once. Dismissed runs are soft-deleted and persist across app restarts.
+
+### Patch Changes
+
+- 963a02b: Fix updateAutomationRun silently nulling out omitted optional fields (e.g. startedAtMs) when only a subset of fields is provided by the caller.
+
 ## 0.13.1
 
 ### Patch Changes
