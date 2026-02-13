@@ -1,5 +1,12 @@
 # divergence
 
+## 0.14.1
+
+### Patch Changes
+
+- f657704: Fix merge detection effect cascade where detecting a merge caused unnecessary effect re-triggers, interval resets, and silently skipped divergence checks.
+- b4e055c: Fix off-by-one bug in computeNextScheduledRunAtMs: when the computed next run time landed exactly on the current time (or missed intervals aligned to exact multiples), Math.ceil returned 0, causing the function to return the current time instead of a future slot. This could trigger immediate re-runs in a tight loop. Switched to Math.floor + 1 to guarantee the result always lands strictly in the future.
+
 ## 0.14.0
 
 ### Minor Changes
