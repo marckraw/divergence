@@ -153,6 +153,13 @@ const MIGRATIONS: Migration[] = [
       { sql: "ALTER TABLE automation_runs ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", safeAddColumn: true },
     ],
   },
+  {
+    version: 3,
+    description: "Add divergence_id to automation_runs",
+    statements: [
+      { sql: "ALTER TABLE automation_runs ADD COLUMN divergence_id INTEGER REFERENCES divergences(id) ON DELETE SET NULL", safeAddColumn: true },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────

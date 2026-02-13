@@ -44,7 +44,7 @@ import {
 } from "../features/diff-review";
 import { notifyCommandFinished } from "../shared/lib/notifications";
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
-import { buildTerminalSession, buildWorkspaceKey } from "./lib/sessionBuilder.pure";
+import { buildTerminalSession, buildWorkspaceKey, generateSessionEntropy } from "./lib/sessionBuilder.pure";
 import {
   buildIdleNotificationTargetLabel,
   shouldNotifyIdle,
@@ -345,7 +345,7 @@ function App() {
     type: "project" | "divergence",
     target: Project | Divergence
   ): TerminalSession => {
-    const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const entropy = generateSessionEntropy();
     const sessionId = `${type}-${target.id}#manual-${entropy}`;
     const workspaceSessions = Array.from(sessionsRef.current.values())
       .filter((session) => session.type === type && session.targetId === target.id);
@@ -512,7 +512,7 @@ function App() {
   }, [waitForSessionCommand]);
 
   const createReviewAgentSession = useCallback((sourceSession: TerminalSession, agent: DiffReviewAgent): TerminalSession => {
-    const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const entropy = generateSessionEntropy();
     const shortRunId = entropy.split("-")[1]?.padStart(3, "0") ?? "000";
     const sessionId = `${sourceSession.type}-${sourceSession.targetId}#review-${entropy}`;
     const tmuxSessionName = sourceSession.useTmux
@@ -778,9 +778,13 @@ function App() {
     runTask,
   ]);
 
-  const handleRunAutomationNow = useCallback(async (automationId: number): Promise<void> => {
+  const executeAutomationRun = useCallback(async (
+    automationId: number,
+    triggerSource?: AutomationRunTriggerSource,
+  ): Promise<void> => {
     const automation = automations.find((item) => item.id === automationId);
     if (!automation) {
+      if (triggerSource) return; // scheduled runs silently skip missing automations
       throw new Error("Automation not found.");
     }
     const project = projectById.get(automation.projectId) ?? null;
@@ -790,41 +794,29 @@ function App() {
       runTask,
       agentCommandClaude: appSettings.agentCommandClaude,
       agentCommandCodex: appSettings.agentCommandCodex,
+      triggerSource,
     });
-    await refreshAutomations();
+    await Promise.all([refreshAutomations(), refreshDivergences()]);
   }, [
     appSettings.agentCommandClaude,
     appSettings.agentCommandCodex,
     automations,
     projectById,
     refreshAutomations,
+    refreshDivergences,
     runTask,
   ]);
 
-  const handleRunScheduledAutomation = useCallback(async (
-    automationId: number,
-    triggerSource: AutomationRunTriggerSource,
-  ): Promise<void> => {
-    const automation = automations.find((item) => item.id === automationId);
-    if (!automation) return;
-    const project = projectById.get(automation.projectId) ?? null;
-    await runAutomationNow({
-      automation,
-      project,
-      runTask,
-      agentCommandClaude: appSettings.agentCommandClaude,
-      agentCommandCodex: appSettings.agentCommandCodex,
-      triggerSource,
-    });
-    await refreshAutomations();
-  }, [
-    appSettings.agentCommandClaude,
-    appSettings.agentCommandCodex,
-    automations,
-    projectById,
-    refreshAutomations,
-    runTask,
-  ]);
+  const handleRunAutomationNow = useCallback(
+    (automationId: number) => executeAutomationRun(automationId),
+    [executeAutomationRun],
+  );
+
+  const handleRunScheduledAutomation = useCallback(
+    (automationId: number, triggerSource: AutomationRunTriggerSource) =>
+      executeAutomationRun(automationId, triggerSource),
+    [executeAutomationRun],
+  );
 
   // Automation scheduler — periodically triggers due automations
   useAutomationScheduler({
@@ -866,7 +858,7 @@ function App() {
     // (which cannot target a specific window), we spawn a plain shell and send
     // `tmux attach` as a command. This lets us select window 0 first so the
     // user lands on the main automation output, not a random agent window.
-    const entropy = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const entropy = generateSessionEntropy();
     const sessionId = `project-${projectId}#automation-${entropy}`;
     const base = buildTerminalSession({
       type: "project",

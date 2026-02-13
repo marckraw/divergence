@@ -3,7 +3,7 @@ import type { Divergence, Project } from "../../../entities";
 import { insertDivergenceAndGetId } from "../../../entities/divergence";
 
 interface CreateDivergenceCommandParams {
-  project: Project;
+  project: Pick<Project, "id" | "name" | "path">;
   branchName: string;
   copyIgnoredSkip: string[];
   useExistingBranch: boolean;

@@ -3,10 +3,16 @@ import {
   insertAutomationRun,
   markAutomationRunSchedule,
   updateAutomationRun,
+  updateAutomationRunDivergence,
   updateAutomationRunTmuxSession,
   type Automation,
   type AutomationRunTriggerSource,
 } from "../../../entities/automation";
+import { loadProjectSettings } from "../../../entities/project";
+import {
+  createDivergenceRepository,
+  insertDivergenceRecord,
+} from "../../create-divergence";
 import { writeAutomationBriefFile } from "../api/runAutomation.api";
 import {
   spawnAutomationTmuxSession,
@@ -23,42 +29,18 @@ import {
   parseAutomationResult,
 } from "../lib/tmuxAutomation.pure";
 import type { AutomationResultFile } from "../lib/tmuxAutomation.types";
-import { computeNextScheduledRunAtMs } from "../lib/automationScheduler.pure";
+import {
+  buildAutomationBranchName,
+  buildAutomationPromptMarkdown,
+  computeNextScheduledRunAtMs,
+} from "../lib/automationScheduler.pure";
+import { renderTemplateCommand } from "../../../shared/lib/templateRendering.pure";
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const LOG_TAIL_MAX_BYTES = 8_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function renderAutomationCommand(template: string, tokens: {
-  workspacePath: string;
-  briefPath: string;
-}): string {
-  return template
-    .split("{workspacePath}").join(tokens.workspacePath)
-    .split("{briefPath}").join(tokens.briefPath);
-}
-
-function buildAutomationPromptMarkdown(input: {
-  automationName: string;
-  projectName: string;
-  triggerSource: string;
-  prompt: string;
-  generatedAtMs: number;
-}): string {
-  return [
-    `# Automation Run: ${input.automationName}`,
-    "",
-    `Project: ${input.projectName}`,
-    `Trigger: ${input.triggerSource}`,
-    `Generated at: ${new Date(input.generatedAtMs).toISOString()}`,
-    "",
-    "## Prompt",
-    input.prompt.trim(),
-    "",
-  ].join("\n");
 }
 
 export interface RunAutomationNowInput {
@@ -74,6 +56,7 @@ export interface RunAutomationNowResult {
   runId: number;
   status: "launched" | "error";
   tmuxSessionName?: string;
+  divergenceId?: number;
   error?: string;
 }
 
@@ -81,7 +64,11 @@ export interface RunAutomationNowDependencies {
   insertAutomationRun: typeof insertAutomationRun;
   updateAutomationRun: typeof updateAutomationRun;
   updateAutomationRunTmuxSession: typeof updateAutomationRunTmuxSession;
+  updateAutomationRunDivergence: typeof updateAutomationRunDivergence;
   markAutomationRunSchedule: typeof markAutomationRunSchedule;
+  loadProjectSettings: typeof loadProjectSettings;
+  createDivergenceRepository: typeof createDivergenceRepository;
+  insertDivergenceRecord: typeof insertDivergenceRecord;
   buildAutomationPromptMarkdown: typeof buildAutomationPromptMarkdown;
   writeAutomationBriefFile: typeof writeAutomationBriefFile;
   spawnAutomationTmuxSession: typeof spawnAutomationTmuxSession;
@@ -102,7 +89,11 @@ export async function runAutomationNow(
     insertAutomationRun,
     updateAutomationRun,
     updateAutomationRunTmuxSession,
+    updateAutomationRunDivergence,
     markAutomationRunSchedule,
+    loadProjectSettings,
+    createDivergenceRepository,
+    insertDivergenceRecord,
     buildAutomationPromptMarkdown,
     writeAutomationBriefFile,
     spawnAutomationTmuxSession,
@@ -149,6 +140,43 @@ export async function runAutomationNow(
     };
   }
 
+  // ── Create divergence (branch-isolated clone) ──
+  let divergencePath: string;
+  let divergenceId: number;
+  try {
+    const settings = await deps.loadProjectSettings(project.id);
+    const branchName = buildAutomationBranchName(input.automation.id, input.automation.name, deps.now());
+    const divergence = await deps.createDivergenceRepository({
+      project,
+      branchName,
+      copyIgnoredSkip: settings.copyIgnoredSkip,
+      useExistingBranch: false,
+    });
+    divergenceId = await deps.insertDivergenceRecord(divergence);
+    await deps.updateAutomationRunDivergence(runId, divergenceId);
+    divergencePath = divergence.path;
+  } catch (err) {
+    const endedAtMs = deps.now();
+    const errorMessage = `Failed to create divergence: ${err instanceof Error ? err.message : String(err)}`;
+    await Promise.all([
+      deps.updateAutomationRun(runId, {
+        status: "error",
+        startedAtMs,
+        endedAtMs,
+        error: errorMessage,
+      }),
+      deps.markAutomationRunSchedule(input.automation.id, {
+        lastRunAtMs: endedAtMs,
+        nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
+      }),
+    ]);
+    return {
+      runId,
+      status: "error",
+      error: errorMessage,
+    };
+  }
+
   let monitoringStarted = false;
   const precomputedTmuxSessionName = buildAutomationTmuxSessionName(input.automation.id, runId);
 
@@ -160,7 +188,7 @@ export async function runAutomationNow(
         type: "project",
         projectId: project.id,
         projectName: project.name,
-        path: project.path,
+        path: divergencePath,
         label: `${project.name} / ${input.automation.name}`,
         tmuxSessionName: precomputedTmuxSessionName,
       },
@@ -180,7 +208,7 @@ export async function runAutomationNow(
           prompt: input.automation.prompt,
           generatedAtMs: deps.now(),
         });
-        const { path: briefPath } = await deps.writeAutomationBriefFile(project.path, markdown);
+        const { path: briefPath } = await deps.writeAutomationBriefFile(divergencePath, markdown);
 
         const commandTemplate = input.automation.agent === "claude"
           ? input.agentCommandClaude
@@ -189,14 +217,14 @@ export async function runAutomationNow(
           throw new Error(`No ${input.automation.agent} command template configured in settings.`);
         }
 
-        const agentCommand = renderAutomationCommand(commandTemplate, {
-          workspacePath: project.path,
+        const agentCommand = renderTemplateCommand(commandTemplate, {
+          workspacePath: divergencePath,
           briefPath,
         });
 
         const tmuxSessionName = buildAutomationTmuxSessionName(input.automation.id, runId);
-        const logPath = buildAutomationLogPath(project.path, runId);
-        const resultPath = buildAutomationResultPath(project.path, runId);
+        const logPath = buildAutomationLogPath(divergencePath, runId);
+        const resultPath = buildAutomationResultPath(divergencePath, runId);
 
         const wrapperCommand = buildWrapperCommand({
           agentCommand,
@@ -208,6 +236,7 @@ export async function runAutomationNow(
             automationId: input.automation.id,
             projectName: project.name,
             projectPath: project.path,
+            divergencePath,
             agent: input.automation.agent,
             triggerSource,
             briefPath,
@@ -218,7 +247,7 @@ export async function runAutomationNow(
         await deps.spawnAutomationTmuxSession({
           sessionName: tmuxSessionName,
           command: wrapperCommand,
-          cwd: project.path,
+          cwd: divergencePath,
           logPath,
         });
 
@@ -298,6 +327,7 @@ export async function runAutomationNow(
       runId,
       status: "launched",
       tmuxSessionName: buildAutomationTmuxSessionName(input.automation.id, runId),
+      divergenceId,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -32,4 +32,5 @@ export interface CreateAutomationRunInput {
   tmuxSessionName?: string | null;
   logFilePath?: string | null;
   resultFilePath?: string | null;
+  divergenceId?: number | null;
 }
