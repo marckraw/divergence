@@ -109,15 +109,15 @@ export async function updateAutomationRun(
     detailsJson?: string | null;
   }
 ): Promise<void> {
+  const fields: Record<string, unknown> = { status: input.status };
+  if ("startedAtMs" in input) fields.startedAtMs = input.startedAtMs ?? null;
+  if ("endedAtMs" in input) fields.endedAtMs = input.endedAtMs ?? null;
+  if ("error" in input) fields.error = input.error ?? null;
+  if ("detailsJson" in input) fields.detailsJson = input.detailsJson ?? null;
+
   await db
     .update(automationRuns)
-    .set({
-      status: input.status,
-      startedAtMs: input.startedAtMs ?? null,
-      endedAtMs: input.endedAtMs ?? null,
-      error: input.error ?? null,
-      detailsJson: input.detailsJson ?? null,
-    })
+    .set(fields)
     .where(eq(automationRuns.id, runId));
 }
 
