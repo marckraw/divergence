@@ -146,6 +146,13 @@ const MIGRATIONS: Migration[] = [
       { sql: "CREATE INDEX IF NOT EXISTS idx_automations_project_id ON automations(project_id)" },
     ],
   },
+  {
+    version: 2,
+    description: "Add archived column to automation_runs",
+    statements: [
+      { sql: "ALTER TABLE automation_runs ADD COLUMN archived INTEGER NOT NULL DEFAULT 0", safeAddColumn: true },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────

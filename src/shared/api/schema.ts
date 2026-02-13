@@ -98,6 +98,7 @@ export const automationRuns = sqliteTable(
     tmuxSessionName: text("tmux_session_name"),
     logFilePath: text("log_file_path"),
     resultFilePath: text("result_file_path"),
+    archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   },
   (table) => [
     index("idx_automation_runs_automation_id").on(table.automationId, table.id),

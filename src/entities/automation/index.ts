@@ -10,6 +10,8 @@ export type {
 } from "./model/automation.types";
 export { useAutomations } from "./model/useAutomations";
 export {
+  archiveAutomationRun,
+  archiveAllCompletedAutomationRuns,
   deleteAutomation,
   insertAutomation,
   insertAutomationRun,

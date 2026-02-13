@@ -144,6 +144,8 @@ function App() {
     runningCount,
     focusedTaskId,
     dismissToast,
+    dismissTask,
+    dismissAllRecentTasks,
     viewTask,
     retryTask,
     runTask,
@@ -1189,6 +1191,8 @@ function App() {
               focusedTaskId={focusedTaskId}
               onRetryTask={retryTask}
               onViewTask={handleViewTaskCenterTask}
+              onDismissTask={dismissTask}
+              onDismissAllRecentTasks={dismissAllRecentTasks}
               onAttachToAutomationSession={handleAttachToAutomationSession}
             />
           )}

@@ -42,6 +42,7 @@ export interface BackgroundTask {
   startedAtMs?: number;
   endedAtMs?: number;
   error?: string;
+  dbRunId?: number;
 }
 
 export interface BackgroundTaskToast {
@@ -67,6 +68,7 @@ export interface BackgroundTaskRunOptions<T> {
   run: (controls: BackgroundTaskControls) => Promise<T>;
   successMessage?: string;
   errorMessage?: string;
+  dbRunId?: number;
 }
 
 export type RunBackgroundTask = <T>(options: BackgroundTaskRunOptions<T>) => Promise<T>;

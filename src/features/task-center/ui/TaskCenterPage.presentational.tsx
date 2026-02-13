@@ -41,6 +41,7 @@ function TaskCenterTaskCard({
   onRetryTask,
   onViewTask,
   onInspectTask,
+  onDismissTask,
 }: {
   task: BackgroundTask;
   nowMs: number;
@@ -48,6 +49,7 @@ function TaskCenterTaskCard({
   onRetryTask: (taskId: string) => Promise<void>;
   onViewTask: (taskId: string) => void;
   onInspectTask: (taskId: string) => void;
+  onDismissTask?: (taskId: string) => void;
 }) {
   const [isRetrying, setIsRetrying] = useState(false);
 
@@ -123,6 +125,18 @@ function TaskCenterTaskCard({
             className="px-2 py-1 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-60"
           >
             {isRetrying ? "Retrying..." : "Retry"}
+          </button>
+        )}
+        {(task.status === "success" || task.status === "error") && onDismissTask && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDismissTask(task.id);
+            }}
+            className="px-2 py-1 text-xs rounded border border-surface text-subtext hover:text-text hover:bg-surface"
+          >
+            Dismiss
           </button>
         )}
       </div>
@@ -264,6 +278,8 @@ function TaskCenterPagePresentational({
   focusedTaskId,
   onRetryTask,
   onViewTask,
+  onDismissTask,
+  onDismissAllRecentTasks,
   onAttachToAutomationSession,
   nowMs,
 }: TaskCenterPagePresentationalProps) {
@@ -310,7 +326,18 @@ function TaskCenterPagePresentational({
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-subtext mb-2">Recent</h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-subtext">Recent</h3>
+            {recentTasks.length > 0 && (
+              <button
+                type="button"
+                onClick={onDismissAllRecentTasks}
+                className="px-2 py-0.5 text-xs rounded border border-surface text-subtext hover:text-text hover:bg-surface"
+              >
+                Clear All
+              </button>
+            )}
+          </div>
           {recentTasks.length === 0 ? (
             <div className="text-xs text-subtext px-1 py-2">No completed tasks yet</div>
           ) : (
@@ -324,6 +351,7 @@ function TaskCenterPagePresentational({
                   onRetryTask={onRetryTask}
                   onViewTask={onViewTask}
                   onInspectTask={setInspectTaskId}
+                  onDismissTask={onDismissTask}
                 />
               ))}
             </div>
