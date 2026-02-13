@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildTmuxBootstrapCommand,
   sanitizeTmuxSessionNameForShell,
+  TMUX_BOOTSTRAP_TIMEOUT_MS,
+  buildBootstrapTimeoutMessage,
 } from "../../src/widgets/main-area/lib/terminalTmux.pure";
 
 describe("terminal tmux utils", () => {
@@ -16,5 +18,20 @@ describe("terminal tmux utils", () => {
     expect(command).toContain("history-limit");
     expect(command).toContain("exec tmux attach");
     expect(command).toContain("tmux not found, starting zsh");
+  });
+
+  it("exports bootstrap timeout constant", () => {
+    expect(TMUX_BOOTSTRAP_TIMEOUT_MS).toBe(15_000);
+  });
+
+  it("builds bootstrap timeout message with seconds", () => {
+    const msg = buildBootstrapTimeoutMessage(15_000);
+    expect(msg).toContain("15s");
+    expect(msg).toContain("Reconnecting");
+  });
+
+  it("rounds timeout message to nearest second", () => {
+    const msg = buildBootstrapTimeoutMessage(7_500);
+    expect(msg).toContain("8s");
   });
 });

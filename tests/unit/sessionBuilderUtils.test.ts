@@ -65,7 +65,6 @@ describe("session builder utils", () => {
     expect(session.workspaceKey).toBe("divergence:9");
     expect(session.sessionRole).toBe("default");
     expect(session.useTmux).toBe(false);
-    expect(session.useWebgl).toBe(false);
     expect(session.tmuxHistoryLimit).toBe(12345);
     expect(session.tmuxSessionName).toContain("divergence-branch-alpha-feat-search-9");
   });

@@ -40,7 +40,6 @@ const sessions = new Map<string, TerminalSession>([
     useTmux: true,
     tmuxSessionName: "divergence-branch-alpha-feat-search-10",
     tmuxHistoryLimit: 50000,
-    useWebgl: true,
     status: "idle",
   }],
 ]);

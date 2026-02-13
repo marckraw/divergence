@@ -22,7 +22,6 @@ export interface MainAreaProps {
   onCloseSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
-  onRendererChange: (sessionId: string, renderer: "webgl" | "canvas") => void;
   onRegisterTerminalCommand: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterTerminalCommand: (sessionId: string) => void;
   onRunReviewAgentRequest: (input: {

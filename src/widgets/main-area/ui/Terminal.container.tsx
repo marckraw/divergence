@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebglAddon } from "@xterm/addon-webgl";
 import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../shared";
 import "@xterm/xterm/css/xterm.css";
 import { useAppSettings } from "../../../shared";
@@ -13,8 +12,16 @@ import {
 import {
   buildTmuxBootstrapCommand,
   sanitizeTmuxSessionNameForShell,
+  TMUX_BOOTSTRAP_TIMEOUT_MS,
+  buildBootstrapTimeoutMessage,
 } from "../lib/terminalTmux.pure";
+import {
+  shouldAutoReconnect,
+  getReconnectDelayMs,
+} from "../lib/terminalReconnect.pure";
 import TerminalPresentational from "./Terminal.presentational";
+
+const SPAWN_DEBOUNCE_MS = 50;
 
 interface TerminalProps {
   cwd: string;
@@ -22,11 +29,10 @@ interface TerminalProps {
   useTmux?: boolean;
   tmuxSessionName?: string;
   tmuxHistoryLimit?: number;
-  useWebgl?: boolean;
-  onRendererChange?: (renderer: "webgl" | "canvas") => void;
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterCommand?: (sessionId: string) => void;
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
+  onReconnect?: () => void;
   onClose?: () => void;
 }
 
@@ -87,11 +93,10 @@ function Terminal({
   useTmux = false,
   tmuxSessionName,
   tmuxHistoryLimit,
-  useWebgl = true,
-  onRendererChange,
   onRegisterCommand,
   onUnregisterCommand,
   onStatusChange,
+  onReconnect,
   onClose,
 }: TerminalProps) {
   const { settings: appSettings } = useAppSettings();
@@ -99,31 +104,38 @@ function Terminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const webglAddonRef = useRef<WebglAddon | null>(null);
   const ptyRef = useRef<PtyProcess | null>(null);
   const isDisposedRef = useRef(false);
   const ptyDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const ptyExitDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const terminalResizeDisposableRef = useRef<{ dispose: () => void } | null>(null);
-  const terminalFocusDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const initRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const resumeDisabledRef = useRef(false);
+  const spawnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
   const onStatusChangeRef = useRef<TerminalProps["onStatusChange"]>(onStatusChange);
-  const onRendererChangeRef = useRef<TerminalProps["onRendererChange"]>(onRendererChange);
+  const onReconnectRef = useRef(onReconnect);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasReceivedDataRef = useRef(false);
   const statusRef = useRef<"idle" | "active" | "busy">("idle");
   const lastActiveUpdateRef = useRef(0);
+  const themeModeRef = useRef<"dark" | "light">(themeMode);
+
+  useEffect(() => {
+    themeModeRef.current = themeMode;
+  }, [themeMode]);
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
 
   useEffect(() => {
-    onRendererChangeRef.current = onRendererChange;
-  }, [onRendererChange]);
+    onReconnectRef.current = onReconnect;
+  }, [onReconnect]);
 
   const updateStatus = useCallback((status: "idle" | "active" | "busy") => {
     if (statusRef.current === status) {
@@ -133,40 +145,12 @@ function Terminal({
     onStatusChangeRef.current?.(status);
   }, []);
 
-  const tryResumePty = useCallback(() => {
-    if (resumeDisabledRef.current) {
-      return;
-    }
-    const pty = ptyRef.current;
-    if (!pty || typeof pty.resume !== "function") {
-      resumeDisabledRef.current = true;
-      return;
-    }
-    try {
-      pty.resume();
-    } catch (err) {
-      resumeDisabledRef.current = true;
-      console.warn(`[${sessionId}] PTY resume not available`, err);
-    }
-  }, [sessionId]);
-
   useEffect(() => {
     const container = containerRef.current;
     if (!container || initializedRef.current) return;
     isDisposedRef.current = false;
     let handleResize: (() => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
-
-    const disposeWebgl = () => {
-      if (webglAddonRef.current) {
-        try {
-          webglAddonRef.current.dispose();
-        } catch (err) {
-          console.warn(`[${sessionId}] Failed to dispose WebGL addon`, err);
-        }
-        webglAddonRef.current = null;
-      }
-    };
 
     const initTerminal = () => {
       if (initializedRef.current || isDisposedRef.current) {
@@ -191,54 +175,25 @@ function Terminal({
       initializedRef.current = true;
       console.log(`[${sessionId}] Initializing terminal`);
 
-      // Create terminal - note convertEol for proper line handling
+      // Phase 1 (immediate): Create XTerm, open in container, set up ResizeObserver
       const terminal = new XTerm({
         convertEol: true,
         cursorBlink: true,
         fontSize: 14,
         fontFamily: '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
-        theme: getTerminalTheme(themeMode),
+        theme: getTerminalTheme(themeModeRef.current),
         scrollback: 10000,
       });
 
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
 
-      if (useWebgl) {
-        try {
-          const webglAddon = new WebglAddon();
-          webglAddon.onContextLoss(() => {
-            console.warn(`[${sessionId}] WebGL context lost, falling back to Canvas`);
-            disposeWebgl();
-            onRendererChangeRef.current?.("canvas");
-          });
-          terminal.loadAddon(webglAddon);
-          webglAddonRef.current = webglAddon;
-          onRendererChangeRef.current?.("webgl");
-        } catch (err) {
-          console.warn(`[${sessionId}] WebGL init failed, using Canvas renderer`, err);
-          disposeWebgl();
-          onRendererChangeRef.current?.("canvas");
-        }
-      } else {
-        disposeWebgl();
-        onRendererChangeRef.current?.("canvas");
-      }
-
       terminalRef.current = terminal;
       fitAddonRef.current = fitAddon;
 
       terminal.open(container);
       fitAddon.fit();
-      if (terminal.element) {
-        const handleFocus = () => {
-          tryResumePty();
-        };
-        terminal.element.addEventListener("focusin", handleFocus);
-        terminalFocusDisposableRef.current = {
-          dispose: () => terminal.element?.removeEventListener("focusin", handleFocus),
-        };
-      }
+      terminal.write("\x1b[90mConnecting...\x1b[0m");
 
       if (typeof ResizeObserver !== "undefined") {
         resizeObserver = new ResizeObserver(() => {
@@ -254,7 +209,6 @@ function Terminal({
       }
 
       if (!useTmux) {
-        // Ensure scrollback works reliably when not in tmux
         terminal.attachCustomWheelEventHandler((event) => {
           if (event.ctrlKey || event.metaKey) {
             return true;
@@ -265,111 +219,10 @@ function Terminal({
             return false;
           }
 
-          // Trackpads can send very small deltas; scale to at least 1 line.
           const lines = Math.max(1, Math.ceil(Math.abs(deltaY) / 20));
           terminal.scrollLines(deltaY > 0 ? lines : -lines);
           return false;
         });
-      }
-
-      const spawnShell = () => spawnInteractiveShellPty({
-        cols: terminal.cols,
-        rows: terminal.rows,
-        cwd,
-        env: {
-          TERM: "xterm-256color",
-          COLORTERM: "truecolor",
-          DIVERGENCE_APP: "1",
-        },
-      });
-
-      const safeSessionName = sanitizeTmuxSessionNameForShell(tmuxSessionName, sessionId);
-      const tmuxCommand = buildTmuxBootstrapCommand();
-
-      // Spawn PTY - use zsh (login + interactive) to match iTerm behavior
-      try {
-        const pty = useTmux
-          ? spawnTmuxPty({
-              cols: terminal.cols,
-              rows: terminal.rows,
-              cwd,
-              tmuxCommand,
-              sessionName: safeSessionName,
-              historyLimit: tmuxHistoryLimit ?? DEFAULT_TMUX_HISTORY_LIMIT,
-              env: {
-                DIVERGENCE_APP: "1",
-              },
-            })
-          : spawnShell();
-
-        ptyRef.current = pty;
-        console.log(`[${sessionId}] PTY spawned`);
-
-        const sendCommand = (command: string) => {
-          if (!command.trim()) {
-            return;
-          }
-          ptyRef.current?.write(command + "\n");
-          updateStatus("busy");
-        };
-        onRegisterCommand?.(sessionId, sendCommand);
-
-        // Handle PTY output - convert to Uint8Array as per official example
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ptyDataDisposableRef.current = pty.onData((data: any) => {
-          if (isDisposedRef.current || !terminalRef.current) {
-            return;
-          }
-          terminal.write(new Uint8Array(data));
-          const now = Date.now();
-          if (statusRef.current !== "active" || now - lastActiveUpdateRef.current > 500) {
-            lastActiveUpdateRef.current = now;
-            updateStatus("active");
-          }
-
-          if (activityTimeoutRef.current) {
-            clearTimeout(activityTimeoutRef.current);
-          }
-          activityTimeoutRef.current = setTimeout(() => {
-            updateStatus("idle");
-          }, 2000);
-        });
-
-        ptyExitDisposableRef.current = pty.onExit(({ exitCode }: { exitCode: number }) => {
-          if (isDisposedRef.current || !terminalRef.current) {
-            return;
-          }
-          console.log(`[${sessionId}] PTY exited: ${exitCode}`);
-          terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
-          updateStatus("idle");
-        });
-
-        // Handle terminal input
-        terminalDataDisposableRef.current = terminal.onData((data: string) => {
-          if (isDisposedRef.current) {
-            return;
-          }
-          pty.write(data);
-          if (data.includes("\r") || data.includes("\n")) {
-            updateStatus("busy");
-          }
-        });
-
-        // Handle terminal resize
-        terminalResizeDisposableRef.current = terminal.onResize((e: { cols: number; rows: number }) => {
-          if (isDisposedRef.current) {
-            return;
-          }
-          pty.resize(e.cols, e.rows);
-        });
-
-        terminal.focus();
-
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error(`[${sessionId}] PTY error:`, err);
-        setError(errorMessage);
-        terminal.write(`\r\n\x1b[31mFailed to start terminal: ${errorMessage}\x1b[0m\r\n`);
       }
 
       // Window resize handler
@@ -380,12 +233,158 @@ function Terminal({
         }
       };
       window.addEventListener("resize", handleResize);
+
+      // Phase 2 (debounced): Spawn PTY after short delay to survive StrictMode unmount
+      spawnTimerRef.current = setTimeout(() => {
+        spawnTimerRef.current = null;
+        if (isDisposedRef.current) {
+          return;
+        }
+
+        const spawnShell = () => spawnInteractiveShellPty({
+          cols: terminal.cols,
+          rows: terminal.rows,
+          cwd,
+          env: {
+            TERM: "xterm-256color",
+            COLORTERM: "truecolor",
+            DIVERGENCE_APP: "1",
+          },
+        });
+
+        const safeSessionName = sanitizeTmuxSessionNameForShell(tmuxSessionName, sessionId);
+        const tmuxCommand = buildTmuxBootstrapCommand();
+
+        try {
+          const pty = useTmux
+            ? spawnTmuxPty({
+                cols: terminal.cols,
+                rows: terminal.rows,
+                cwd,
+                tmuxCommand,
+                sessionName: safeSessionName,
+                historyLimit: tmuxHistoryLimit ?? DEFAULT_TMUX_HISTORY_LIMIT,
+                env: {
+                  DIVERGENCE_APP: "1",
+                },
+              })
+            : spawnShell();
+
+          ptyRef.current = pty;
+          hasReceivedDataRef.current = false;
+          console.log(`[${sessionId}] PTY spawned`);
+          terminal.write("\r\x1b[2K");
+
+          if (useTmux) {
+            startupTimerRef.current = setTimeout(() => {
+              startupTimerRef.current = null;
+              if (isDisposedRef.current || hasReceivedDataRef.current) {
+                return;
+              }
+              console.warn(`[${sessionId}] tmux bootstrap timeout`);
+              terminal.write(`\r\n\x1b[33m${buildBootstrapTimeoutMessage(TMUX_BOOTSTRAP_TIMEOUT_MS)}\x1b[0m\r\n`);
+              onReconnectRef.current?.();
+            }, TMUX_BOOTSTRAP_TIMEOUT_MS);
+          }
+
+          const sendCommand = (command: string) => {
+            if (!command.trim()) {
+              return;
+            }
+            ptyRef.current?.write(command + "\n");
+            updateStatus("busy");
+          };
+          onRegisterCommand?.(sessionId, sendCommand);
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ptyDataDisposableRef.current = pty.onData((data: any) => {
+            if (isDisposedRef.current || !terminalRef.current) {
+              return;
+            }
+            if (!hasReceivedDataRef.current) {
+              hasReceivedDataRef.current = true;
+              if (startupTimerRef.current) {
+                clearTimeout(startupTimerRef.current);
+                startupTimerRef.current = null;
+              }
+            }
+            reconnectAttemptRef.current = 0;
+            terminal.write(new Uint8Array(data));
+            const now = Date.now();
+            if (statusRef.current !== "active" || now - lastActiveUpdateRef.current > 500) {
+              lastActiveUpdateRef.current = now;
+              updateStatus("active");
+            }
+
+            if (activityTimeoutRef.current) {
+              clearTimeout(activityTimeoutRef.current);
+            }
+            activityTimeoutRef.current = setTimeout(() => {
+              updateStatus("idle");
+            }, 2000);
+          });
+
+          ptyExitDisposableRef.current = pty.onExit(({ exitCode }: { exitCode: number }) => {
+            if (isDisposedRef.current || !terminalRef.current) {
+              return;
+            }
+            console.log(`[${sessionId}] PTY exited: ${exitCode}`);
+            terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
+            updateStatus("idle");
+
+            const attempt = reconnectAttemptRef.current;
+            if (shouldAutoReconnect(exitCode, useTmux, attempt)) {
+              const delayMs = getReconnectDelayMs(attempt);
+              const delaySec = Math.round(delayMs / 1000);
+              terminal.write(`\x1b[33m[Reconnecting in ${delaySec}s... (attempt ${attempt + 1})]\x1b[0m\r\n`);
+              reconnectAttemptRef.current = attempt + 1;
+              reconnectTimerRef.current = setTimeout(() => {
+                reconnectTimerRef.current = null;
+                if (!isDisposedRef.current) {
+                  onReconnectRef.current?.();
+                }
+              }, delayMs);
+            } else if (exitCode !== 0) {
+              terminal.write("\x1b[33m[Max reconnect attempts reached. Reconnect manually.]\x1b[0m\r\n");
+            }
+          });
+
+          terminalDataDisposableRef.current = terminal.onData((data: string) => {
+            if (isDisposedRef.current) {
+              return;
+            }
+            pty.write(data);
+            if (data.includes("\r") || data.includes("\n")) {
+              updateStatus("busy");
+            }
+          });
+
+          terminalResizeDisposableRef.current = terminal.onResize((e: { cols: number; rows: number }) => {
+            if (isDisposedRef.current) {
+              return;
+            }
+            pty.resize(e.cols, e.rows);
+          });
+
+          terminal.focus();
+
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          console.error(`[${sessionId}] PTY error:`, err);
+          setError(errorMessage);
+          terminal.write(`\r\n\x1b[31mFailed to start terminal: ${errorMessage}\x1b[0m\r\n`);
+        }
+      }, SPAWN_DEBOUNCE_MS);
     };
 
     initTerminal();
 
     return () => {
       console.log(`[${sessionId}] Cleanup`);
+      if (spawnTimerRef.current) {
+        clearTimeout(spawnTimerRef.current);
+        spawnTimerRef.current = null;
+      }
       statusRef.current = "idle";
       isDisposedRef.current = true;
       if (handleResize) {
@@ -397,7 +396,14 @@ function Terminal({
       if (activityTimeoutRef.current) {
         clearTimeout(activityTimeoutRef.current);
       }
-      disposeWebgl();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (startupTimerRef.current) {
+        clearTimeout(startupTimerRef.current);
+        startupTimerRef.current = null;
+      }
       if (initRetryTimeoutRef.current) {
         clearTimeout(initRetryTimeoutRef.current);
         initRetryTimeoutRef.current = null;
@@ -410,8 +416,6 @@ function Terminal({
       terminalDataDisposableRef.current = null;
       terminalResizeDisposableRef.current?.dispose();
       terminalResizeDisposableRef.current = null;
-      terminalFocusDisposableRef.current?.dispose();
-      terminalFocusDisposableRef.current = null;
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
@@ -419,9 +423,8 @@ function Terminal({
       terminalRef.current = null;
       fitAddonRef.current = null;
       initializedRef.current = false;
-      resumeDisabledRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, useWebgl, onRegisterCommand, onUnregisterCommand, tryResumePty, themeMode, tmuxHistoryLimit]);
+  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, onRegisterCommand, onUnregisterCommand, tmuxHistoryLimit]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -435,13 +438,6 @@ function Terminal({
       maybeSetOption("theme", theme);
     } else {
       terminal.options.theme = theme;
-    }
-    if (webglAddonRef.current) {
-      try {
-        webglAddonRef.current.clearTextureAtlas();
-      } catch (err) {
-        console.warn(`[${sessionId}] Failed to refresh WebGL atlas`, err);
-      }
     }
     if (terminal.rows > 0) {
       terminal.refresh(0, terminal.rows - 1);
@@ -474,7 +470,6 @@ function Terminal({
         className="absolute inset-0 overflow-hidden p-2 bg-main"
         onMouseDown={() => {
           terminalRef.current?.focus();
-          tryResumePty();
         }}
       />
     </TerminalPresentational>

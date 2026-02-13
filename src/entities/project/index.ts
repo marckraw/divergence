@@ -7,7 +7,6 @@ export {
   DEFAULT_COPY_IGNORED_SKIP,
   DEFAULT_TMUX_HISTORY_LIMIT,
   DEFAULT_USE_TMUX,
-  DEFAULT_USE_WEBGL,
   loadProjectSettings,
   normalizeSkipList,
   saveProjectSettings,
