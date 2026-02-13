@@ -53,7 +53,10 @@ interface UseTaskCenterResult {
   runTask: RunBackgroundTask;
 }
 
-export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): UseTaskCenterResult {
+export function useTaskCenter(
+  fsConcurrency: number = DEFAULT_FS_CONCURRENCY,
+  initialTasks: BackgroundTask[] = [],
+): UseTaskCenterResult {
   const [tasks, setTasks] = useState<BackgroundTask[]>([]);
   const [toasts, setToasts] = useState<BackgroundTaskToast[]>([]);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
   const retryHandlersRef = useRef<Map<string, () => Promise<void>>>(new Map());
   const toastTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasHydratedRef = useRef(false);
 
   useEffect(() => {
     const toastTimers = toastTimersRef.current;
@@ -78,6 +82,27 @@ export function useTaskCenter(fsConcurrency: number = DEFAULT_FS_CONCURRENCY): U
       }
     };
   }, []);
+
+  // Hydrate from DB-loaded tasks once
+  useEffect(() => {
+    if (hasHydratedRef.current || initialTasks.length === 0) {
+      return;
+    }
+    hasHydratedRef.current = true;
+
+    setTasks((previous) => {
+      const existingIds = new Set(previous.map((t) => t.id));
+      const newTasks = initialTasks.filter((t) => !existingIds.has(t.id));
+      if (newTasks.length === 0) {
+        return previous;
+      }
+      const combined = [...newTasks, ...previous];
+      if (combined.length <= MAX_RECENT_TASKS + 20) {
+        return combined;
+      }
+      return combined.slice(combined.length - (MAX_RECENT_TASKS + 20));
+    });
+  }, [initialTasks]);
 
   const updateTask = useCallback((taskId: string, updater: (task: BackgroundTask) => BackgroundTask) => {
     setTasks((previous) => previous.map((task) => (task.id === taskId ? updater(task) : task)));

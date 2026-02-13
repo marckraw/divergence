@@ -10,7 +10,15 @@ export type {
   RunBackgroundTask,
 } from "./model/task.types";
 
+export type {
+  AutomationRunHydrationInput,
+  AutomationHydrationLookup,
+  ProjectHydrationLookup,
+} from "./lib/taskCenter.pure";
+
 export {
+  automationRunToBackgroundTask,
+  hydrateTasksFromAutomationRuns,
   formatElapsed,
   getRecentTasks,
   getRunningTasks,

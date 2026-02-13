@@ -20,6 +20,7 @@ import { MergeNotification, useMergeDetection, type MergeNotificationData } from
 import { executeDeleteDivergence } from "../features/delete-divergence";
 import { executeRemoveProject } from "../features/remove-project";
 import { TaskCenterPage, TaskToasts, useTaskCenter } from "../features/task-center";
+import { hydrateTasksFromAutomationRuns } from "../entities/task";
 import type { WorkSidebarMode, WorkSidebarTab } from "../features/work-sidebar";
 import { useAllDivergences } from "../entities/divergence";
 import { useProjectSettingsMap, useProjects } from "../entities/project";
@@ -105,6 +106,38 @@ function App() {
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(0);
   const {
+    automations,
+    runs: automationRuns,
+    latestRunByAutomationId,
+    loading: automationsLoading,
+    error: automationsError,
+    refresh: refreshAutomations,
+    createAutomation,
+    updateAutomation: saveAutomation,
+    removeAutomation,
+  } = useAutomations();
+
+  const automationLookupById = useMemo(() => {
+    const map = new Map<number, { name: string; projectId: number }>();
+    for (const a of automations) {
+      map.set(a.id, { name: a.name, projectId: a.projectId });
+    }
+    return map;
+  }, [automations]);
+
+  const projectLookupById = useMemo(() => {
+    const map = new Map<number, { name: string; path: string }>();
+    for (const p of projects) {
+      map.set(p.id, { name: p.name, path: p.path });
+    }
+    return map;
+  }, [projects]);
+
+  const hydratedTasks = useMemo(() => {
+    return hydrateTasksFromAutomationRuns(automationRuns, automationLookupById, projectLookupById);
+  }, [automationRuns, automationLookupById, projectLookupById]);
+
+  const {
     runningTasks,
     recentTasks,
     toasts,
@@ -114,17 +147,7 @@ function App() {
     viewTask,
     retryTask,
     runTask,
-  } = useTaskCenter(2);
-  const {
-    automations,
-    latestRunByAutomationId,
-    loading: automationsLoading,
-    error: automationsError,
-    refresh: refreshAutomations,
-    createAutomation,
-    updateAutomation: saveAutomation,
-    removeAutomation,
-  } = useAutomations();
+  } = useTaskCenter(2, hydratedTasks);
   const {
     events: inboxEvents,
     filter: inboxFilter,
