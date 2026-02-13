@@ -934,35 +934,39 @@ function App() {
         }
 
         for (const pullRequest of pullRequests) {
-          const kind = classifyGithubPullRequestEvent(pullRequest, lastPolledAtMs);
-          if (!kind) {
-            continue;
-          }
+          try {
+            const kind = classifyGithubPullRequestEvent(pullRequest, lastPolledAtMs);
+            if (!kind) {
+              continue;
+            }
 
-          const eventAtMs = kind === "github_pr_opened"
-            ? pullRequest.createdAtMs
-            : pullRequest.updatedAtMs;
-          const insertedId = await insertInboxEvent({
-            kind,
-            source: "github",
-            projectId: repoTarget.projectId,
-            externalId: buildGithubInboxExternalId(
-              repoTarget.repoKey,
-              pullRequest.id,
+            const eventAtMs = kind === "github_pr_opened"
+              ? pullRequest.createdAtMs
+              : pullRequest.updatedAtMs;
+            const insertedId = await insertInboxEvent({
               kind,
-              eventAtMs
-            ),
-            title: buildGithubInboxTitle(repoTarget.repoKey, pullRequest.number, kind),
-            body: buildGithubInboxBody(pullRequest),
-            payloadJson: JSON.stringify({
+              source: "github",
               projectId: repoTarget.projectId,
-              repoKey: repoTarget.repoKey,
-              pullRequest,
-            }),
-            createdAtMs: eventAtMs,
-          });
-          if (insertedId) {
-            insertedCount += 1;
+              externalId: buildGithubInboxExternalId(
+                repoTarget.repoKey,
+                pullRequest.id,
+                kind,
+                eventAtMs
+              ),
+              title: buildGithubInboxTitle(repoTarget.repoKey, pullRequest.number, kind),
+              body: buildGithubInboxBody(pullRequest),
+              payloadJson: JSON.stringify({
+                projectId: repoTarget.projectId,
+                repoKey: repoTarget.repoKey,
+                pullRequest,
+              }),
+              createdAtMs: eventAtMs,
+            });
+            if (insertedId) {
+              insertedCount += 1;
+            }
+          } catch (error) {
+            console.warn(`Failed to process PR #${pullRequest.number} for ${repoTarget.repoKey}:`, error);
           }
         }
 
