@@ -15,6 +15,7 @@ import type {
 
 interface UseAutomationsResult {
   automations: Automation[];
+  runs: AutomationRun[];
   latestRunByAutomationId: Map<number, AutomationRun>;
   loading: boolean;
   error: string | null;
@@ -79,6 +80,7 @@ export function useAutomations(): UseAutomationsResult {
 
   return {
     automations,
+    runs,
     latestRunByAutomationId,
     loading,
     error,

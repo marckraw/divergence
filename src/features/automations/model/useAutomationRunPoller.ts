@@ -14,6 +14,7 @@ import {
 } from "../api/tmuxAutomation.api";
 import { parseAutomationResult } from "../lib/tmuxAutomation.pure";
 import type { AutomationResultFile } from "../lib/tmuxAutomation.types";
+import type { Automation } from "../../../entities/automation";
 
 const DEFAULT_POLLING_INTERVAL_MS = 5_000;
 const LOG_TAIL_MAX_BYTES = 4_000;
@@ -94,6 +95,17 @@ async function pollSingleRun(
   keepSessionAlive: boolean,
   callbacks: AutomationRunPollerCallbacks
 ): Promise<void> {
+  // Lazy-cached automation lookup: fetches the full list at most once per poll
+  // cycle and reuses the result across all code paths that need it.
+  let cachedAutomation: Automation | undefined | null = null; // null = not yet fetched
+  async function getAutomation(): Promise<Automation | undefined> {
+    if (cachedAutomation === null) {
+      const allAutomations = await listAutomations();
+      cachedAutomation = allAutomations.find(a => a.id === automationId);
+    }
+    return cachedAutomation;
+  }
+
   let paneStatus;
   try {
     paneStatus = await queryAutomationTmuxPaneStatus(tmuxSessionName);
@@ -105,7 +117,7 @@ async function pollSingleRun(
       if (resultJson) {
         const result = parseAutomationResult(resultJson);
         if (result) {
-          await finalizeRun(runId, automationId, result, tmuxSessionName, keepSessionAlive, callbacks);
+          await finalizeRun(runId, automationId, result, tmuxSessionName, keepSessionAlive, callbacks, getAutomation);
           return;
         }
       }
@@ -116,8 +128,7 @@ async function pollSingleRun(
         endedAtMs,
         error: "Process lost — tmux session disappeared.",
       });
-      const allAutomations = await listAutomations();
-      const automation = allAutomations.find(a => a.id === automationId);
+      const automation = await getAutomation();
       await markAutomationRunSchedule(automationId, {
         lastRunAtMs: endedAtMs,
         nextRunAtMs: automation
@@ -146,7 +157,7 @@ async function pollSingleRun(
   if (resultJson) {
     const result = parseAutomationResult(resultJson);
     if (result) {
-      await finalizeRun(runId, automationId, result, tmuxSessionName, keepSessionAlive, callbacks);
+      await finalizeRun(runId, automationId, result, tmuxSessionName, keepSessionAlive, callbacks, getAutomation);
       return;
     }
   }
@@ -161,12 +172,11 @@ async function pollSingleRun(
     endedAtMs,
     error: `Process exited without writing result file${exitCodeInfo}.`,
   });
-  const allAutomationsForNoResult = await listAutomations();
-  const automationForNoResult = allAutomationsForNoResult.find(a => a.id === automationId);
+  const automation = await getAutomation();
   await markAutomationRunSchedule(automationId, {
     lastRunAtMs: endedAtMs,
-    nextRunAtMs: automationForNoResult
-      ? computeNextScheduledRunAtMs(automationForNoResult, endedAtMs)
+    nextRunAtMs: automation
+      ? computeNextScheduledRunAtMs(automation, endedAtMs)
       : null,
   });
   callbacks.onRunFailed(runId, `Process exited without writing result file${exitCodeInfo}.`);
@@ -186,7 +196,8 @@ async function finalizeRun(
   result: AutomationResultFile,
   tmuxSessionName: string,
   keepSessionAlive: boolean,
-  callbacks: AutomationRunPollerCallbacks
+  callbacks: AutomationRunPollerCallbacks,
+  getAutomation: () => Promise<Automation | undefined>
 ): Promise<void> {
   const endedAtMs = Date.now();
   const status = result.exitCode === 0 ? "success" : "error";
@@ -200,12 +211,11 @@ async function finalizeRun(
     error: error ?? null,
     detailsJson: JSON.stringify(result),
   });
-  const allAutomationsForFinalize = await listAutomations();
-  const automationForFinalize = allAutomationsForFinalize.find(a => a.id === automationId);
+  const automation = await getAutomation();
   await markAutomationRunSchedule(automationId, {
     lastRunAtMs: endedAtMs,
-    nextRunAtMs: automationForFinalize
-      ? computeNextScheduledRunAtMs(automationForFinalize, endedAtMs)
+    nextRunAtMs: automation
+      ? computeNextScheduledRunAtMs(automation, endedAtMs)
       : null,
   });
 
