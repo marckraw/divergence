@@ -43,7 +43,7 @@ export function computeNextScheduledRunAtMs(
   let next = anchor + intervalMs;
   // If we've fallen behind (app closed, long run), advance to next future slot
   if (next <= nowMs) {
-    const missedIntervals = Math.ceil((nowMs - next) / intervalMs);
+    const missedIntervals = Math.floor((nowMs - next) / intervalMs) + 1;
     next += missedIntervals * intervalMs;
   }
   return next;

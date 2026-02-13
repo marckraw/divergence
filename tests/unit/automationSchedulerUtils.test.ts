@@ -91,6 +91,33 @@ describe("automation scheduler utils", () => {
       );
       expect(result).toBe(nowMs + 4 * HOUR_MS);
     });
+
+    it("boundary: next equals nowMs must still advance to future", () => {
+      // anchor + interval lands exactly on nowMs → must not return nowMs
+      const anchor = Date.UTC(2026, 0, 1, 10, 0, 0);
+      const intervalHours = 2;
+      const nowMs = anchor + intervalHours * HOUR_MS; // next === nowMs
+      const result = computeNextScheduledRunAtMs(
+        { enabled: true, intervalHours, nextRunAtMs: anchor },
+        nowMs,
+      );
+      expect(result).toBe(nowMs + intervalHours * HOUR_MS);
+      expect(result).toBeGreaterThan(nowMs);
+    });
+
+    it("boundary: missed exactly one full interval must land in future", () => {
+      // anchor + interval is in the past by exactly one more interval
+      const anchor = Date.UTC(2026, 0, 1, 10, 0, 0);
+      const intervalHours = 3;
+      const next = anchor + intervalHours * HOUR_MS; // 1pm
+      const nowMs = next + intervalHours * HOUR_MS;  // 4pm (missed by exactly 1 interval)
+      const result = computeNextScheduledRunAtMs(
+        { enabled: true, intervalHours, nextRunAtMs: anchor },
+        nowMs,
+      );
+      expect(result).toBe(nowMs + intervalHours * HOUR_MS); // 7pm
+      expect(result).toBeGreaterThan(nowMs);
+    });
   });
 
   describe("findDueAutomations", () => {
