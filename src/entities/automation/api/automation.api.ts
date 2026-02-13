@@ -1,6 +1,6 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../../shared/api/drizzle.api";
-import { automationRuns, automations } from "../../../shared/api/schema";
+import { automationRuns, automations } from "../../../shared/api/schema.types";
 import type {
   Automation,
   AutomationRun,

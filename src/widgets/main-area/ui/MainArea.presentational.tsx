@@ -7,8 +7,8 @@ import TmuxPanel from "./TmuxPanel.container";
 import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
-import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared/lib/motion";
-import { TabButton, ToolbarButton } from "../../../shared/ui";
+import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared";
+import { TabButton, ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
 import type { MainAreaPresentationalProps } from "./MainArea.types";
 

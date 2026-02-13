@@ -1,4 +1,4 @@
-import type { RalphyConfigSummary } from "../../../shared/api/ralphyConfig.types";
+import type { RalphyConfigSummary } from "../../../shared";
 
 export function parseSkipListInput(value: string): string[] {
   return value

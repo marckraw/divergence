@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../../shared/api/drizzle.api";
-import { projectSettings } from "../../../shared/api/schema";
+import { projectSettings } from "../../../shared/api/schema.types";
 import {
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeTmuxHistoryLimit,
-} from "../../../shared/config/appSettings";
+} from "../../../shared/lib/appSettings.pure";
 
 export const DEFAULT_COPY_IGNORED_SKIP = [
   "node_modules",

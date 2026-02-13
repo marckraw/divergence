@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   formatElapsed,
   getTaskStatusClass,
@@ -9,6 +9,10 @@ import type { TaskCenterPageProps } from "./TaskCenterPage.types";
 
 interface TaskCenterPagePresentationalProps extends TaskCenterPageProps {
   nowMs: number;
+  inspectTaskId: string | null;
+  retryingTaskId: string | null;
+  onInspectTask: (taskId: string) => void;
+  onCloseInspectTask: () => void;
 }
 
 function formatRelativeAge(atMs: number | undefined, nowMs: number): string {
@@ -38,6 +42,7 @@ function TaskCenterTaskCard({
   task,
   nowMs,
   focused,
+  retryingTaskId,
   onRetryTask,
   onViewTask,
   onInspectTask,
@@ -46,12 +51,13 @@ function TaskCenterTaskCard({
   task: BackgroundTask;
   nowMs: number;
   focused: boolean;
+  retryingTaskId: string | null;
   onRetryTask: (taskId: string) => Promise<void>;
   onViewTask: (taskId: string) => void;
   onInspectTask: (taskId: string) => void;
   onDismissTask?: (taskId: string) => void;
 }) {
-  const [isRetrying, setIsRetrying] = useState(false);
+  const isRetrying = retryingTaskId === task.id;
 
   return (
     <div
@@ -116,10 +122,7 @@ function TaskCenterTaskCard({
             type="button"
             onClick={(event) => {
               event.stopPropagation();
-              setIsRetrying(true);
-              void onRetryTask(task.id).finally(() => {
-                setIsRetrying(false);
-              });
+              void onRetryTask(task.id);
             }}
             disabled={isRetrying}
             className="px-2 py-1 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-60"
@@ -281,9 +284,12 @@ function TaskCenterPagePresentational({
   onDismissTask,
   onDismissAllRecentTasks,
   onAttachToAutomationSession,
+  inspectTaskId,
+  retryingTaskId,
+  onInspectTask,
+  onCloseInspectTask,
   nowMs,
 }: TaskCenterPagePresentationalProps) {
-  const [inspectTaskId, setInspectTaskId] = useState<string | null>(null);
   const allTasksById = useMemo(() => {
     const map = new Map<string, BackgroundTask>();
     runningTasks.forEach((task) => {
@@ -316,9 +322,10 @@ function TaskCenterPagePresentational({
                   task={task}
                   nowMs={nowMs}
                   focused={task.id === focusedTaskId}
+                  retryingTaskId={retryingTaskId}
                   onRetryTask={onRetryTask}
                   onViewTask={onViewTask}
-                  onInspectTask={setInspectTaskId}
+                  onInspectTask={onInspectTask}
                 />
               ))}
             </div>
@@ -348,9 +355,10 @@ function TaskCenterPagePresentational({
                   task={task}
                   nowMs={nowMs}
                   focused={task.id === focusedTaskId}
+                  retryingTaskId={retryingTaskId}
                   onRetryTask={onRetryTask}
                   onViewTask={onViewTask}
-                  onInspectTask={setInspectTaskId}
+                  onInspectTask={onInspectTask}
                   onDismissTask={onDismissTask}
                 />
               ))}
@@ -362,7 +370,7 @@ function TaskCenterPagePresentational({
         <TaskInspectModal
           task={inspectedTask}
           nowMs={nowMs}
-          onClose={() => setInspectTaskId(null)}
+          onClose={onCloseInspectTask}
           onAttachToAutomationSession={onAttachToAutomationSession}
         />
       )}

@@ -1,5 +1,7 @@
 import { spawn, type IPty } from "tauri-pty";
 
+export type PtyProcess = IPty;
+
 interface SpawnPtyBaseOptions {
   cols: number;
   rows: number;

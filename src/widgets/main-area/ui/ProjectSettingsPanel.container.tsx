@@ -5,10 +5,10 @@ import {
   DEFAULT_USE_TMUX,
   DEFAULT_USE_WEBGL,
 } from "../../../entities/project";
-import { normalizeTmuxHistoryLimit } from "../../../shared/config/appSettings";
+import { normalizeTmuxHistoryLimit } from "../../../shared";
 import type { ProjectSettings } from "../../../entities/project";
 import { useProjectSettings } from "../../../entities/project";
-import { useRalphyConfig } from "../../../shared/hooks/useRalphyConfig";
+import { useRalphyConfig } from "../../../shared";
 import {
   formatProviderLabel,
   formatRalphyClaudeSummary,

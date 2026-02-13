@@ -31,8 +31,8 @@ import {
   getGithubPollState,
   upsertGithubPollState,
 } from "../entities/inbox-event";
-import { useAppSettings } from "../shared/hooks/useAppSettings";
-import { useUpdater } from "../shared/hooks/useUpdater";
+import { useAppSettings } from "../shared";
+import { useUpdater } from "../shared";
 import type { Project, Divergence, TerminalSession, SplitOrientation, BackgroundTask } from "../entities";
 import { buildSplitTmuxSessionName } from "../entities/terminal-session";
 import { getRalphyConfigSummary } from "../shared/api/ralphyConfig.api";
@@ -42,7 +42,7 @@ import {
   writeReviewBriefFile,
   type DiffReviewAgent,
 } from "../features/diff-review";
-import { notifyCommandFinished } from "../shared/lib/notifications";
+import { notifyCommandFinished } from "../shared";
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
 import { buildTerminalSession, buildWorkspaceKey, generateSessionEntropy } from "./lib/sessionBuilder.pure";
 import {

@@ -4,7 +4,7 @@ import {
   getEditorThemeMode,
   isEditorThemeId,
   type EditorThemeId,
-} from "./editorThemes";
+} from "./editorThemes.pure";
 
 export const SETTINGS_STORAGE_KEY = "divergence-settings";
 export const SETTINGS_UPDATED_EVENT = "divergence-settings-updated";
@@ -50,7 +50,7 @@ const LEGACY_CLAUDE_PIPE_COMMAND_PATTERN = /^cat\s+["']?\{briefPath\}["']?\s*\|\
 const LEGACY_CODEX_PIPE_COMMAND_PATTERN = /^cat\s+["']?\{briefPath\}["']?\s*\|\s*codex(?:\s+.*)?$/;
 const LEGACY_CODEX_FULL_AUTO_COMMAND_PATTERN = /^codex\s+exec\b(?=.*(?:^|\s)--full-auto(?:\s|$)).*$/;
 
-export function migrateAgentCommandTemplate(agent: AgentCommandTemplate, template: string): string {
+function migrateAgentCommandTemplate(agent: AgentCommandTemplate, template: string): string {
   const normalizedTemplate = template.trim();
 
   if (agent === "claude") {
@@ -127,28 +127,4 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     agentCommandClaude: migratedAgentCommandClaude,
     agentCommandCodex: migratedAgentCommandCodex,
   };
-}
-
-export function loadAppSettings(): AppSettings {
-  try {
-    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!stored) {
-      return { ...DEFAULT_APP_SETTINGS };
-    }
-    const parsed = JSON.parse(stored);
-    return normalizeAppSettings(parsed);
-  } catch (err) {
-    console.warn("Failed to parse app settings, using defaults", err);
-    return { ...DEFAULT_APP_SETTINGS };
-  }
-}
-
-export function saveAppSettings(settings: AppSettings) {
-  const normalized = normalizeAppSettings(settings);
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
-  return normalized;
-}
-
-export function broadcastAppSettings(settings: AppSettings) {
-  window.dispatchEvent(new CustomEvent(SETTINGS_UPDATED_EVENT, { detail: settings }));
 }

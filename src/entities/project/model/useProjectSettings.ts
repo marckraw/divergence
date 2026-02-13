@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { loadProjectSettings, saveProjectSettings } from "../lib/projectSettings";
-import type { ProjectSettings } from "../lib/projectSettings";
+import { loadProjectSettings, saveProjectSettings } from "../api/projectSettings.api";
+import type { ProjectSettings } from "../api/projectSettings.api";
 
 export function useProjectSettings(projectId: number | null) {
   const [settings, setSettings] = useState<ProjectSettings | null>(null);

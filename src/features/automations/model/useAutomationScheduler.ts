@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import type { Automation, AutomationRunTriggerSource } from "../../../entities/automation";
 import type { Project } from "../../../entities";
-import { listRunningAutomationRuns } from "../../../entities/automation/api/automation.api";
+import { listRunningAutomationRuns } from "../../../entities/automation";
 import { findDueAutomations } from "../lib/automationScheduler.pure";
 
 const SCHEDULER_POLL_INTERVAL_MS = 30_000;

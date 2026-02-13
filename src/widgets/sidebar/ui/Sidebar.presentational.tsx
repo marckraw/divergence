@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Project, TerminalSession } from "../../../entities";
-import { MenuButton, StatusIndicator } from "../../../shared/ui";
+import { MenuButton, StatusIndicator } from "../../../shared";
 import CreateDivergenceModal from "../../../features/create-divergence";
 import {
   FAST_EASE_OUT,
   SOFT_SPRING,
   getCollapseVariants,
   getPopVariants,
-} from "../../../shared/lib/motion";
+} from "../../../shared";
 import {
   getSessionsForWorkspace,
   getSessionStatus,

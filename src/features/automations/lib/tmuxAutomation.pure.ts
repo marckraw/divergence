@@ -1,4 +1,4 @@
-import { sanitizeTmuxLabel } from "../../../shared/lib/tmux.pure";
+import { sanitizeTmuxLabel } from "../../../shared";
 import type { AutomationResultFile } from "./tmuxAutomation.types";
 
 const AUTOMATION_SESSION_PREFIX = "divergence-auto";

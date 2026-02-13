@@ -7,7 +7,7 @@ import type {
   SplitOrientation,
   TerminalSession,
 } from "../../../entities";
-import type { EditorThemeId } from "../../../shared/config/editorThemes";
+import type { EditorThemeId } from "../../../shared";
 import type { ProjectSettings } from "../../../entities/project";
 import type {
   DiffReviewAgent,

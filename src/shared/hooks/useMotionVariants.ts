@@ -7,7 +7,7 @@ import {
   getPopVariants,
   getCollapseVariants,
   getContentSwapVariants,
-} from "../lib/motion";
+} from "../lib/motion.pure";
 
 interface MotionVariantsResult {
   shouldReduceMotion: boolean | null;

@@ -34,7 +34,7 @@ import {
   buildAutomationPromptMarkdown,
   computeNextScheduledRunAtMs,
 } from "../lib/automationScheduler.pure";
-import { renderTemplateCommand } from "../../../shared/lib/templateRendering.pure";
+import { renderTemplateCommand } from "../../../shared";
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_MAX_POLL_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours

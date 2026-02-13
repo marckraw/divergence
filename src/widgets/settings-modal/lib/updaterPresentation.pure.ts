@@ -1,4 +1,4 @@
-import type { UpdateStatus } from "../../../shared/hooks/useUpdater";
+import type { UpdateStatus } from "../../../shared";
 
 export interface UpdaterPresentation {
   message: string;

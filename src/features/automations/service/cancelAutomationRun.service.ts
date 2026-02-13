@@ -1,4 +1,4 @@
-import { updateAutomationRun } from "../../../entities/automation/api/automation.api";
+import { updateAutomationRun } from "../../../entities/automation";
 import { killAutomationTmuxSession } from "../api/tmuxAutomation.api";
 
 export async function cancelAutomationRun(

@@ -1,4 +1,4 @@
-export type { Automation, AutomationRun } from "../../../shared/api/schema";
+export type { Automation, AutomationRun } from "../../../shared/api/schema.types";
 
 export type AutomationAgent = "claude" | "codex";
 

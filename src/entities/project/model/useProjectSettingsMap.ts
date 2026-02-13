@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Project } from "./project.types";
-import type { ProjectSettings } from "../lib/projectSettings";
-import { loadProjectSettings } from "../lib/projectSettings";
+import type { ProjectSettings } from "../api/projectSettings.api";
+import { loadProjectSettings } from "../api/projectSettings.api";
 
 export function useProjectSettingsMap(projects: Project[]) {
   const [settingsByProjectId, setSettingsByProjectId] = useState<Map<number, ProjectSettings>>(new Map());

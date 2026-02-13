@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { AppSettings } from "../config/appSettings";
-import { loadAppSettings, SETTINGS_UPDATED_EVENT } from "../config/appSettings";
+import type { AppSettings } from "../lib/appSettings.pure";
+import { SETTINGS_UPDATED_EVENT } from "../lib/appSettings.pure";
+import { loadAppSettings } from "../service/appSettings.service";
 
 export function useAppSettings() {
   const [settings, setSettings] = useState<AppSettings>(() => loadAppSettings());
