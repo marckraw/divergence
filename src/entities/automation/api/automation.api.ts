@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../../shared/api/drizzle.api";
 import { automationRuns, automations } from "../../../shared/api/schema";
 import type {
@@ -74,6 +74,7 @@ export async function listAutomationRuns(limit: number = 200): Promise<Automatio
   return db
     .select()
     .from(automationRuns)
+    .where(eq(automationRuns.archived, false))
     .orderBy(desc(automationRuns.id))
     .limit(limit);
 }
@@ -109,15 +110,15 @@ export async function updateAutomationRun(
     detailsJson?: string | null;
   }
 ): Promise<void> {
+  const updates: Record<string, unknown> = { status: input.status };
+  if (input.startedAtMs !== undefined) updates.startedAtMs = input.startedAtMs;
+  if (input.endedAtMs !== undefined) updates.endedAtMs = input.endedAtMs;
+  if (input.error !== undefined) updates.error = input.error;
+  if (input.detailsJson !== undefined) updates.detailsJson = input.detailsJson;
+
   await db
     .update(automationRuns)
-    .set({
-      status: input.status,
-      startedAtMs: input.startedAtMs ?? null,
-      endedAtMs: input.endedAtMs ?? null,
-      error: input.error ?? null,
-      detailsJson: input.detailsJson ?? null,
-    })
+    .set(updates)
     .where(eq(automationRuns.id, runId));
 }
 
@@ -162,4 +163,18 @@ export async function markAutomationRunSchedule(
       updatedAtMs: Date.now(),
     })
     .where(eq(automations.id, automationId));
+}
+
+export async function archiveAutomationRun(runId: number): Promise<void> {
+  await db
+    .update(automationRuns)
+    .set({ archived: true })
+    .where(eq(automationRuns.id, runId));
+}
+
+export async function archiveAllCompletedAutomationRuns(): Promise<void> {
+  await db
+    .update(automationRuns)
+    .set({ archived: true })
+    .where(inArray(automationRuns.status, ["success", "error"]));
 }
