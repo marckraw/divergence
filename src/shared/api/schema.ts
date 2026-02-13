@@ -99,6 +99,7 @@ export const automationRuns = sqliteTable(
     logFilePath: text("log_file_path"),
     resultFilePath: text("result_file_path"),
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+    divergenceId: integer("divergence_id").references(() => divergences.id, { onDelete: "set null" }),
   },
   (table) => [
     index("idx_automation_runs_automation_id").on(table.automationId, table.id),

@@ -94,6 +94,7 @@ export async function insertAutomationRun(input: CreateAutomationRunInput): Prom
       tmuxSessionName: input.tmuxSessionName ?? null,
       logFilePath: input.logFilePath ?? null,
       resultFilePath: input.resultFilePath ?? null,
+      divergenceId: input.divergenceId ?? null,
     })
     .returning({ id: automationRuns.id });
 
@@ -145,6 +146,16 @@ export async function updateAutomationRunTmuxSession(
       logFilePath: input.logFilePath,
       resultFilePath: input.resultFilePath,
     })
+    .where(eq(automationRuns.id, runId));
+}
+
+export async function updateAutomationRunDivergence(
+  runId: number,
+  divergenceId: number,
+): Promise<void> {
+  await db
+    .update(automationRuns)
+    .set({ divergenceId })
     .where(eq(automationRuns.id, runId));
 }
 

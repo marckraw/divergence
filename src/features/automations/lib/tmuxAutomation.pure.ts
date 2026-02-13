@@ -38,6 +38,7 @@ export function buildWrapperCommand(options: {
     automationId?: number;
     projectName?: string;
     projectPath?: string;
+    divergencePath?: string;
     agent?: string;
     triggerSource?: string;
     briefPath?: string;

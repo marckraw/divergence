@@ -20,6 +20,8 @@ const VALID_RESULT = {
   finishedAt: "2025-01-01T00:05:00Z",
 };
 
+const MOCK_DIVERGENCE_PATH = "/divergences/mock-divergence";
+
 function createAutomation(overrides: Partial<Automation> = {}): Automation {
   return {
     id: 7,
@@ -45,10 +47,28 @@ function createDependencies(
     insertAutomationRun: vi.fn().mockResolvedValue(99),
     updateAutomationRun: vi.fn().mockResolvedValue(undefined),
     updateAutomationRunTmuxSession: vi.fn().mockResolvedValue(undefined),
+    updateAutomationRunDivergence: vi.fn().mockResolvedValue(undefined),
     markAutomationRunSchedule: vi.fn().mockResolvedValue(undefined),
+    loadProjectSettings: vi.fn().mockResolvedValue({
+      projectId: 2,
+      copyIgnoredSkip: ["node_modules"],
+      useTmux: true,
+      useWebgl: true,
+      tmuxHistoryLimit: null,
+    }),
+    createDivergenceRepository: vi.fn().mockResolvedValue({
+      id: 0,
+      projectId: 2,
+      name: "mock-divergence",
+      branch: "automation/7-manual-audit-20260101-000000000",
+      path: MOCK_DIVERGENCE_PATH,
+      createdAt: "2026-01-01T00:00:00Z",
+      hasDiverged: false,
+    }),
+    insertDivergenceRecord: vi.fn().mockResolvedValue(42),
     buildAutomationPromptMarkdown: vi.fn().mockReturnValue("# Prompt"),
     writeAutomationBriefFile: vi.fn().mockResolvedValue({
-      path: "/repo/.divergence/review-brief.md",
+      path: `${MOCK_DIVERGENCE_PATH}/.divergence/review-brief.md`,
     }),
     spawnAutomationTmuxSession: vi.fn().mockResolvedValue(undefined),
     queryAutomationTmuxPaneStatus: vi.fn().mockResolvedValue({ alive: false, exitCode: 0 }),
@@ -132,7 +152,7 @@ describe("runAutomationNow service", () => {
     expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionName: "divergence-auto-7-99",
-        cwd: "/repo",
+        cwd: MOCK_DIVERGENCE_PATH,
       })
     );
     // Verify monitoring happened
@@ -165,7 +185,7 @@ describe("runAutomationNow service", () => {
       agentCommandCodex: "",
     }, deps);
 
-    expect(deps.writeAutomationBriefFile).toHaveBeenCalledWith("/repo", "# Prompt");
+    expect(deps.writeAutomationBriefFile).toHaveBeenCalledWith(MOCK_DIVERGENCE_PATH, "# Prompt");
     expect(deps.buildAutomationPromptMarkdown).toHaveBeenCalledWith(
       expect.objectContaining({
         automationName: "Manual audit",
@@ -186,7 +206,7 @@ describe("runAutomationNow service", () => {
     }, deps);
 
     const spawnCall = (deps.spawnAutomationTmuxSession as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(spawnCall.command).toContain("cat \"/repo/.divergence/review-brief.md\" | claude -p --cwd \"/repo\"");
+    expect(spawnCall.command).toContain(`cat "${MOCK_DIVERGENCE_PATH}/.divergence/review-brief.md" | claude -p --cwd "${MOCK_DIVERGENCE_PATH}"`);
   });
 
   it("marks run as error when agent exits with non-zero code", async () => {
@@ -392,5 +412,80 @@ describe("runAutomationNow service", () => {
         nextRunAtMs: null,
       })
     );
+  });
+
+  it("creates divergence before spawning agent", async () => {
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(deps.createDivergenceRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project: { id: 2, name: "repo", path: "/repo" },
+        copyIgnoredSkip: ["node_modules"],
+        useExistingBranch: false,
+      })
+    );
+    // Branch name should start with automation/7-
+    const call = (deps.createDivergenceRepository as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(call.branchName).toMatch(/^automation\/7-manual-audit-/);
+  });
+
+  it("marks run as error when divergence creation fails", async () => {
+    const deps = createDependencies({
+      createDivergenceRepository: vi.fn().mockRejectedValue(new Error("Git clone failed")),
+    });
+
+    const result = await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("Failed to create divergence");
+    expect(result.error).toContain("Git clone failed");
+    expect(deps.spawnAutomationTmuxSession).not.toHaveBeenCalled();
+    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({ status: "error" })
+    );
+  });
+
+  it("links divergence to automation run", async () => {
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(deps.updateAutomationRunDivergence).toHaveBeenCalledWith(99, 42);
+  });
+
+  it("returns divergenceId in result", async () => {
+    const deps = createDependencies();
+
+    const result = await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(result.status).toBe("launched");
+    expect(result.divergenceId).toBe(42);
   });
 });

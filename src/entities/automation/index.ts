@@ -21,5 +21,6 @@ export {
   markAutomationRunSchedule,
   updateAutomation,
   updateAutomationRun,
+  updateAutomationRunDivergence,
   updateAutomationRunTmuxSession,
 } from "./api/automation.api";
