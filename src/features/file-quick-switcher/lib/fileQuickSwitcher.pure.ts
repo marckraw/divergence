@@ -14,7 +14,9 @@ export function filterFilesByQuery(files: string[], query: string): string[] {
 
 export function joinRootWithRelativePath(rootPath: string, relativePath: string): string {
   const separator = rootPath.includes("\\") ? "\\" : "/";
-  return `${rootPath}${separator}${relativePath}`;
+  const trimmedRoot = rootPath.replace(/[/\\]+$/, "");
+  const trimmedRelative = relativePath.replace(/^[/\\]+/, "");
+  return `${trimmedRoot}${separator}${trimmedRelative}`;
 }
 
 export function getFileQuickSwitcherInfo(filePath: string): FileQuickSwitcherInfo {
