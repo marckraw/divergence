@@ -374,6 +374,41 @@ describe("runAutomationNow service", () => {
     );
   });
 
+  it("times out polling when maxPollDurationMs is exceeded", async () => {
+    let clock = 0;
+    const deps = createDependencies({
+      now: vi.fn(() => clock),
+      queryAutomationTmuxPaneStatus: vi.fn().mockImplementation(() => {
+        // Advance clock by 2 hours per poll tick
+        clock += 2 * 60 * 60 * 1000;
+        return Promise.resolve({ alive: true, exitCode: null });
+      }),
+      readAutomationResultFile: vi.fn().mockResolvedValue(null),
+      pollIntervalMs: 0,
+      maxPollDurationMs: 3 * 60 * 60 * 1000, // 3 hour timeout
+    });
+
+    const result = await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("polling timed out");
+    expect(result.error).toContain("180 minutes");
+    // DB should be finalized to "error" to avoid stuck "running" rows
+    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({
+        status: "error",
+      })
+    );
+    expect(deps.markAutomationRunSchedule).toHaveBeenCalled();
+  });
+
   it("uses fixed-clock scheduling: anchors to scheduled time, not completion time", async () => {
     // Automation scheduled at 9000ms, 5h interval, now() returns 1234 (completion time)
     // Fixed-clock: next = 9000 + 5*3600000 = 18_009_000 (not 1234 + 5*3600000)

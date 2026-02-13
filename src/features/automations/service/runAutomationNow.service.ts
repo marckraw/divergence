@@ -37,6 +37,7 @@ import {
 import { renderTemplateCommand } from "../../../shared/lib/templateRendering.pure";
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_MAX_POLL_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours
 const LOG_TAIL_MAX_BYTES = 8_000;
 
 function sleep(ms: number): Promise<void> {
@@ -79,6 +80,7 @@ export interface RunAutomationNowDependencies {
   parseAutomationResult: typeof parseAutomationResult;
   now: () => number;
   pollIntervalMs: number;
+  maxPollDurationMs: number;
 }
 
 export async function runAutomationNow(
@@ -104,6 +106,7 @@ export async function runAutomationNow(
     parseAutomationResult,
     now: Date.now,
     pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+    maxPollDurationMs: DEFAULT_MAX_POLL_DURATION_MS,
     ...dependencies,
   };
 
@@ -177,7 +180,7 @@ export async function runAutomationNow(
     };
   }
 
-  let monitoringStarted = false;
+  let dbFinalized = false;
   const precomputedTmuxSessionName = buildAutomationTmuxSessionName(input.automation.id, runId);
 
   try {
@@ -264,7 +267,6 @@ export async function runAutomationNow(
         ]);
 
         // ── Phase 2: Monitor ──
-        monitoringStarted = true;
         setPhase("Running agent");
 
         const result = await pollUntilDone({
@@ -273,6 +275,8 @@ export async function runAutomationNow(
           resultPath,
           setOutputTail,
           pollIntervalMs: deps.pollIntervalMs,
+          maxPollDurationMs: deps.maxPollDurationMs,
+          now: deps.now,
           queryPaneStatus: deps.queryAutomationTmuxPaneStatus,
           readLogTail: deps.readAutomationLogTail,
           readResultFile: deps.readAutomationResultFile,
@@ -307,6 +311,7 @@ export async function runAutomationNow(
             startedAtMs,
             endedAtMs,
           });
+          dbFinalized = true;
           // Returns normally -> task center shows "Success"
         } else {
           const errorMsg = result
@@ -318,6 +323,7 @@ export async function runAutomationNow(
             endedAtMs,
             error: errorMsg,
           });
+          dbFinalized = true;
           throw new Error(errorMsg); // -> task center shows "Error"
         }
       },
@@ -332,8 +338,10 @@ export async function runAutomationNow(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    if (!monitoringStarted) {
-      // Launch-phase error — DB hasn't been finalized yet
+    if (!dbFinalized) {
+      // DB hasn't been finalized yet — this covers launch-phase errors and
+      // unexpected monitoring-phase errors (e.g., poll timeout) that would
+      // otherwise leave the run stuck in "running" status.
       const endedAtMs = deps.now();
       await Promise.all([
         deps.updateAutomationRun(runId, {
@@ -348,7 +356,6 @@ export async function runAutomationNow(
         }),
       ]);
     }
-    // If monitoringStarted, DB was already updated inside the run callback.
 
     return {
       runId,
@@ -364,6 +371,8 @@ async function pollUntilDone(params: {
   resultPath: string;
   setOutputTail: (tail: string) => void;
   pollIntervalMs: number;
+  maxPollDurationMs: number;
+  now: () => number;
   queryPaneStatus: typeof queryAutomationTmuxPaneStatus;
   readLogTail: typeof readAutomationLogTail;
   readResultFile: typeof readAutomationResultFile;
@@ -375,13 +384,23 @@ async function pollUntilDone(params: {
     resultPath,
     setOutputTail,
     pollIntervalMs,
+    maxPollDurationMs,
+    now,
     queryPaneStatus,
     readLogTail,
     readResultFile,
     parseResult,
   } = params;
 
+  const pollStartedAt = now();
+
   while (true) {
+    if (now() - pollStartedAt >= maxPollDurationMs) {
+      throw new Error(
+        `Automation polling timed out after ${Math.round(maxPollDurationMs / 60_000)} minutes. ` +
+        `The tmux session "${tmuxSessionName}" may still be running.`
+      );
+    }
     await sleep(pollIntervalMs);
 
     // Read log tail for live output
