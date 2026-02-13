@@ -1,5 +1,11 @@
 # divergence
 
+## 0.15.0
+
+### Minor Changes
+
+- 407506b: Automation runs now create a fresh divergence (branch-isolated clone) before spawning the agent, keeping the base project directory untouched. The new divergence appears in the sidebar after each run.
+
 ## 0.14.1
 
 ### Patch Changes
