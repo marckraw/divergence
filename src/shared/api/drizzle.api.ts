@@ -9,7 +9,7 @@ export const db = drizzle<typeof schema>(
     if (/^\s*SELECT\b/i.test(sql) || /\bRETURNING\b/i.test(sql)) {
       const rows = await database.select<Record<string, unknown>[]>(sql, params as unknown[]);
       const mapped = rows.map(Object.values);
-      return { rows: method === "all" ? mapped : [mapped[0]] };
+      return { rows: method === "all" ? mapped : mapped.length > 0 ? [mapped[0]] : [] };
     }
 
     await database.execute(sql, params as unknown[]);
