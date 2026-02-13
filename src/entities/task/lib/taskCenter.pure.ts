@@ -68,6 +68,7 @@ export function automationRunToBackgroundTask(
     endedAtMs: run.endedAtMs ?? undefined,
     error: run.error ?? undefined,
     phaseEvents: phaseEvents.length > 0 ? phaseEvents : undefined,
+    dbRunId: run.id,
   };
 }
 

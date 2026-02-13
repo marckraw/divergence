@@ -169,6 +169,7 @@ export async function runAutomationNow(
       initialPhase: "Queued",
       successMessage: `Automation completed: ${input.automation.name}`,
       errorMessage: `Automation failed: ${input.automation.name}`,
+      dbRunId: runId,
       run: async ({ setPhase, setOutputTail }) => {
         // ── Phase 1: Launch ──
         setPhase("Preparing prompt");

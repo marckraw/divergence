@@ -10,6 +10,10 @@ import {
   type BackgroundTaskToast,
   type RunBackgroundTask,
 } from "../../../entities/task";
+import {
+  archiveAutomationRun,
+  archiveAllCompletedAutomationRuns,
+} from "../../../entities/automation";
 
 const DEFAULT_FS_CONCURRENCY = 2;
 const SUCCESS_TOAST_TTL_MS = 5000;
@@ -48,6 +52,8 @@ interface UseTaskCenterResult {
   runningCount: number;
   focusedTaskId: string | null;
   dismissToast: (toastId: string) => void;
+  dismissTask: (taskId: string) => void;
+  dismissAllRecentTasks: () => void;
   viewTask: (taskId: string) => void;
   retryTask: (taskId: string) => Promise<void>;
   runTask: RunBackgroundTask;
@@ -201,6 +207,7 @@ export function useTaskCenter(
       createdAtMs,
       lastUpdatedAtMs: createdAtMs,
       phaseEvents: [{ phase: initialPhase, atMs: createdAtMs }],
+      dbRunId: options.dbRunId,
     };
 
     setTasks((previous) => {
@@ -330,6 +337,28 @@ export function useTaskCenter(
     await handler();
   }, []);
 
+  const dismissTask = useCallback((taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    setTasks((previous) => previous.filter((t) => t.id !== taskId));
+
+    const dbPrefix = "db-automation-run-";
+    if (taskId.startsWith(dbPrefix)) {
+      const dbId = Number(taskId.slice(dbPrefix.length));
+      if (Number.isFinite(dbId)) {
+        void archiveAutomationRun(dbId);
+      }
+    } else if (task?.dbRunId != null) {
+      void archiveAutomationRun(task.dbRunId);
+    }
+  }, [tasks]);
+
+  const dismissAllRecentTasks = useCallback(() => {
+    setTasks((previous) =>
+      previous.filter((t) => t.status !== "success" && t.status !== "error"),
+    );
+    void archiveAllCompletedAutomationRuns();
+  }, []);
+
   const runningTasks = useMemo(() => {
     return getRunningTasks(tasks);
   }, [tasks]);
@@ -348,6 +377,8 @@ export function useTaskCenter(
     runningCount,
     focusedTaskId,
     dismissToast,
+    dismissTask,
+    dismissAllRecentTasks,
     viewTask,
     retryTask,
     runTask,
