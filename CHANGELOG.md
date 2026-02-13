@@ -1,5 +1,13 @@
 # divergence
 
+## 0.15.1
+
+### Patch Changes
+
+- eb29ba4: Fix drizzle sqlite-proxy to return empty array instead of [undefined] when a single-row query yields no results.
+- f3c5bcb: Fix double path separators in file quick switcher when root path has trailing slash or relative path has leading slash
+- 6810f75: Fix GitHub inbox polling failure cascade where a single insertInboxEvent error would abort processing of all remaining pull requests and repositories, and prevent poll state from being updated.
+
 ## 0.15.0
 
 ### Minor Changes
