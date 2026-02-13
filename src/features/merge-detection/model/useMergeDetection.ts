@@ -15,9 +15,17 @@ export function useMergeDetection(
   const checkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const checkedRef = useRef<Set<number>>(new Set());
   const divergedRef = useRef<Set<number>>(new Set());
+  const mergedDivergencesRef = useRef<Set<number>>(mergedDivergences);
+  mergedDivergencesRef.current = mergedDivergences;
+
+  const onMergeDetectedRef = useRef(onMergeDetected);
+  onMergeDetectedRef.current = onMergeDetected;
+
+  const projectsByIdRef = useRef(projectsById);
+  projectsByIdRef.current = projectsById;
 
   const checkDivergence = useCallback(async (divergence: Divergence) => {
-    if (checkedRef.current.has(divergence.id) || mergedDivergences.has(divergence.id)) {
+    if (checkedRef.current.has(divergence.id) || mergedDivergencesRef.current.has(divergence.id)) {
       return;
     }
 
@@ -39,9 +47,9 @@ export function useMergeDetection(
 
       if (status.merged && hasDiverged) {
         setMergedDivergences((previous) => new Set(previous).add(divergence.id));
-        const project = projectsById.get(divergence.projectId);
-        if (project && onMergeDetected) {
-          onMergeDetected({
+        const project = projectsByIdRef.current.get(divergence.projectId);
+        if (project && onMergeDetectedRef.current) {
+          onMergeDetectedRef.current({
             divergence,
             projectName: project.name,
           });
@@ -52,7 +60,7 @@ export function useMergeDetection(
     } catch (err) {
       console.error("Failed to check merge status:", err);
     }
-  }, [mergedDivergences, onMergeDetected, projectsById]);
+  }, []);
 
   const checkAllDivergences = useCallback(async () => {
     for (const divergence of divergences) {
@@ -68,6 +76,7 @@ export function useMergeDetection(
 
     window.addEventListener("focus", handleFocus);
 
+    checkedRef.current.clear();
     void checkAllDivergences();
 
     checkIntervalRef.current = setInterval(() => {
