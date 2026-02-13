@@ -1,5 +1,11 @@
 # divergence
 
+## 0.15.2
+
+### Patch Changes
+
+- 370e1e1: Fix updateAutomationRun clobbering unrelated fields with null when optional parameters are omitted
+
 ## 0.15.1
 
 ### Patch Changes
