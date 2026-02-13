@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -27,6 +27,10 @@ pub struct Divergence {
     pub path: String,
     pub created_at: String,
     pub has_diverged: bool,
+}
+
+fn path_to_string(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
 }
 
 #[tauri::command]
@@ -103,7 +107,7 @@ pub async fn create_divergence(
         project_id,
         name: divergence_dir_name,
         branch: branch_name,
-        path: divergence_path.to_string_lossy().to_string(),
+        path: path_to_string(&divergence_path),
         created_at: chrono::Utc::now().to_rfc3339(),
         has_diverged: false,
     })
@@ -151,7 +155,7 @@ pub async fn get_ralphy_config_summary(project_path: String) -> Result<RalphyCon
     let config_path = PathBuf::from(&project_path)
         .join(".ralphy")
         .join("config.json");
-    let path_string = config_path.to_string_lossy().to_string();
+    let path_string = path_to_string(&config_path);
 
     if !config_path.exists() {
         return Ok(RalphyConfigResponse::Missing { path: path_string });
@@ -536,7 +540,7 @@ pub async fn get_git_diff(
 
 #[tauri::command]
 pub async fn get_divergence_base_path() -> Result<String, String> {
-    Ok(get_divergence_dir().to_string_lossy().to_string())
+    Ok(path_to_string(&get_divergence_dir()))
 }
 
 #[tauri::command]
@@ -729,7 +733,7 @@ pub async fn list_project_files(root_path: String) -> Result<FileListResult, Str
                     break;
                 }
                 if let Ok(relative) = path.strip_prefix(&root) {
-                    files.push(relative.to_string_lossy().to_string());
+                    files.push(path_to_string(relative));
                 }
             }
         }
@@ -853,6 +857,6 @@ pub async fn write_review_brief_file(
         .map_err(|error| format!("Failed to write review brief: {}", error))?;
 
     Ok(WriteReviewBriefResponse {
-        path: file_path.to_string_lossy().to_string(),
+        path: path_to_string(&file_path),
     })
 }
