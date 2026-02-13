@@ -182,12 +182,6 @@ function MainAreaPresentational({
                     </span>
                   )}
 
-                  {session.rendererType && (
-                    <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">
-                      {session.rendererType}
-                    </span>
-                  )}
-
                   <button
                     className="w-4 h-4 flex items-center justify-center text-subtext hover:text-red rounded"
                     onClick={(event) => {

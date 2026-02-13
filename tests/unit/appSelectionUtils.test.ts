@@ -18,7 +18,6 @@ function makeSession(projectId: number): TerminalSession {
     useTmux: true,
     tmuxSessionName: "x",
     tmuxHistoryLimit: 1000,
-    useWebgl: true,
     status: "idle",
   };
 }

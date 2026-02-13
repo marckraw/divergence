@@ -16,7 +16,6 @@ export const DEFAULT_COPY_IGNORED_SKIP = [
   ".cache",
 ];
 export const DEFAULT_USE_TMUX = true;
-export const DEFAULT_USE_WEBGL = true;
 export { DEFAULT_TMUX_HISTORY_LIMIT };
 
 export interface ProjectSettings {
@@ -58,7 +57,7 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
       projectId,
       copyIgnoredSkip: DEFAULT_COPY_IGNORED_SKIP,
       useTmux: DEFAULT_USE_TMUX,
-      useWebgl: DEFAULT_USE_WEBGL,
+      useWebgl: true,
       tmuxHistoryLimit: null,
     };
   }
@@ -71,7 +70,7 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
         projectId,
         copyIgnoredSkip: normalizeSkipList(parsed.map(String)),
         useTmux: row.useTmux ?? DEFAULT_USE_TMUX,
-        useWebgl: row.useWebgl ?? DEFAULT_USE_WEBGL,
+        useWebgl: row.useWebgl ?? true,
         tmuxHistoryLimit: historyLimit === null || historyLimit === undefined
           ? null
           : normalizeTmuxHistoryLimit(historyLimit, DEFAULT_TMUX_HISTORY_LIMIT),
@@ -85,7 +84,7 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
     projectId,
     copyIgnoredSkip: DEFAULT_COPY_IGNORED_SKIP,
     useTmux: DEFAULT_USE_TMUX,
-    useWebgl: DEFAULT_USE_WEBGL,
+    useWebgl: true,
     tmuxHistoryLimit: null,
   };
 }

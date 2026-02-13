@@ -678,20 +678,6 @@ function App() {
     });
   }, [clearIdleNotifyTimer, scheduleIdleNotification]);
 
-  const handleSessionRendererChange = useCallback((sessionId: string, renderer: "webgl" | "canvas") => {
-    setSessions(prev => {
-      const newSessions = new Map(prev);
-      const session = newSessions.get(sessionId);
-      if (session) {
-        if (session.rendererType === renderer) {
-          return prev;
-        }
-        newSessions.set(sessionId, { ...session, rendererType: renderer });
-      }
-      return newSessions;
-    });
-  }, []);
-
   useEffect(() => {
     setSessions(prev => {
       let changed = false;
@@ -1215,7 +1201,6 @@ function App() {
           onCloseSession={handleCloseSession}
           onSelectSession={setActiveSessionId}
           onStatusChange={handleSessionStatusChange}
-          onRendererChange={handleSessionRendererChange}
           onRegisterTerminalCommand={handleRegisterTerminalCommand}
           onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
           onRunReviewAgentRequest={handleRunReviewAgent}

@@ -35,12 +35,12 @@ function MainAreaContainer({
   onCloseSession,
   onSelectSession,
   onStatusChange,
-  onRendererChange,
   onRegisterTerminalCommand,
   onUnregisterTerminalCommand,
   onRunReviewAgentRequest,
   splitBySessionId,
   reconnectBySessionId,
+  onReconnectSession,
   ...props
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
@@ -323,20 +323,12 @@ function MainAreaContainer({
     [onStatusChange]
   );
 
-  const handleRendererChange = useCallback(
-    (sessionId: string) => (renderer: "webgl" | "canvas") => {
-      onRendererChange(sessionId, renderer);
-    },
-    [onRendererChange]
-  );
-
   const renderSession = useCallback((session: TerminalSession) => {
     const splitState = splitBySessionId.get(session.id) ?? null;
     const isSplit = Boolean(splitState);
     const orientation: SplitOrientation = splitState?.orientation ?? "vertical";
     const layoutClass = orientation === "vertical" ? "flex-row" : "flex-col";
     const dividerClass = orientation === "vertical" ? "border-r border-surface" : "border-b border-surface";
-    const effectiveUseWebgl = false;
     const reconnectToken = reconnectBySessionId.get(session.id) ?? 0;
     const paneTwoTmuxName = session.useTmux
       ? buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2")
@@ -346,15 +338,14 @@ function MainAreaContainer({
       <div className={`flex h-full w-full ${layoutClass}`}>
         <div className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${isSplit ? dividerClass : ""}`}>
           <Terminal
-            key={`${session.id}-${effectiveUseWebgl ? "webgl" : "canvas"}-${reconnectToken}`}
+            key={`${session.id}-${reconnectToken}`}
             cwd={session.path}
             sessionId={session.id}
             useTmux={session.useTmux}
             tmuxSessionName={session.tmuxSessionName}
             tmuxHistoryLimit={session.tmuxHistoryLimit}
-            useWebgl={effectiveUseWebgl}
-            onRendererChange={handleRendererChange(session.id)}
             onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
+            onReconnect={() => onReconnectSession(session.id)}
             onRegisterCommand={onRegisterTerminalCommand}
             onUnregisterCommand={onUnregisterTerminalCommand}
             onClose={() => onCloseSession(session.id)}
@@ -363,15 +354,14 @@ function MainAreaContainer({
         {isSplit && (
           <div className="flex-1 relative overflow-hidden min-w-0 min-h-0">
             <Terminal
-              key={`${session.id}-pane-2-${effectiveUseWebgl ? "webgl" : "canvas"}-${reconnectToken}`}
+              key={`${session.id}-pane-2-${reconnectToken}`}
               cwd={session.path}
               sessionId={`${session.id}-pane-2`}
               useTmux={session.useTmux}
               tmuxSessionName={paneTwoTmuxName}
               tmuxHistoryLimit={session.tmuxHistoryLimit}
-              useWebgl={effectiveUseWebgl}
-              onRendererChange={handleRendererChange(session.id)}
               onStatusChange={handleSplitStatusChange(session.id, 1)}
+              onReconnect={() => onReconnectSession(session.id)}
               onClose={() => onCloseSession(session.id)}
             />
           </div>
@@ -379,10 +369,10 @@ function MainAreaContainer({
       </div>
     );
   }, [
-    handleRendererChange,
     handleSplitStatusChange,
     handleStatusChange,
     onCloseSession,
+    onReconnectSession,
     onRegisterTerminalCommand,
     onUnregisterTerminalCommand,
     reconnectBySessionId,
@@ -398,12 +388,12 @@ function MainAreaContainer({
       onCloseSession={onCloseSession}
       onSelectSession={onSelectSession}
       onStatusChange={onStatusChange}
-      onRendererChange={onRendererChange}
       onRegisterTerminalCommand={onRegisterTerminalCommand}
       onUnregisterTerminalCommand={onUnregisterTerminalCommand}
       onRunReviewAgentRequest={onRunReviewAgentRequest}
       splitBySessionId={splitBySessionId}
       reconnectBySessionId={reconnectBySessionId}
+      onReconnectSession={onReconnectSession}
       sessionList={sessionList}
       activeProject={activeProject}
       activeSplit={activeSplit}

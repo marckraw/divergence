@@ -64,7 +64,6 @@ describe("sidebar utils", () => {
         useTmux: true,
         tmuxSessionName: "x",
         tmuxHistoryLimit: 1000,
-        useWebgl: true,
         status: "busy",
       }],
       ["project-1#review", {
@@ -79,7 +78,6 @@ describe("sidebar utils", () => {
         useTmux: true,
         tmuxSessionName: "x-review",
         tmuxHistoryLimit: 1000,
-        useWebgl: true,
         status: "idle",
       }],
     ]);

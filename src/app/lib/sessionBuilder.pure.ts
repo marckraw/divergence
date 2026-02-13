@@ -1,6 +1,6 @@
 import type { Project, Divergence, TerminalSession } from "../../entities";
 import type { ProjectSettings } from "../../entities/project";
-import { DEFAULT_USE_TMUX, DEFAULT_USE_WEBGL } from "../../entities/project";
+import { DEFAULT_USE_TMUX } from "../../entities/project";
 import { buildTmuxSessionName } from "../../entities/terminal-session";
 
 export interface BuildTerminalSessionInput {
@@ -30,7 +30,6 @@ export function buildTerminalSession(input: BuildTerminalSessionInput): Terminal
   const projectSettings = settingsByProjectId.get(projectId);
 
   const useTmux = projectSettings?.useTmux ?? DEFAULT_USE_TMUX;
-  const useWebgl = projectSettings?.useWebgl ?? DEFAULT_USE_WEBGL;
   const tmuxHistoryLimit = projectSettings?.tmuxHistoryLimit ?? globalTmuxHistoryLimit;
 
   const projectName = type === "project"
@@ -58,7 +57,6 @@ export function buildTerminalSession(input: BuildTerminalSessionInput): Terminal
     useTmux,
     tmuxSessionName,
     tmuxHistoryLimit,
-    useWebgl,
     status: "idle",
   };
 }
