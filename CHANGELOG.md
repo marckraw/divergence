@@ -1,5 +1,11 @@
 # divergence
 
+## 0.13.1
+
+### Patch Changes
+
+- 99e9b24: Deduplicate listAutomations() calls in automation run poller to avoid redundant DB queries
+
 ## 0.13.0
 
 ### Minor Changes
