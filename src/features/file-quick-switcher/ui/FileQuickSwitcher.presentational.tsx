@@ -6,7 +6,7 @@ import {
   SOFT_SPRING,
   getContentSwapVariants,
   getPopVariants,
-} from "../../../shared/lib/motion";
+} from "../../../shared";
 import { getFileQuickSwitcherInfo } from "../lib/fileQuickSwitcher.pure";
 import type { FileQuickSwitcherPresentationalProps } from "./FileQuickSwitcher.types";
 

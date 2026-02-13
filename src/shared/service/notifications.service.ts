@@ -1,4 +1,8 @@
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import {
+  getNotificationPermissionGranted,
+  requestNotificationPermission,
+  sendDesktopNotification,
+} from "../api/notifications.api";
 
 type PermissionState = "unknown" | "granted" | "denied";
 
@@ -20,13 +24,13 @@ async function ensureNotificationPermission(): Promise<boolean> {
 
   permissionRequestInFlight = (async () => {
     try {
-      const alreadyGranted = await isPermissionGranted();
+      const alreadyGranted = await getNotificationPermissionGranted();
       if (alreadyGranted) {
         permissionState = "granted";
         return true;
       }
 
-      const permission = await requestPermission();
+      const permission = await requestNotificationPermission();
       const granted = permission === "granted";
       permissionState = granted ? "granted" : "denied";
       return granted;
@@ -49,7 +53,7 @@ export async function notifyCommandFinished(title: string, body: string): Promis
   }
 
   try {
-    sendNotification({ title, body });
+    sendDesktopNotification(title, body);
   } catch (error) {
     console.warn("Failed to send notification:", error);
   }

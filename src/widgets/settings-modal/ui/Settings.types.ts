@@ -1,5 +1,5 @@
-import type { UpdateStatus } from "../../../shared/hooks/useUpdater";
-import type { EditorThemeId } from "../../../shared/config/editorThemes";
+import type { UpdateStatus } from "../../../shared";
+import type { EditorThemeId } from "../../../shared";
 import type { UpdaterPresentation } from "../lib/updaterPresentation.pure";
 import type { Project } from "../../../entities";
 import type {

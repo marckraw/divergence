@@ -1,12 +1,12 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { getVersion } from "@tauri-apps/api/app";
 import {
   DEFAULT_APP_SETTINGS,
   normalizeTmuxHistoryLimit,
   loadAppSettings,
   saveAppSettings,
   broadcastAppSettings,
-} from "../../../shared/config/appSettings";
+} from "../../../shared";
+import { getAppVersion } from "../../../shared/api/app.api";
 import { getUpdaterPresentation } from "../lib/updaterPresentation.pure";
 import { getDivergenceBasePath } from "../api/settings.api";
 import SettingsPresentational from "./Settings.presentational";
@@ -85,7 +85,7 @@ function SettingsContainer({
   }, []);
 
   useEffect(() => {
-    getVersion().then(setAppVersion).catch(() => {});
+    getAppVersion().then(setAppVersion).catch(() => {});
   }, []);
 
   const handleSave = useCallback(() => {

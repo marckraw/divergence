@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/sqlite-proxy";
 import { getDb } from "./database.api";
-import * as schema from "./schema";
+import * as schema from "./schema.types";
 
 export const db = drizzle<typeof schema>(
   async (sql, params, method) => {

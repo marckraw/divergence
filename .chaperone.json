@@ -34,6 +34,14 @@
       },
       {
         "type": "regex",
+        "id": "no-stateful-hooks-in-presentational",
+        "severity": "error",
+        "files": "src/**/*.presentational.tsx",
+        "pattern": "\\b(useState|useReducer|useRef|useImperativeHandle)\\b",
+        "message": "Presentational components must not own local stateful hooks; move state orchestration to *.container.tsx"
+      },
+      {
+        "type": "regex",
         "id": "no-tauri-imports-in-presentational",
         "severity": "error",
         "files": "src/**/*.presentational.tsx",
@@ -42,14 +50,59 @@
       },
       {
         "type": "regex",
-        "id": "container-imports-presentational",
+        "id": "no-direct-tauri-imports-in-layer-implementation-files",
         "severity": "error",
-        "files": "src/**/*.container.tsx",
-        "exclude": [
-          "src/app/**"
-        ],
-        "pattern": "^(?![\\s\\S]*from\\s+[\"']\\./[^\"']+\\.presentational[\"'])[\\s\\S]+$",
-        "message": "Container components should import a colocated *.presentational component (missing import detected)"
+        "files": "src/{app,widgets,features,entities,shared}/{lib,model,ui,hooks,config,service}/**/*.{ts,tsx}",
+        "pattern": "(?:@tauri-apps/|tauri-pty)",
+        "message": "Direct Tauri imports are forbidden in non-API implementation files. Move transport calls behind *.api.ts wrappers."
+      },
+      {
+        "type": "regex",
+        "id": "no-direct-tauri-imports-in-app-root",
+        "severity": "error",
+        "files": "src/app/*.{ts,tsx}",
+        "pattern": "(?:@tauri-apps/|tauri-pty)",
+        "message": "Direct Tauri imports are forbidden outside *.api.ts files."
+      },
+      {
+        "type": "regex",
+        "id": "no-deep-entities-imports-from-app-widgets-features",
+        "severity": "error",
+        "files": "src/{app,widgets,features}/**/*.{ts,tsx}",
+        "pattern": "from\\s+[\"'](?:(?:\\.{1,2}/)+|(?:@/|~/|src/))entities/[^/\"']+/(?:api|model|lib|ui|config|hooks)/",
+        "message": "Cross-slice imports must use entity slice public APIs (src/entities/<slice>/index.ts), not deep private paths."
+      },
+      {
+        "type": "regex",
+        "id": "no-deep-shared-imports-from-app-widgets-features",
+        "severity": "error",
+        "files": "src/{app,widgets,features}/**/*.{ts,tsx}",
+        "pattern": "from\\s+[\"'](?:(?:\\.{1,2}/)+|(?:@/|~/|src/))shared/(?:model|lib|ui|hooks)/",
+        "message": "Cross-slice imports must use shared public API (src/shared/index.ts) for shared hooks/lib/ui/model imports."
+      },
+      {
+        "type": "regex",
+        "id": "no-side-effects-in-pure-files",
+        "severity": "error",
+        "files": "src/**/*.pure.ts",
+        "pattern": "\\b(localStorage|sessionStorage|window\\.dispatchEvent|fetch|XMLHttpRequest|WebSocket|EventSource|invoke|spawn|Database\\.load)\\b",
+        "message": "Pure files must stay side-effect free. Move IO and orchestration into *.api.ts or *.service.ts."
+      },
+      {
+        "type": "regex",
+        "id": "no-api-imports-in-pure-files",
+        "severity": "error",
+        "files": "src/**/*.pure.ts",
+        "pattern": "from\\s+[\"'][^\"']+\\.api[\"']",
+        "message": "Pure files must not import *.api.ts modules."
+      },
+      {
+        "type": "regex",
+        "id": "no-shared-config-files",
+        "severity": "error",
+        "files": "src/shared/config/**/*.{ts,tsx}",
+        "pattern": ".+",
+        "message": "src/shared/config is retired; place pure constants/helpers under src/shared/lib/*.pure.ts."
       },
       {
         "type": "component-location",

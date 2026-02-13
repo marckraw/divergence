@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import Terminal from "./Terminal.container";
 import MainAreaPresentational from "./MainArea.presentational";
 import type { MainAreaOpenDiff, MainAreaProps, RightPanelTab } from "./MainArea.types";
@@ -21,6 +20,7 @@ import {
   getAggregatedTerminalStatus,
   joinSessionPath,
 } from "../lib/mainArea.pure";
+import { readTextFile, writeTextFile } from "../../../shared/api/fs.api";
 import {
   getBranchDiff,
   getWorkingDiff,

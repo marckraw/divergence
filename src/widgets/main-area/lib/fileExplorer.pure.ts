@@ -1,5 +1,3 @@
-import type { DirEntry } from "@tauri-apps/plugin-fs";
-
 export interface BadgeInfo {
   label: string;
   className: string;
@@ -9,6 +7,11 @@ export interface FileEntry {
   path: string;
   name: string;
   isDir: boolean;
+}
+
+export interface FileExplorerDirEntry {
+  name?: string | null;
+  isDirectory?: boolean | null;
 }
 
 const FILE_BADGE_BY_NAME: Record<string, BadgeInfo> = {
@@ -89,7 +92,7 @@ export function joinFileExplorerPath(parent: string, name: string): string {
   return `${parent}${separator}${cleanName}`;
 }
 
-export function normalizeFileExplorerEntry(parentPath: string, entry: DirEntry): FileEntry {
+export function normalizeFileExplorerEntry(parentPath: string, entry: FileExplorerDirEntry): FileEntry {
   const name = entry.name ?? getBaseName(parentPath);
   return {
     path: joinFileExplorerPath(parentPath, name),

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { check, Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import {
+  checkForAppUpdate,
+  relaunchApp,
+  type AppUpdate,
+} from "../api/updater.api";
 
 export type UpdateStatus =
   | "idle"
@@ -24,13 +27,13 @@ export function useUpdater(checkOnMount = false): UpdaterState {
   const [version, setVersion] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [update, setUpdate] = useState<Update | null>(null);
+  const [update, setUpdate] = useState<AppUpdate | null>(null);
 
   const checkForUpdate = useCallback(async () => {
     setStatus("checking");
     setError(null);
     try {
-      const result = await check();
+      const result = await checkForAppUpdate();
 
       if (result) {
         setUpdate(result);
@@ -54,7 +57,7 @@ export function useUpdater(checkOnMount = false): UpdaterState {
       setStatus("checking");
       setError(null);
       try {
-        const result = await check();
+        const result = await checkForAppUpdate();
         if (cancelled) return;
 
         if (result) {
@@ -99,7 +102,7 @@ export function useUpdater(checkOnMount = false): UpdaterState {
       });
 
       setStatus("installed");
-      await relaunch();
+      await relaunchApp();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStatus("error");

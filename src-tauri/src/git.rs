@@ -33,6 +33,10 @@ pub enum DiffMode {
     Staged,
 }
 
+fn path_to_string(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
 pub fn clone_repo(source: &Path, destination: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .args(["clone", "--local"])
@@ -299,11 +303,11 @@ pub fn get_tmux_diagnostics() -> TmuxDiagnostics {
     let login_shell_tmux_context = get_login_shell_tmux_context();
 
     TmuxDiagnostics {
-        resolved_tmux_path: get_tmux_path().map(|path| path.to_string_lossy().to_string()),
+        resolved_tmux_path: get_tmux_path().map(|path| path_to_string(&path)),
         login_shell_path: get_login_shell_path(),
         login_shell_tmux_path: login_shell_tmux_context
             .tmux_path
-            .map(|path| path.to_string_lossy().to_string()),
+            .map(|path| path_to_string(&path)),
         env_path: std::env::var("PATH").ok(),
         env_shell: std::env::var("SHELL").ok(),
         env_tmux: std::env::var("TMUX").ok(),
@@ -815,10 +819,23 @@ fn get_default_remote_branch(repo_path: &Path) -> Result<Option<String>, String>
 }
 
 fn fetch_origin(repo_path: &Path) {
-    let _ = Command::new("git")
+    if let Err(error) = fetch_origin_impl(repo_path) {
+        eprintln!("git fetch origin failed for '{}': {}", path_to_string(repo_path), error);
+    }
+}
+
+fn fetch_origin_impl(repo_path: &Path) -> Result<(), String> {
+    let output = Command::new("git")
         .args(["fetch", "origin"])
         .current_dir(repo_path)
-        .output();
+        .output()
+        .map_err(|error| format!("Failed to execute git fetch origin: {}", error))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    Ok(())
 }
 
 fn ref_exists(repo_path: &Path, reference: &str) -> Result<bool, String> {
@@ -892,66 +909,44 @@ pub fn list_changes(repo_path: &Path) -> Result<Vec<GitChange>, String> {
         ));
     }
 
-    let parts: Vec<&[u8]> = output
-        .stdout
+    let parts = split_nul_terminated_parts(&output.stdout);
+    Ok(parse_status_porcelain_v2(&parts))
+}
+
+fn split_nul_terminated_parts(bytes: &[u8]) -> Vec<&[u8]> {
+    bytes
         .split(|b| *b == 0u8)
         .filter(|part| !part.is_empty())
-        .collect();
+        .collect()
+}
 
+fn parse_status_porcelain_v2(parts: &[&[u8]]) -> Vec<GitChange> {
     let mut changes = Vec::new();
-    let mut i = 0;
-    while i < parts.len() {
-        let part = String::from_utf8_lossy(parts[i]);
-        let mut chars = part.chars();
-        let tag = chars.next().unwrap_or('\0');
+    let mut index = 0;
+
+    while index < parts.len() {
+        let part = String::from_utf8_lossy(parts[index]);
+        let tag = part.chars().next().unwrap_or('\0');
 
         match tag {
             '1' => {
-                let fields: Vec<&str> = part.splitn(9, ' ').collect();
-                if fields.len() < 9 {
-                    i += 1;
-                    continue;
+                if let Some(change) = parse_porcelain_tracked_entry(&part) {
+                    changes.push(change);
                 }
-                let xy = fields[1];
-                let path = fields[8];
-                changes.push(change_from_xy(path, None, xy));
             }
             '2' => {
-                let fields: Vec<&str> = part.splitn(10, ' ').collect();
-                if fields.len() < 10 {
-                    i += 1;
-                    continue;
+                if let Some(change) = parse_porcelain_renamed_entry(parts, index, &part) {
+                    changes.push(change);
+                    index += 1;
                 }
-                let xy = fields[1];
-                let path = fields[9];
-                let old_path = parts
-                    .get(i + 1)
-                    .map(|p| String::from_utf8_lossy(p).to_string());
-                changes.push(change_from_xy(path, old_path, xy));
-                i += 1;
             }
             'u' => {
-                let fields: Vec<&str> = part.splitn(11, ' ').collect();
-                let path = fields.last().copied().unwrap_or_default();
-                changes.push(GitChange {
-                    path: path.to_string(),
-                    old_path: None,
-                    status: 'U',
-                    staged: true,
-                    unstaged: true,
-                    untracked: false,
-                });
+                if let Some(change) = parse_porcelain_unmerged_entry(&part) {
+                    changes.push(change);
+                }
             }
             '?' => {
-                let path = part.strip_prefix("? ").unwrap_or("");
-                changes.push(GitChange {
-                    path: path.to_string(),
-                    old_path: None,
-                    status: '?',
-                    staged: false,
-                    unstaged: false,
-                    untracked: true,
-                });
+                changes.push(parse_porcelain_untracked_entry(&part));
             }
             '!' => {
                 // ignored; skip
@@ -961,15 +956,59 @@ pub fn list_changes(repo_path: &Path) -> Result<Vec<GitChange>, String> {
             }
         }
 
-        i += 1;
+        index += 1;
     }
 
-    Ok(changes)
+    changes
+}
+
+fn parse_porcelain_tracked_entry(part: &str) -> Option<GitChange> {
+    let fields: Vec<&str> = part.splitn(9, ' ').collect();
+    if fields.len() < 9 {
+        return None;
+    }
+    Some(change_from_xy(fields[8], None, fields[1]))
+}
+
+fn parse_porcelain_renamed_entry(parts: &[&[u8]], index: usize, part: &str) -> Option<GitChange> {
+    let fields: Vec<&str> = part.splitn(10, ' ').collect();
+    if fields.len() < 10 {
+        return None;
+    }
+    let old_path = parts
+        .get(index + 1)
+        .map(|value| String::from_utf8_lossy(value).into_owned());
+    Some(change_from_xy(fields[9], old_path, fields[1]))
+}
+
+fn parse_porcelain_unmerged_entry(part: &str) -> Option<GitChange> {
+    let fields: Vec<&str> = part.splitn(11, ' ').collect();
+    let path = fields.last().copied()?;
+    Some(GitChange {
+        path: path.to_string(),
+        old_path: None,
+        status: 'U',
+        staged: true,
+        unstaged: true,
+        untracked: false,
+    })
+}
+
+fn parse_porcelain_untracked_entry(part: &str) -> GitChange {
+    let path = part.strip_prefix("? ").unwrap_or("");
+    GitChange {
+        path: path.to_string(),
+        old_path: None,
+        status: '?',
+        staged: false,
+        unstaged: false,
+        untracked: true,
+    }
 }
 
 pub fn get_diff(repo_path: &Path, file_path: &Path, mode: DiffMode) -> Result<GitDiff, String> {
     let rel_path = file_path.strip_prefix(repo_path).unwrap_or(file_path);
-    let rel_string = rel_path.to_string_lossy().to_string();
+    let rel_string = path_to_string(rel_path);
 
     let diff = run_diff(repo_path, &rel_string, mode)?;
     let mut diff_text = diff;
@@ -1071,29 +1110,59 @@ pub fn spawn_tmux_automation_session(
     _log_path: &str,
     env_vars: &[(String, String)],
 ) -> Result<(), String> {
-    if !session_name.starts_with("divergence-") {
-        return Err("Automation session name must start with 'divergence-'".to_string());
-    }
+    validate_automation_session_name(session_name)?;
 
     // Write the wrapper command to a temporary script file to avoid quoting hell.
     // tmux new-session passes its command through a shell layer, and the wrapper
     // command contains single-quoted paths, shell variables ($, ${}, PIPESTATUS),
     // pipes, and && chains — making inline quoting extremely fragile.
+    let script_path = write_automation_script(cwd, session_name, command)?;
+    run_tmux_new_session(session_name, cwd, env_vars, &script_path)?;
+    set_tmux_remain_on_exit(session_name);
+
+    // Note: logging is handled by `tee -a` in the wrapper script itself.
+    // We intentionally do NOT use pipe-pane here because it would race with
+    // tee and produce duplicated/interleaved output in the same log file.
+
+    Ok(())
+}
+
+fn validate_automation_session_name(session_name: &str) -> Result<(), String> {
+    if !session_name.starts_with("divergence-") {
+        return Err("Automation session name must start with 'divergence-'".to_string());
+    }
+    Ok(())
+}
+
+fn write_automation_script(cwd: &str, session_name: &str, command: &str) -> Result<PathBuf, String> {
     let script_dir = PathBuf::from(cwd).join(".divergence").join("automation-runs");
     fs::create_dir_all(&script_dir)
-        .map_err(|e| format!("Failed to create automation-runs directory: {}", e))?;
+        .map_err(|error| format!("Failed to create automation-runs directory: {}", error))?;
 
     let script_path = script_dir.join(format!("{}.sh", session_name));
     fs::write(&script_path, format!("#!/usr/bin/env bash\n{}\n", command))
-        .map_err(|e| format!("Failed to write automation script: {}", e))?;
+        .map_err(|error| format!("Failed to write automation script: {}", error))?;
 
+    set_script_permissions(&script_path);
+    Ok(script_path)
+}
+
+fn set_script_permissions(script_path: &Path) {
+    let _ = script_path;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755));
+        let _ = fs::set_permissions(script_path, fs::Permissions::from_mode(0o755));
     }
+}
 
-    let script_path_str = script_path.to_string_lossy().to_string();
+fn run_tmux_new_session(
+    session_name: &str,
+    cwd: &str,
+    env_vars: &[(String, String)],
+    script_path: &Path,
+) -> Result<(), String> {
+    let script_path_str = path_to_string(script_path);
     let bash_command = format!("bash -l {}", shell_escape(&script_path_str));
 
     let mut cmd = command_with_tmux();
@@ -1116,23 +1185,20 @@ pub fn spawn_tmux_automation_session(
 
     let output = cmd
         .output()
-        .map_err(|e| format!("Failed to execute tmux new-session: {}", e))?;
+        .map_err(|error| format!("Failed to execute tmux new-session: {}", error))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("Failed to create tmux session: {}", stderr));
     }
 
-    // Set remain-on-exit so we can inspect results after the process exits
+    Ok(())
+}
+
+fn set_tmux_remain_on_exit(session_name: &str) {
     let _ = command_with_tmux()
         .args(["set-option", "-t", session_name, "remain-on-exit", "on"])
         .output();
-
-    // Note: logging is handled by `tee -a` in the wrapper script itself.
-    // We intentionally do NOT use pipe-pane here because it would race with
-    // tee and produce duplicated/interleaved output in the same log file.
-
-    Ok(())
 }
 
 pub fn query_tmux_pane_status(session_name: &str) -> Result<TmuxPaneStatus, String> {

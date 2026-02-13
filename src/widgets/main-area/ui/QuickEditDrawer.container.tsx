@@ -23,16 +23,16 @@ import { githubDark, githubLight } from "@uiw/codemirror-theme-github";
 import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
-import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { DEFAULT_EDITOR_THEME, type EditorThemeId } from "../../../shared/config/editorThemes";
+import { DEFAULT_EDITOR_THEME, type EditorThemeId } from "../../../shared";
+import { readDir, readTextFile } from "../../../shared/api/fs.api";
 import {
   FAST_EASE_OUT,
   SOFT_SPRING,
   getContentSwapVariants,
   getSlideUpVariants,
-} from "../../../shared/lib/motion";
-import { TabButton, ToolbarButton } from "../../../shared/ui";
+} from "../../../shared";
+import { TabButton, ToolbarButton } from "../../../shared";
 import type { ChangesMode } from "../../../entities";
 import {
   buildAnchorLabel,
@@ -50,8 +50,8 @@ import {
   normalizePath,
   resolvePath,
 } from "../lib/quickEdit.pure";
-import { getLanguageKind } from "../../../shared/lib/languageDetection.pure";
-import { getImportPathMatchFromPrefix } from "../../../shared/lib/importPathMatch.pure";
+import { getLanguageKind } from "../../../shared";
+import { getImportPathMatchFromPrefix } from "../../../shared";
 import QuickEditDrawerPresentational from "./QuickEditDrawer.presentational";
 
 interface QuickEditDrawerProps {

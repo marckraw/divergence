@@ -4,7 +4,8 @@ import {
   listRunningAutomationRuns,
   updateAutomationRun,
   markAutomationRunSchedule,
-} from "../../../entities/automation/api/automation.api";
+  type Automation,
+} from "../../../entities/automation";
 import { computeNextScheduledRunAtMs } from "../lib/automationScheduler.pure";
 import {
   queryAutomationTmuxPaneStatus,
@@ -14,7 +15,6 @@ import {
 } from "../api/tmuxAutomation.api";
 import { parseAutomationResult } from "../lib/tmuxAutomation.pure";
 import type { AutomationResultFile } from "../lib/tmuxAutomation.types";
-import type { Automation } from "../../../entities/automation";
 
 const DEFAULT_POLLING_INTERVAL_MS = 5_000;
 const LOG_TAIL_MAX_BYTES = 4_000;

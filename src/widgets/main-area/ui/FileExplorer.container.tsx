@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
-import { readDir, remove } from "@tauri-apps/plugin-fs";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants, getPopVariants } from "../../../shared/lib/motion";
-import { MenuButton, ToolbarButton } from "../../../shared/ui";
+import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants, getPopVariants } from "../../../shared";
+import { MenuButton, ToolbarButton } from "../../../shared";
+import { readDir, remove } from "../../../shared/api/fs.api";
 import {
   type FileEntry,
   getBaseName,

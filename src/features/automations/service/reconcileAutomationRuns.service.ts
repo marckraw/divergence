@@ -3,9 +3,9 @@ import {
   listRunningAutomationRuns,
   updateAutomationRun,
   markAutomationRunSchedule,
-} from "../../../entities/automation/api/automation.api";
+  type Automation,
+} from "../../../entities/automation";
 import { computeNextScheduledRunAtMs } from "../lib/automationScheduler.pure";
-import type { Automation } from "../../../entities/automation";
 import {
   queryAutomationTmuxPaneStatus,
   readAutomationResultFile,

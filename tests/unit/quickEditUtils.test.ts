@@ -3,6 +3,7 @@ import {
   buildImportLabel,
   getDiffLineClass,
   getDirname,
+  IMPORT_COMPLETION_EXTENSIONS,
   isImportCompletionEnabled,
   joinPath,
   normalizePath,
@@ -30,6 +31,9 @@ describe("quick edit utils", () => {
   });
 
   it("checks import completion eligibility", () => {
+    expect(IMPORT_COMPLETION_EXTENSIONS.has(".ts")).toBe(true);
+    expect(IMPORT_COMPLETION_EXTENSIONS.has(".tsx")).toBe(true);
+    expect(IMPORT_COMPLETION_EXTENSIONS.has(".json")).toBe(false);
     expect(isImportCompletionEnabled("/a/file.tsx")).toBe(true);
     expect(isImportCompletionEnabled("/a/file.json")).toBe(false);
     expect(isImportCompletionEnabled(null)).toBe(false);

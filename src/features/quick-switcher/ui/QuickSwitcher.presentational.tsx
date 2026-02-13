@@ -6,7 +6,7 @@ import {
   SOFT_SPRING,
   getPopVariants,
   getContentSwapVariants,
-} from "../../../shared/lib/motion";
+} from "../../../shared";
 import type { QuickSwitcherPresentationalProps } from "./QuickSwitcher.types";
 
 function QuickSwitcherPresentational({

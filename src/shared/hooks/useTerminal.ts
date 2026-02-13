@@ -1,8 +1,7 @@
 import { useRef, useCallback, useEffect, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import type { IPty } from "tauri-pty";
-import { spawnLoginPty } from "../api/pty.api";
+import { spawnLoginPty, type PtyProcess } from "../api/pty.api";
 
 type TerminalStatus = "idle" | "active" | "busy";
 
@@ -15,7 +14,7 @@ interface UseTerminalOptions {
 export function useTerminal(options: UseTerminalOptions = {}) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const ptyRef = useRef<IPty | null>(null);
+  const ptyRef = useRef<PtyProcess | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [status, setStatus] = useState<TerminalStatus>("idle");

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import type { IPty } from "tauri-pty";
-import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../shared/config/appSettings";
+import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../shared";
 import "@xterm/xterm/css/xterm.css";
-import { useAppSettings } from "../../../shared/hooks/useAppSettings";
+import { useAppSettings } from "../../../shared";
 import {
+  type PtyProcess,
   spawnInteractiveShellPty,
   spawnTmuxPty,
 } from "../../../shared/api/pty.api";
@@ -104,7 +104,7 @@ function Terminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const ptyRef = useRef<IPty | null>(null);
+  const ptyRef = useRef<PtyProcess | null>(null);
   const isDisposedRef = useRef(false);
   const ptyDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const ptyExitDisposableRef = useRef<{ dispose: () => void } | null>(null);

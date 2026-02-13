@@ -1,6 +1,6 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "../../../shared/api/drizzle.api";
-import { githubPollState, inboxEvents } from "../../../shared/api/schema";
+import { githubPollState, inboxEvents } from "../../../shared/api/schema.types";
 import type {
   CreateInboxEventInput,
   InboxEvent,

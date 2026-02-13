@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 
 pub fn get_divergence_dir() -> PathBuf {
-    let home = dirs::home_dir().expect("Could not find home directory");
+    let home = dirs::home_dir()
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."));
     home.join(".divergence")
 }
 

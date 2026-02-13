@@ -2,7 +2,7 @@ export type { Project } from "./model/project.types";
 export { useProjects } from "./model/useProjects";
 export { useProjectSettings } from "./model/useProjectSettings";
 export { useProjectSettingsMap } from "./model/useProjectSettingsMap";
-export type { ProjectSettings } from "./lib/projectSettings";
+export type { ProjectSettings } from "./api/projectSettings.api";
 export {
   DEFAULT_COPY_IGNORED_SKIP,
   DEFAULT_TMUX_HISTORY_LIMIT,
@@ -10,7 +10,7 @@ export {
   loadProjectSettings,
   normalizeSkipList,
   saveProjectSettings,
-} from "./lib/projectSettings";
+} from "./api/projectSettings.api";
 export {
   deleteProjectWithRelations,
   insertProject,

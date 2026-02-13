@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import type { Divergence, Project, TerminalSession } from "../../../entities";
+import { selectSingleDirectory } from "../../../shared/api/dialog.api";
 import {
   areAllExpanded,
   getExpandableProjectIds,
@@ -65,13 +65,8 @@ function SidebarContainer({
 
   const handleAddProjectClick = useCallback(async () => {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Project Folder",
-      });
-
-      if (selected && typeof selected === "string") {
+      const selected = await selectSingleDirectory("Select Project Folder");
+      if (selected) {
         const name = getProjectNameFromSelectedPath(selected);
         await onAddProject(name, selected);
       }

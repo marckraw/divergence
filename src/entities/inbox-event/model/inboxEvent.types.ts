@@ -1,4 +1,4 @@
-export type { InboxEvent } from "../../../shared/api/schema";
+export type { InboxEvent } from "../../../shared/api/schema.types";
 
 export type InboxEventKind = "automation_run" | "github_pr_opened" | "github_pr_updated" | "system";
 

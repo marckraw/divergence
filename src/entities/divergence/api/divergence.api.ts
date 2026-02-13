@@ -1,6 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "../../../shared/api/drizzle.api";
-import { divergences } from "../../../shared/api/schema";
+import { divergences } from "../../../shared/api/schema.types";
 import type { Divergence } from "../model/divergence.types";
 
 export async function listDivergencesByProject(projectId: number): Promise<Divergence[]> {
