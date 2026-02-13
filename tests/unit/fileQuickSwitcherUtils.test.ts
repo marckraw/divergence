@@ -17,6 +17,14 @@ describe("file quick switcher utils", () => {
     expect(joinRootWithRelativePath("C:\\root", "src\\main.ts")).toBe("C:\\root\\src\\main.ts");
   });
 
+  it("joins root and relative path without producing double separators", () => {
+    expect(joinRootWithRelativePath("/root/", "src/main.ts")).toBe("/root/src/main.ts");
+    expect(joinRootWithRelativePath("/root/", "/src/main.ts")).toBe("/root/src/main.ts");
+    expect(joinRootWithRelativePath("/root", "/src/main.ts")).toBe("/root/src/main.ts");
+    expect(joinRootWithRelativePath("C:\\root\\", "src\\main.ts")).toBe("C:\\root\\src\\main.ts");
+    expect(joinRootWithRelativePath("C:\\root\\", "\\src\\main.ts")).toBe("C:\\root\\src\\main.ts");
+  });
+
   it("extracts file info", () => {
     expect(getFileQuickSwitcherInfo("src/main.ts")).toEqual({
       fileName: "main.ts",
