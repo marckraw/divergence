@@ -234,12 +234,14 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
     debug_log(&format!("[divergence] list_tmux_sessions: process TMPDIR={:?}", std::env::var("TMPDIR").ok()));
     debug_log(&format!("[divergence] list_tmux_sessions: process TMUX_TMPDIR={:?}", std::env::var("TMUX_TMPDIR").ok()));
 
+    const SEP: &str = ":::";
+    let fmt = format!(
+        "#{{session_name}}{0}#{{session_created}}{0}#{{session_attached}}{0}#{{session_windows}}{0}#{{session_activity}}",
+        SEP
+    );
+
     let mut cmd = command_with_tmux();
-    cmd.args([
-        "list-sessions",
-        "-F",
-        "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
-    ]);
+    cmd.args(["list-sessions", "-F", &fmt]);
     let output = cmd.output();
 
     let result = match output {
@@ -264,6 +266,12 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
         stderr.chars().take(300).collect::<String>()
     ));
 
+    // Log hex bytes of first line to diagnose separator issues
+    if let Some(first_line) = stdout.lines().next() {
+        let hex: String = first_line.bytes().take(120).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
+        debug_log(&format!("[divergence] list_tmux_sessions: first line hex (up to 120 bytes): {}", hex));
+    }
+
     if !result.status.success() {
         if stderr.contains("no server running") || stderr.contains("failed to connect to server") {
             debug_log("[divergence] list_tmux_sessions: no tmux server running (this is normal if no sessions exist)");
@@ -277,7 +285,7 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
     let mut skipped_non_divergence = 0u32;
 
     for line in stdout.lines() {
-        let parts: Vec<&str> = line.split('\t').collect();
+        let parts: Vec<&str> = line.split(SEP).collect();
         if parts.len() < 5 {
             debug_log(&format!("[divergence] list_tmux_sessions: skipping malformed line (parts={}): {:?}", parts.len(), line.chars().take(100).collect::<String>()));
             continue;
@@ -306,12 +314,13 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
 
 pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
     debug_log("[divergence] list_all_tmux_sessions: starting");
+    const SEP: &str = ":::";
+    let fmt = format!(
+        "#{{session_name}}{0}#{{socket_path}}{0}#{{session_created}}{0}#{{session_attached}}{0}#{{session_windows}}{0}#{{session_activity}}",
+        SEP
+    );
     let output = command_with_tmux()
-        .args([
-            "list-sessions",
-            "-F",
-            "#{session_name}\t#{socket_path}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
-        ])
+        .args(["list-sessions", "-F", &fmt])
         .output();
 
     let result = match output {
@@ -343,7 +352,7 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
     let mut sessions = Vec::new();
 
     for line in stdout.lines() {
-        let parts: Vec<&str> = line.split('\t').collect();
+        let parts: Vec<&str> = line.split(SEP).collect();
         if parts.len() < 6 {
             continue;
         }
@@ -382,7 +391,7 @@ pub fn get_tmux_diagnostics() -> TmuxDiagnostics {
         list_sessions_raw: run_tmux_command_for_diagnostics(&[
             "list-sessions",
             "-F",
-            "#{session_name}\t#{socket_path}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
+            "#{session_name}:::#{socket_path}:::#{session_created}:::#{session_attached}:::#{session_windows}:::#{session_activity}",
         ]),
     }
 }
