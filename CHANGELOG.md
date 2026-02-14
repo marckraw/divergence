@@ -1,5 +1,12 @@
 # divergence
 
+## 0.15.8
+
+### Patch Changes
+
+- 06cd011: Fix tmux sessions not appearing in production mode by replacing tab separator with ::: in tmux list-sessions format strings. Add file-based debug logging at ~/Library/Logs/Divergence/tmux-debug.log for production diagnostics.
+- 4d8c00a: fix tmux sessions
+
 ## 0.15.7
 
 ### Patch Changes
