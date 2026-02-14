@@ -1,5 +1,11 @@
 # divergence
 
+## 0.16.0
+
+### Minor Changes
+
+- 1be1867: Add Claude OAuth token setting for long-running automations. Store a long-lived token from `claude setup-token` in app settings and inject it as `CLAUDE_CODE_OAUTH_TOKEN` env var into automation tmux sessions. Remove keepalive and auth retry logic from wrapper script in favor of the env-based approach.
+
 ## 0.15.8
 
 ### Patch Changes
