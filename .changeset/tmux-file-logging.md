@@ -2,4 +2,4 @@
 "divergence": patch
 ---
 
-Replace stderr debug logging with file-based logging for tmux diagnostics in production. Logs are written to ~/Library/Logs/Divergence/tmux-debug.log since eprintln output is not visible for Finder-launched GUI apps on macOS.
+Fix tmux sessions not appearing in production mode by replacing tab separator with ::: in tmux list-sessions format strings. Add file-based debug logging at ~/Library/Logs/Divergence/tmux-debug.log for production diagnostics.
