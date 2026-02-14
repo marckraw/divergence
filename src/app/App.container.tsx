@@ -780,12 +780,14 @@ function App() {
       runTask,
       agentCommandClaude: appSettings.agentCommandClaude,
       agentCommandCodex: appSettings.agentCommandCodex,
+      claudeOAuthToken: appSettings.claudeOAuthToken ?? "",
       triggerSource,
     });
     await Promise.all([refreshAutomations(), refreshDivergences()]);
   }, [
     appSettings.agentCommandClaude,
     appSettings.agentCommandCodex,
+    appSettings.claudeOAuthToken,
     automations,
     projectById,
     refreshAutomations,

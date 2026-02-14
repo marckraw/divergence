@@ -21,6 +21,7 @@ export interface AppSettings {
   divergenceBasePath?: string;
   agentCommandClaude: string;
   agentCommandCodex: string;
+  claudeOAuthToken?: string;
 }
 
 type AgentCommandTemplate = "claude" | "codex";
@@ -35,6 +36,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
   agentCommandCodex:
     "codex exec --dangerously-bypass-approvals-and-sandbox -C \"{workspacePath}\" - < \"{briefPath}\"",
+  claudeOAuthToken: "",
 };
 
 const LEGACY_CLAUDE_COMMAND_TEMPLATES = [
@@ -118,6 +120,10 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     : DEFAULT_APP_SETTINGS.agentCommandCodex;
   const migratedAgentCommandCodex = migrateAgentCommandTemplate("codex", agentCommandCodex);
 
+  const claudeOAuthToken = typeof input?.claudeOAuthToken === "string"
+    ? input.claudeOAuthToken
+    : "";
+
   return {
     ...DEFAULT_APP_SETTINGS,
     ...input,
@@ -126,5 +132,6 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     editorThemeForDarkMode,
     agentCommandClaude: migratedAgentCommandClaude,
     agentCommandCodex: migratedAgentCommandCodex,
+    claudeOAuthToken,
   };
 }

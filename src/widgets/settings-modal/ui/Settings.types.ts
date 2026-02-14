@@ -43,6 +43,7 @@ export interface SettingsState {
   tmuxHistoryLimit: number;
   agentCommandClaude: string;
   agentCommandCodex: string;
+  claudeOAuthToken: string;
 }
 
 export interface SettingsAutomationFormState {

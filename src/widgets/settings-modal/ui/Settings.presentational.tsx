@@ -520,6 +520,23 @@ function SettingsPresentational({
             </p>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Claude OAuth Token (Automations)
+            </label>
+            <input
+              type="password"
+              value={settings.claudeOAuthToken}
+              onChange={(event) => onUpdateSetting("claudeOAuthToken", event.target.value)}
+              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              placeholder="Paste token from claude setup-token"
+            />
+            <p className="text-xs text-subtext mt-1">
+              Optional. Run <code>claude setup-token</code> to generate a long-lived OAuth token.
+              Only needed for long-running automations to avoid token expiry.
+            </p>
+          </div>
+
           <section className="rounded-md border border-surface p-3 bg-main/40 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
