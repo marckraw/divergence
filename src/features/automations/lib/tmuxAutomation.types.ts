@@ -8,6 +8,7 @@ export interface AutomationResultFile {
   exitCode: number;
   startedAt: string;
   finishedAt: string;
+  errorCategory?: "auth" | "general";
 }
 
 export interface AutomationRunPollerState {

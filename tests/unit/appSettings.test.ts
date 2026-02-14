@@ -95,4 +95,30 @@ describe("normalizeAppSettings", () => {
 
     expect(normalized.agentCommandClaude).toBe(DEFAULT_APP_SETTINGS.agentCommandClaude);
   });
+
+  it("defaults claudeOAuthToken to empty string", () => {
+    const normalized = normalizeAppSettings();
+    expect(normalized.claudeOAuthToken).toBe("");
+  });
+
+  it("preserves valid claudeOAuthToken string", () => {
+    const normalized = normalizeAppSettings({
+      claudeOAuthToken: "sk-ant-oauth-test-token",
+    });
+    expect(normalized.claudeOAuthToken).toBe("sk-ant-oauth-test-token");
+  });
+
+  it("falls back to empty string for non-string claudeOAuthToken", () => {
+    const normalized = normalizeAppSettings({
+      claudeOAuthToken: 42 as never,
+    });
+    expect(normalized.claudeOAuthToken).toBe("");
+  });
+
+  it("falls back to empty string for null claudeOAuthToken", () => {
+    const normalized = normalizeAppSettings({
+      claudeOAuthToken: null as never,
+    });
+    expect(normalized.claudeOAuthToken).toBe("");
+  });
 });

@@ -19,6 +19,7 @@ import type {
 const defaultSettings: SettingsState = {
   ...DEFAULT_APP_SETTINGS,
   divergenceBasePath: "",
+  claudeOAuthToken: "",
 };
 
 const EMPTY_AUTOMATION_FORM: SettingsAutomationFormState = {

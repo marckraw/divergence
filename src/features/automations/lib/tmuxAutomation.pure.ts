@@ -98,6 +98,42 @@ export function buildWrapperCommand(options: {
   ].join("\n");
 }
 
+const AUTH_ERROR_PATTERNS = [
+  /oauth token has expired/i,
+  /authentication.error/i,
+  /authentication failed/i,
+];
+
+export function classifyAutomationError(
+  exitCode: number,
+  logTail: string | null
+): "auth" | "general" {
+  if (exitCode === 0 || !logTail) return "general";
+  for (const pattern of AUTH_ERROR_PATTERNS) {
+    if (pattern.test(logTail)) return "auth";
+  }
+  return "general";
+}
+
+export function buildAutomationErrorMessage(
+  result: AutomationResultFile | null
+): string {
+  if (!result) {
+    return "Agent process ended without producing a result file.";
+  }
+  if (result.exitCode === 0) {
+    return "";
+  }
+  if (result.errorCategory === "auth") {
+    return (
+      `Agent exited with code ${result.exitCode} due to an authentication error. ` +
+      `The OAuth token may have expired. To fix this, run "claude /login" or ` +
+      `"claude setup-token" to refresh your credentials, then retry the automation.`
+    );
+  }
+  return `Agent exited with code ${result.exitCode}`;
+}
+
 function shellEscape(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
@@ -115,7 +151,16 @@ export function parseAutomationResult(
       typeof parsed.startedAt === "string" &&
       typeof parsed.finishedAt === "string"
     ) {
-      return parsed as AutomationResultFile;
+      const result: AutomationResultFile = {
+        status: parsed.status,
+        exitCode: parsed.exitCode,
+        startedAt: parsed.startedAt,
+        finishedAt: parsed.finishedAt,
+      };
+      if (parsed.errorCategory === "auth" || parsed.errorCategory === "general") {
+        result.errorCategory = parsed.errorCategory;
+      }
+      return result;
     }
     return null;
   } catch {

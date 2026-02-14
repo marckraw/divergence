@@ -22,6 +22,7 @@ import {
   killAutomationTmuxSession,
 } from "../api/tmuxAutomation.api";
 import {
+  buildAutomationErrorMessage,
   buildAutomationLogPath,
   buildAutomationResultPath,
   buildAutomationTmuxSessionName,
@@ -50,6 +51,7 @@ export interface RunAutomationNowInput {
   runTask: RunBackgroundTask;
   agentCommandClaude: string;
   agentCommandCodex: string;
+  claudeOAuthToken?: string;
   triggerSource?: AutomationRunTriggerSource;
 }
 
@@ -247,11 +249,16 @@ export async function runAutomationNow(
         });
 
         setPhase("Spawning tmux session");
+        const envVars: [string, string][] = [];
+        if (input.claudeOAuthToken) {
+          envVars.push(["CLAUDE_CODE_OAUTH_TOKEN", input.claudeOAuthToken]);
+        }
         await deps.spawnAutomationTmuxSession({
           sessionName: tmuxSessionName,
           command: wrapperCommand,
           cwd: divergencePath,
           logPath,
+          envVars: envVars.length > 0 ? envVars : undefined,
         });
 
         await Promise.all([
@@ -314,9 +321,7 @@ export async function runAutomationNow(
           dbFinalized = true;
           // Returns normally -> task center shows "Success"
         } else {
-          const errorMsg = result
-            ? `Agent exited with code ${result.exitCode}`
-            : "Agent process ended without producing a result file.";
+          const errorMsg = buildAutomationErrorMessage(result);
           await deps.updateAutomationRun(runId, {
             status: "error",
             startedAtMs,

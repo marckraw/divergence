@@ -241,6 +241,41 @@ describe("runAutomationNow service", () => {
     );
   });
 
+  it("produces actionable auth error message when result has auth errorCategory", async () => {
+    const authFailResult = {
+      status: "completed" as const,
+      exitCode: 1,
+      startedAt: "2025-01-01T00:00:00Z",
+      finishedAt: "2025-01-01T00:05:00Z",
+      errorCategory: "auth" as const,
+    };
+    const deps = createDependencies({
+      queryAutomationTmuxPaneStatus: vi.fn().mockResolvedValue({ alive: false, exitCode: 1 }),
+      readAutomationResultFile: vi.fn().mockResolvedValue(JSON.stringify(authFailResult)),
+      parseAutomationResult: vi.fn().mockReturnValue(authFailResult),
+    });
+
+    const result = await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("authentication error");
+    expect(result.error).toContain("claude /login");
+    expect(result.error).toContain("setup-token");
+    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({
+        status: "error",
+        error: expect.stringContaining("authentication error"),
+      })
+    );
+  });
+
   it("updates output tail during polling", async () => {
     let pollCount = 0;
     const deps = createDependencies({
@@ -522,5 +557,61 @@ describe("runAutomationNow service", () => {
 
     expect(result.status).toBe("launched");
     expect(result.divergenceId).toBe(42);
+  });
+
+  it("passes CLAUDE_CODE_OAUTH_TOKEN envVars when claudeOAuthToken is provided", async () => {
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+      claudeOAuthToken: "sk-ant-oauth-test-token-123",
+    }, deps);
+
+    expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: [["CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oauth-test-token-123"]],
+      })
+    );
+  });
+
+  it("does not pass envVars when claudeOAuthToken is empty", async () => {
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+      claudeOAuthToken: "",
+    }, deps);
+
+    expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: undefined,
+      })
+    );
+  });
+
+  it("does not pass envVars when claudeOAuthToken is missing", async () => {
+    const deps = createDependencies();
+
+    await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
+      agentCommandCodex: "",
+    }, deps);
+
+    expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        envVars: undefined,
+      })
+    );
   });
 });
