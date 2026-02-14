@@ -186,6 +186,8 @@ pub struct TmuxDiagnostics {
     pub env_tmux: Option<String>,
     pub env_tmux_tmpdir: Option<String>,
     pub login_shell_tmux_tmpdir: Option<String>,
+    pub env_tmpdir: Option<String>,
+    pub login_shell_tmpdir: Option<String>,
     pub version: TmuxCommandDiagnostics,
     pub list_sessions_raw: TmuxCommandDiagnostics,
 }
@@ -201,17 +203,24 @@ fn epoch_to_iso8601(epoch: &str) -> String {
 }
 
 pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
-    let output = command_with_tmux()
-        .args([
-            "list-sessions",
-            "-F",
-            "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
-        ])
-        .output();
+    dump_process_env_once();
+    eprintln!("[divergence] list_tmux_sessions: starting");
+    eprintln!("[divergence] list_tmux_sessions: process TMPDIR={:?}", std::env::var("TMPDIR").ok());
+    eprintln!("[divergence] list_tmux_sessions: process TMUX_TMPDIR={:?}", std::env::var("TMUX_TMPDIR").ok());
+    eprintln!("[divergence] list_tmux_sessions: process PATH={:?}", std::env::var("PATH").ok().map(|p| p.chars().take(200).collect::<String>()));
+
+    let mut cmd = command_with_tmux();
+    cmd.args([
+        "list-sessions",
+        "-F",
+        "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_windows}\t#{session_activity}",
+    ]);
+    let output = cmd.output();
 
     let result = match output {
         Ok(r) => r,
         Err(err) => {
+            eprintln!("[divergence] list_tmux_sessions: tmux command FAILED to execute: {} (kind={:?})", err, err.kind());
             if err.kind() == ErrorKind::NotFound {
                 return Ok(vec![]);
             }
@@ -219,24 +228,38 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
         }
     };
 
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+
+    eprintln!(
+        "[divergence] list_tmux_sessions: exit={:?}, stdout_len={}, stderr_len={}, stderr={:?}",
+        result.status.code(),
+        stdout.len(),
+        stderr.len(),
+        stderr.chars().take(300).collect::<String>()
+    );
+
     if !result.status.success() {
-        let stderr = String::from_utf8_lossy(&result.stderr);
         if stderr.contains("no server running") || stderr.contains("failed to connect to server") {
+            eprintln!("[divergence] list_tmux_sessions: no tmux server running (this is normal if no sessions exist)");
             return Ok(vec![]);
         }
         return Err(format!("Failed to list tmux sessions: {}", stderr));
     }
 
-    let stdout = String::from_utf8_lossy(&result.stdout);
+    let total_lines = stdout.lines().count();
     let mut sessions = Vec::new();
+    let mut skipped_non_divergence = 0u32;
 
     for line in stdout.lines() {
         let parts: Vec<&str> = line.split('\t').collect();
         if parts.len() < 5 {
+            eprintln!("[divergence] list_tmux_sessions: skipping malformed line (parts={}): {:?}", parts.len(), line.chars().take(100).collect::<String>());
             continue;
         }
         let name = parts[0];
         if !name.starts_with("divergence-") {
+            skipped_non_divergence += 1;
             continue;
         }
         sessions.push(TmuxSessionInfo {
@@ -248,10 +271,16 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
         });
     }
 
+    eprintln!(
+        "[divergence] list_tmux_sessions: total_lines={}, divergence_sessions={}, skipped_non_divergence={}",
+        total_lines, sessions.len(), skipped_non_divergence
+    );
+
     Ok(sessions)
 }
 
 pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
+    eprintln!("[divergence] list_all_tmux_sessions: starting");
     let output = command_with_tmux()
         .args([
             "list-sessions",
@@ -263,6 +292,7 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
     let result = match output {
         Ok(r) => r,
         Err(err) => {
+            eprintln!("[divergence] list_all_tmux_sessions: tmux command FAILED: {} (kind={:?})", err, err.kind());
             if err.kind() == ErrorKind::NotFound {
                 return Ok(vec![]);
             }
@@ -270,15 +300,21 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
         }
     };
 
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    eprintln!(
+        "[divergence] list_all_tmux_sessions: exit={:?}, stdout_len={}, stderr={:?}",
+        result.status.code(), stdout.len(), stderr.chars().take(200).collect::<String>()
+    );
+
     if !result.status.success() {
-        let stderr = String::from_utf8_lossy(&result.stderr);
         if stderr.contains("no server running") || stderr.contains("failed to connect to server") {
+            eprintln!("[divergence] list_all_tmux_sessions: no tmux server running");
             return Ok(vec![]);
         }
         return Err(format!("Failed to list tmux sessions: {}", stderr));
     }
 
-    let stdout = String::from_utf8_lossy(&result.stdout);
     let mut sessions = Vec::new();
 
     for line in stdout.lines() {
@@ -286,6 +322,7 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
         if parts.len() < 6 {
             continue;
         }
+        eprintln!("[divergence] list_all_tmux_sessions: found session {:?} socket={:?}", parts[0], parts[1]);
         sessions.push(RawTmuxSessionInfo {
             name: parts[0].to_string(),
             socket_path: parts[1].to_string(),
@@ -296,6 +333,7 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
         });
     }
 
+    eprintln!("[divergence] list_all_tmux_sessions: returning {} sessions", sessions.len());
     Ok(sessions)
 }
 
@@ -312,7 +350,9 @@ pub fn get_tmux_diagnostics() -> TmuxDiagnostics {
         env_shell: std::env::var("SHELL").ok(),
         env_tmux: std::env::var("TMUX").ok(),
         env_tmux_tmpdir: std::env::var("TMUX_TMPDIR").ok(),
-        login_shell_tmux_tmpdir: login_shell_tmux_context.tmux_tmpdir,
+        login_shell_tmux_tmpdir: login_shell_tmux_context.tmux_tmpdir.clone(),
+        env_tmpdir: std::env::var("TMPDIR").ok(),
+        login_shell_tmpdir: login_shell_tmux_context.tmpdir.clone(),
         version: run_tmux_command_for_diagnostics(&["-V"]),
         list_sessions_raw: run_tmux_command_for_diagnostics(&[
             "list-sessions",
@@ -325,22 +365,52 @@ pub fn get_tmux_diagnostics() -> TmuxDiagnostics {
 static LOGIN_SHELL_PATH: OnceLock<Option<String>> = OnceLock::new();
 static TMUX_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
 static LOGIN_SHELL_TMUX_CONTEXT: OnceLock<LoginShellTmuxContext> = OnceLock::new();
+static ENV_DUMP_DONE: OnceLock<()> = OnceLock::new();
+
+fn dump_process_env_once() {
+    ENV_DUMP_DONE.get_or_init(|| {
+        eprintln!("=== [divergence] Process Environment Dump (one-time) ===");
+        eprintln!("[divergence] env PATH={:?}", std::env::var("PATH").ok().map(|p| p.chars().take(300).collect::<String>()));
+        eprintln!("[divergence] env SHELL={:?}", std::env::var("SHELL").ok());
+        eprintln!("[divergence] env HOME={:?}", std::env::var("HOME").ok());
+        eprintln!("[divergence] env USER={:?}", std::env::var("USER").ok());
+        eprintln!("[divergence] env TMPDIR={:?}", std::env::var("TMPDIR").ok());
+        eprintln!("[divergence] env TMUX={:?}", std::env::var("TMUX").ok());
+        eprintln!("[divergence] env TMUX_TMPDIR={:?}", std::env::var("TMUX_TMPDIR").ok());
+        eprintln!("[divergence] env DIVERGENCE_TMUX_PATH={:?}", std::env::var("DIVERGENCE_TMUX_PATH").ok());
+        eprintln!("[divergence] env TERM={:?}", std::env::var("TERM").ok());
+        eprintln!("[divergence] env __CFBundleIdentifier={:?}", std::env::var("__CFBundleIdentifier").ok());
+        eprintln!("[divergence] current_dir={:?}", std::env::current_dir().ok());
+        eprintln!("[divergence] current_exe={:?}", std::env::current_exe().ok());
+        // Check what uid the tmux socket dir would use
+        if let Ok(output) = Command::new("id").arg("-u").output() {
+            eprintln!("[divergence] uid={}", String::from_utf8_lossy(&output.stdout).trim());
+        }
+        eprintln!("=== [divergence] End Process Environment Dump ===");
+    });
+}
 
 #[derive(Debug, Clone, Default)]
 struct LoginShellTmuxContext {
     tmux_path: Option<PathBuf>,
     tmux_tmpdir: Option<String>,
+    tmpdir: Option<String>,
 }
 
 fn command_with_tmux() -> Command {
-    if let Some(path) = get_tmux_path() {
+    if let Some(ref path) = get_tmux_path() {
+        eprintln!("[divergence] command_with_tmux: using resolved tmux binary: {:?}", path);
         let mut cmd = Command::new(path);
-        if let Some(path) = get_login_shell_path() {
-            cmd.env("PATH", path);
+        if let Some(ref login_path) = get_login_shell_path() {
+            eprintln!("[divergence] command_with_tmux: setting PATH from login shell ({} chars)", login_path.len());
+            cmd.env("PATH", login_path);
+        } else {
+            eprintln!("[divergence] command_with_tmux: no login shell PATH available, using process PATH");
         }
         apply_tmux_context_env(&mut cmd);
         return cmd;
     }
+    eprintln!("[divergence] command_with_tmux: no resolved tmux path, falling back to bare 'tmux' with login PATH");
     let mut cmd = command_with_login_path("tmux");
     apply_tmux_context_env(&mut cmd);
     cmd
@@ -367,24 +437,28 @@ fn get_tmux_path() -> Option<PathBuf> {
 
 fn resolve_tmux_path() -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var("DIVERGENCE_TMUX_PATH") {
-        let candidate = PathBuf::from(explicit);
+        let candidate = PathBuf::from(&explicit);
         if is_executable(&candidate) {
+            eprintln!("[divergence] tmux path resolved via DIVERGENCE_TMUX_PATH={:?}", explicit);
             return Some(candidate);
         }
     }
 
     if let Some(found) = get_login_shell_tmux_context().tmux_path {
+        eprintln!("[divergence] tmux path resolved via login shell context: {:?}", found);
         return Some(found);
     }
 
     if let Some(path) = get_login_shell_path() {
         if let Some(found) = find_in_path(&path, "tmux") {
+            eprintln!("[divergence] tmux path resolved via login shell PATH: {:?}", found);
             return Some(found);
         }
     }
 
     if let Ok(path) = std::env::var("PATH") {
         if let Some(found) = find_in_path(&path, "tmux") {
+            eprintln!("[divergence] tmux path resolved via process PATH: {:?}", found);
             return Some(found);
         }
     }
@@ -398,10 +472,12 @@ fn resolve_tmux_path() -> Option<PathBuf> {
     ] {
         let candidate = Path::new(candidate);
         if is_executable(candidate) {
+            eprintln!("[divergence] tmux path resolved via hardcoded fallback: {:?}", candidate);
             return Some(candidate.to_path_buf());
         }
     }
 
+    eprintln!("[divergence] tmux path resolution failed: tmux binary not found");
     None
 }
 
@@ -457,28 +533,72 @@ fn resolve_login_shell_path() -> Option<String> {
             .output();
 
         let Ok(result) = output else {
+            eprintln!("[divergence] login shell PATH probe failed for {:?}: could not execute", shell);
             continue;
         };
         if !result.status.success() {
+            eprintln!(
+                "[divergence] login shell PATH probe failed for {:?}: exit={:?}, stderr={:?}",
+                shell,
+                result.status.code(),
+                String::from_utf8_lossy(&result.stderr).chars().take(200).collect::<String>()
+            );
             continue;
         }
 
         let path = String::from_utf8_lossy(&result.stdout).trim().to_string();
         if !path.is_empty() {
+            eprintln!("[divergence] login shell PATH resolved via {:?} ({} chars)", shell, path.len());
             return Some(path);
         }
     }
 
+    eprintln!("[divergence] login shell PATH probe: no PATH found from any shell candidate");
     None
 }
 
 fn apply_tmux_context_env(cmd: &mut Command) {
-    if std::env::var_os("TMUX_TMPDIR").is_some() {
-        return;
+    let ctx = get_login_shell_tmux_context();
+    let process_tmux_tmpdir = std::env::var("TMUX_TMPDIR").ok();
+    let process_tmpdir = std::env::var("TMPDIR").ok();
+
+    eprintln!(
+        "[divergence] apply_tmux_context_env: process TMUX_TMPDIR={:?}, process TMPDIR={:?}",
+        process_tmux_tmpdir, process_tmpdir
+    );
+    eprintln!(
+        "[divergence] apply_tmux_context_env: login_shell TMUX_TMPDIR={:?}, login_shell TMPDIR={:?}",
+        ctx.tmux_tmpdir, ctx.tmpdir
+    );
+
+    // Propagate TMUX_TMPDIR from login shell if not set in process env
+    if process_tmux_tmpdir.is_none() {
+        if let Some(ref tmux_tmpdir) = ctx.tmux_tmpdir {
+            eprintln!("[divergence] apply_tmux_context_env: setting TMUX_TMPDIR={:?} from login shell", tmux_tmpdir);
+            cmd.env("TMUX_TMPDIR", tmux_tmpdir);
+        }
+    } else {
+        eprintln!("[divergence] apply_tmux_context_env: TMUX_TMPDIR already set in process env, not overriding");
     }
 
-    if let Some(tmpdir) = get_login_shell_tmux_context().tmux_tmpdir {
-        cmd.env("TMUX_TMPDIR", tmpdir);
+    // Propagate TMPDIR from login shell when it differs from process env.
+    // tmux uses TMPDIR as fallback for socket directory (after TMUX_TMPDIR),
+    // so a mismatch causes the app to connect to the wrong tmux server.
+    // This commonly happens when the app is launched from Finder (production)
+    // vs from a terminal (dev mode).
+    if let Some(ref login_tmpdir) = ctx.tmpdir {
+        let current_tmpdir = process_tmpdir.as_deref().unwrap_or("");
+        if current_tmpdir != login_tmpdir.as_str() {
+            eprintln!(
+                "[divergence] apply_tmux_context_env: TMPDIR MISMATCH detected! process={:?}, login_shell={:?} — propagating login shell value to tmux command",
+                current_tmpdir, login_tmpdir
+            );
+            cmd.env("TMPDIR", login_tmpdir);
+        } else {
+            eprintln!("[divergence] apply_tmux_context_env: TMPDIR matches between process and login shell — no override needed");
+        }
+    } else {
+        eprintln!("[divergence] apply_tmux_context_env: no login shell TMPDIR available for comparison");
     }
 }
 
@@ -491,6 +611,7 @@ fn get_login_shell_tmux_context() -> LoginShellTmuxContext {
 fn resolve_login_shell_tmux_context() -> LoginShellTmuxContext {
     const TMUX_BIN_PREFIX: &str = "__DIVERGENCE_TMUX_CTX__TMUX_BIN=";
     const TMUX_TMPDIR_PREFIX: &str = "__DIVERGENCE_TMUX_CTX__TMUX_TMPDIR=";
+    const TMPDIR_PREFIX: &str = "__DIVERGENCE_TMUX_CTX__TMPDIR=";
     const SHELL_PROBE_SCRIPT: &str = r#"
 if [ -n "${ZSH_VERSION-}" ]; then
   _divergence_tmux_bin="$(whence -p tmux 2>/dev/null)"
@@ -501,6 +622,7 @@ else
 fi
 printf '__DIVERGENCE_TMUX_CTX__TMUX_BIN=%s\n' "$_divergence_tmux_bin"
 printf '__DIVERGENCE_TMUX_CTX__TMUX_TMPDIR=%s\n' "${TMUX_TMPDIR-}"
+printf '__DIVERGENCE_TMUX_CTX__TMPDIR=%s\n' "${TMPDIR-}"
 "#;
 
     for shell in login_shell_candidates() {
@@ -509,6 +631,10 @@ printf '__DIVERGENCE_TMUX_CTX__TMUX_TMPDIR=%s\n' "${TMUX_TMPDIR-}"
             .output();
 
         let Ok(result) = output else {
+            eprintln!(
+                "[divergence] login shell tmux context probe failed for {:?}: could not execute",
+                shell
+            );
             continue;
         };
 
@@ -533,14 +659,28 @@ printf '__DIVERGENCE_TMUX_CTX__TMUX_TMPDIR=%s\n' "${TMUX_TMPDIR-}"
                 if !value.is_empty() {
                     context.tmux_tmpdir = Some(value.to_string());
                 }
+                continue;
+            }
+
+            if let Some(value) = line.strip_prefix(TMPDIR_PREFIX) {
+                let value = value.trim();
+                if !value.is_empty() {
+                    context.tmpdir = Some(value.to_string());
+                }
             }
         }
 
-        if context.tmux_path.is_some() || context.tmux_tmpdir.is_some() {
+        eprintln!(
+            "[divergence] login shell tmux context from {:?}: tmux_path={:?}, tmux_tmpdir={:?}, tmpdir={:?}",
+            shell, context.tmux_path, context.tmux_tmpdir, context.tmpdir
+        );
+
+        if context.tmux_path.is_some() || context.tmux_tmpdir.is_some() || context.tmpdir.is_some() {
             return context;
         }
     }
 
+    eprintln!("[divergence] login shell tmux context probe: no data found from any shell candidate");
     LoginShellTmuxContext::default()
 }
 

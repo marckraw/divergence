@@ -21,12 +21,14 @@ function TmuxPanel({
   divergencesLoading,
 }: TmuxPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const ownershipReady = !projectsLoading && !divergencesLoading;
   const {
     sessions,
     loading,
     error,
     orphanCount,
+    diagnostics,
     refresh,
     killSession,
     killOrphans,
@@ -179,8 +181,69 @@ function TmuxPanel({
         )}
 
         {!error && !loading && sessions.length === 0 && (
-          <div className="px-2 py-8 text-center text-xs text-subtext">
-            No tmux sessions running.
+          <div className="px-2 py-4 text-xs text-subtext space-y-2">
+            <div className="py-2 text-center">No tmux sessions running.</div>
+            {diagnostics && (
+              <div className="text-left">
+                <button
+                  type="button"
+                  className="text-[10px] text-subtext/70 hover:text-text underline"
+                  onClick={() => setShowDiagnostics((v) => !v)}
+                >
+                  {showDiagnostics ? "Hide diagnostics" : "Show diagnostics"}
+                </button>
+                {showDiagnostics && (
+                  <div className="mt-2 p-2 bg-surface/50 rounded text-[10px] font-mono space-y-1 overflow-x-auto">
+                    <div className="text-text font-semibold mb-1">Tmux Environment</div>
+                    <div>tmux binary: <span className="text-text">{diagnostics.resolved_tmux_path ?? "NOT FOUND"}</span></div>
+                    <div>tmux version: <span className="text-text">{diagnostics.version.stdout.trim() || diagnostics.version.error || "unknown"}</span></div>
+                    <div>login shell tmux: <span className="text-text">{diagnostics.login_shell_tmux_path ?? "unresolved"}</span></div>
+
+                    <div className="text-text font-semibold mt-2 mb-1">Socket Directories (critical for session discovery)</div>
+                    <div>
+                      process TMPDIR: <span className="text-text">{diagnostics.env_tmpdir ?? "UNSET"}</span>
+                    </div>
+                    <div>
+                      login shell TMPDIR: <span className="text-text">{diagnostics.login_shell_tmpdir ?? "UNSET"}</span>
+                    </div>
+                    {diagnostics.env_tmpdir && diagnostics.login_shell_tmpdir && diagnostics.env_tmpdir !== diagnostics.login_shell_tmpdir && (
+                      <div className="text-red font-semibold">TMPDIR MISMATCH — this causes tmux to look in the wrong socket directory!</div>
+                    )}
+                    {diagnostics.env_tmpdir && diagnostics.login_shell_tmpdir && diagnostics.env_tmpdir === diagnostics.login_shell_tmpdir && (
+                      <div className="text-green">TMPDIR matches (good)</div>
+                    )}
+                    <div>
+                      process TMUX_TMPDIR: <span className="text-text">{diagnostics.env_tmux_tmpdir ?? "unset"}</span>
+                    </div>
+                    <div>
+                      login shell TMUX_TMPDIR: <span className="text-text">{diagnostics.login_shell_tmux_tmpdir ?? "unset"}</span>
+                    </div>
+
+                    <div className="text-text font-semibold mt-2 mb-1">Process Environment</div>
+                    <div>SHELL: <span className="text-text">{diagnostics.env_shell ?? "unset"}</span></div>
+                    <div>TMUX: <span className="text-text">{diagnostics.env_tmux ?? "unset (not inside tmux)"}</span></div>
+                    <div className="break-all">PATH: <span className="text-text/60">{diagnostics.env_path?.slice(0, 200) ?? "unset"}{(diagnostics.env_path?.length ?? 0) > 200 ? "..." : ""}</span></div>
+                    <div className="break-all">login PATH: <span className="text-text/60">{diagnostics.login_shell_path?.slice(0, 200) ?? "unset"}{(diagnostics.login_shell_path?.length ?? 0) > 200 ? "..." : ""}</span></div>
+
+                    <div className="text-text font-semibold mt-2 mb-1">Raw tmux list-sessions output</div>
+                    {diagnostics.list_sessions_raw.error && (
+                      <div className="text-red">exec error: {diagnostics.list_sessions_raw.error}</div>
+                    )}
+                    <div>exit code: <span className="text-text">{diagnostics.list_sessions_raw.status_code ?? "N/A"}</span></div>
+                    {diagnostics.list_sessions_raw.stderr.trim() && (
+                      <div className="text-yellow break-all">stderr: {diagnostics.list_sessions_raw.stderr.trim()}</div>
+                    )}
+                    <div className="text-subtext/70 break-all whitespace-pre-wrap">
+                      stdout: {diagnostics.list_sessions_raw.stdout.trim() || "(empty — no sessions visible to this tmux instance)"}
+                    </div>
+
+                    <div className="mt-2 text-subtext/50 italic">
+                      Tip: Check Console.app for [divergence] logs for detailed Rust-side diagnostics.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
