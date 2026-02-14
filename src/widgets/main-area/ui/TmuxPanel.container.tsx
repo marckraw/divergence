@@ -238,7 +238,7 @@ function TmuxPanel({
                     </div>
 
                     <div className="mt-2 text-subtext/50 italic">
-                      Tip: Check Console.app for [divergence] logs for detailed Rust-side diagnostics.
+                      Tip: Check ~/Library/Logs/Divergence/tmux-debug.log for detailed Rust-side diagnostics.
                     </div>
                   </div>
                 )}
