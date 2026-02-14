@@ -585,6 +585,8 @@ pub struct TmuxDiagnosticsEntry {
     pub env_tmux: Option<String>,
     pub env_tmux_tmpdir: Option<String>,
     pub login_shell_tmux_tmpdir: Option<String>,
+    pub env_tmpdir: Option<String>,
+    pub login_shell_tmpdir: Option<String>,
     pub version: TmuxCommandDiagnosticsEntry,
     pub list_sessions_raw: TmuxCommandDiagnosticsEntry,
 }
@@ -632,6 +634,8 @@ pub async fn get_tmux_diagnostics() -> Result<TmuxDiagnosticsEntry, String> {
         env_tmux: diagnostics.env_tmux,
         env_tmux_tmpdir: diagnostics.env_tmux_tmpdir,
         login_shell_tmux_tmpdir: diagnostics.login_shell_tmux_tmpdir,
+        env_tmpdir: diagnostics.env_tmpdir,
+        login_shell_tmpdir: diagnostics.login_shell_tmpdir,
         version: TmuxCommandDiagnosticsEntry {
             status_code: diagnostics.version.status_code,
             stdout: diagnostics.version.stdout,

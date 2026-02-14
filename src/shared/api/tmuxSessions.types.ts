@@ -31,6 +31,8 @@ export interface TmuxDiagnosticsEntry {
   env_tmux: string | null;
   env_tmux_tmpdir: string | null;
   login_shell_tmux_tmpdir: string | null;
+  env_tmpdir: string | null;
+  login_shell_tmpdir: string | null;
   version: TmuxCommandDiagnosticsEntry;
   list_sessions_raw: TmuxCommandDiagnosticsEntry;
 }
