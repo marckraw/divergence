@@ -1,5 +1,11 @@
 # divergence
 
+## 0.15.6
+
+### Patch Changes
+
+- 9a2766e: Fix tmux sessions not appearing in production mode by propagating TMPDIR from login shell to tmux commands. Add comprehensive diagnostics logging and UI panel for debugging tmux environment issues.
+
 ## 0.15.5
 
 ### Patch Changes
