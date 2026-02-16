@@ -1,5 +1,11 @@
 # divergence
 
+## 0.16.1
+
+### Patch Changes
+
+- 76886a5: add icon to show token
+
 ## 0.16.0
 
 ### Minor Changes
