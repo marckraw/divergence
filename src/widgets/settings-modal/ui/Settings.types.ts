@@ -94,4 +94,6 @@ export interface SettingsPresentationalProps {
   ) => void;
   onSubmitAutomationForm: () => Promise<void>;
   onCloseAutomationEditor: () => void;
+  oauthTokenVisible: boolean;
+  onToggleOAuthTokenVisible: () => void;
 }

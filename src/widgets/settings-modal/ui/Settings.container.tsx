@@ -56,6 +56,7 @@ function SettingsContainer({
   const [automationActionError, setAutomationActionError] = useState<string | null>(null);
   const [isSubmittingAutomation, setIsSubmittingAutomation] = useState(false);
   const [automationActionInFlightId, setAutomationActionInFlightId] = useState<number | null>(null);
+  const [oauthTokenVisible, setOauthTokenVisible] = useState(false);
   const updaterPresentation = useMemo(
     () => getUpdaterPresentation(updater.status, updater.version, updater.progress, updater.error),
     [updater.status, updater.version, updater.progress, updater.error]
@@ -247,6 +248,10 @@ function SettingsContainer({
     }
   }, [onRunAutomationNow]);
 
+  const handleToggleOAuthTokenVisible = useCallback(() => {
+    setOauthTokenVisible((prev) => !prev);
+  }, []);
+
   return (
     <SettingsPresentational
       loading={loading}
@@ -277,6 +282,8 @@ function SettingsContainer({
       onAutomationFormChange={handleAutomationFormChange}
       onSubmitAutomationForm={handleSubmitAutomationForm}
       onCloseAutomationEditor={handleCloseAutomationEditor}
+      oauthTokenVisible={oauthTokenVisible}
+      onToggleOAuthTokenVisible={handleToggleOAuthTokenVisible}
     />
   );
 }
