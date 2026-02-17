@@ -47,6 +47,9 @@ export async function killProjectTmuxSessions(projectId: number, projectName: st
     sessionName: buildSplitTmuxSessionName(projectSessionName, "pane-2"),
   });
   await invoke("kill_tmux_session", {
+    sessionName: buildSplitTmuxSessionName(projectSessionName, "pane-3"),
+  });
+  await invoke("kill_tmux_session", {
     sessionName: buildLegacyTmuxSessionName(`project-${projectId}`),
   });
 }
@@ -65,6 +68,9 @@ export async function killDivergenceTmuxSessions(
   await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
   await invoke("kill_tmux_session", {
     sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
+  });
+  await invoke("kill_tmux_session", {
+    sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-3"),
   });
   await invoke("kill_tmux_session", {
     sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),

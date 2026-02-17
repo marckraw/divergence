@@ -5,12 +5,20 @@ import type {
   CodexUsageResult,
 } from "../model/usageLimits.types";
 
-export function getUsageLimitsStatus(): Promise<UsageLimitsStatus> {
-  return invoke<UsageLimitsStatus>("get_usage_limits_status");
+export function getUsageLimitsStatus(
+  claudeOauthToken?: string,
+): Promise<UsageLimitsStatus> {
+  return invoke<UsageLimitsStatus>("get_usage_limits_status", {
+    claudeOauthToken,
+  });
 }
 
-export function fetchClaudeUsage(): Promise<ClaudeUsageResult> {
-  return invoke<ClaudeUsageResult>("fetch_claude_usage");
+export function fetchClaudeUsage(
+  claudeOauthToken?: string,
+): Promise<ClaudeUsageResult> {
+  return invoke<ClaudeUsageResult>("fetch_claude_usage", {
+    claudeOauthToken,
+  });
 }
 
 export function fetchCodexUsage(): Promise<CodexUsageResult> {

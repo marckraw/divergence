@@ -1,5 +1,7 @@
 export type {
+  SplitPaneId,
   SplitOrientation,
+  SplitSessionState,
   TerminalSession,
 } from "./model/terminalSession.types";
 export type {

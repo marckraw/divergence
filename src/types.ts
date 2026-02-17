@@ -8,7 +8,12 @@ export type {
   GitChangeEntry,
   GitChangeStatus,
 } from "./entities";
-export type { SplitOrientation, TerminalSession } from "./entities";
+export type {
+  SplitOrientation,
+  SplitPaneId,
+  SplitSessionState,
+  TerminalSession,
+} from "./entities";
 export type {
   TmuxSessionEntry,
   TmuxSessionOwnership,

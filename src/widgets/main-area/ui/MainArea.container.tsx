@@ -5,7 +5,8 @@ import type { MainAreaOpenDiff, MainAreaProps, RightPanelTab } from "./MainArea.
 import type {
   ChangesMode,
   GitChangeEntry,
-  SplitOrientation,
+  SplitPaneId,
+  SplitSessionState,
   TerminalSession,
 } from "../../../entities";
 import { buildSplitTmuxSessionName } from "../../../entities/terminal-session";
@@ -40,12 +41,13 @@ function MainAreaContainer({
   onRunReviewAgentRequest,
   splitBySessionId,
   reconnectBySessionId,
+  onFocusSplitPane,
   onReconnectSession,
   ...props
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
   const paneStatusRef = useRef<
-    Map<string, { pane1: TerminalSession["status"]; pane2: TerminalSession["status"] }>
+    Map<string, Map<SplitPaneId, TerminalSession["status"]>>
   >(new Map());
   const activeProject = activeSession
     ? projects.find((project) => project.id === activeSession.projectId) ?? null
@@ -314,58 +316,69 @@ function MainAreaContainer({
   );
 
   const handleSplitStatusChange = useCallback(
-    (sessionId: string, paneIndex: 0 | 1) => (status: TerminalSession["status"]) => {
-      const existing = paneStatusRef.current.get(sessionId) ?? { pane1: "idle", pane2: "idle" };
-      const next = { ...existing, [paneIndex === 0 ? "pane1" : "pane2"]: status };
+    (sessionId: string, paneId: SplitPaneId) => (status: TerminalSession["status"]) => {
+      const allowedPaneIds = splitBySessionId.get(sessionId)?.paneIds ?? ["pane-1"];
+      const existing = paneStatusRef.current.get(sessionId) ?? new Map<SplitPaneId, TerminalSession["status"]>();
+      const next = new Map<SplitPaneId, TerminalSession["status"]>();
+      for (const allowedPaneId of allowedPaneIds) {
+        if (allowedPaneId === paneId) {
+          continue;
+        }
+        const existingStatus = existing.get(allowedPaneId);
+        if (existingStatus) {
+          next.set(allowedPaneId, existingStatus);
+        }
+      }
+      next.set(paneId, status);
       paneStatusRef.current.set(sessionId, next);
-      onStatusChange(sessionId, getAggregatedTerminalStatus(next));
+      onStatusChange(sessionId, getAggregatedTerminalStatus(Array.from(next.values())));
     },
-    [onStatusChange]
+    [onStatusChange, splitBySessionId]
   );
 
   const renderSession = useCallback((session: TerminalSession) => {
     const splitState = splitBySessionId.get(session.id) ?? null;
-    const isSplit = Boolean(splitState);
-    const orientation: SplitOrientation = splitState?.orientation ?? "vertical";
+    const paneIds = splitState?.paneIds.length ? splitState.paneIds : (["pane-1"] as SplitPaneId[]);
+    const isSplit = paneIds.length > 1;
+    const orientation: SplitSessionState["orientation"] = splitState?.orientation ?? "vertical";
     const layoutClass = orientation === "vertical" ? "flex-row" : "flex-col";
     const dividerClass = orientation === "vertical" ? "border-r border-surface" : "border-b border-surface";
     const reconnectToken = reconnectBySessionId.get(session.id) ?? 0;
-    const paneTwoTmuxName = session.useTmux
-      ? buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2")
-      : session.tmuxSessionName;
 
     return (
       <div className={`flex h-full w-full ${layoutClass}`}>
-        <div className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${isSplit ? dividerClass : ""}`}>
-          <Terminal
-            key={`${session.id}-${reconnectToken}`}
-            cwd={session.path}
-            sessionId={session.id}
-            useTmux={session.useTmux}
-            tmuxSessionName={session.tmuxSessionName}
-            tmuxHistoryLimit={session.tmuxHistoryLimit}
-            onStatusChange={isSplit ? handleSplitStatusChange(session.id, 0) : handleStatusChange(session.id)}
-            onReconnect={() => onReconnectSession(session.id)}
-            onRegisterCommand={onRegisterTerminalCommand}
-            onUnregisterCommand={onUnregisterTerminalCommand}
-            onClose={() => onCloseSession(session.id)}
-          />
-        </div>
-        {isSplit && (
-          <div className="flex-1 relative overflow-hidden min-w-0 min-h-0">
-            <Terminal
-              key={`${session.id}-pane-2-${reconnectToken}`}
-              cwd={session.path}
-              sessionId={`${session.id}-pane-2`}
-              useTmux={session.useTmux}
-              tmuxSessionName={paneTwoTmuxName}
-              tmuxHistoryLimit={session.tmuxHistoryLimit}
-              onStatusChange={handleSplitStatusChange(session.id, 1)}
-              onReconnect={() => onReconnectSession(session.id)}
-              onClose={() => onCloseSession(session.id)}
-            />
-          </div>
-        )}
+        {paneIds.map((paneId, index) => {
+          const isPrimaryPane = paneId === (splitState?.primaryPaneId ?? "pane-1");
+          const paneSessionId = isPrimaryPane ? session.id : `${session.id}-${paneId}`;
+          const paneTmuxName = paneId === "pane-1" || !session.useTmux
+            ? session.tmuxSessionName
+            : buildSplitTmuxSessionName(session.tmuxSessionName, paneId);
+          const withDivider = index < paneIds.length - 1;
+
+          return (
+            <div
+              key={`${session.id}-${paneId}-wrapper`}
+              className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${
+                withDivider ? dividerClass : ""
+              }`}
+              onMouseDown={() => onFocusSplitPane(session.id, paneId)}
+            >
+              <Terminal
+                key={`${paneSessionId}-${paneTmuxName}-${reconnectToken}`}
+                cwd={session.path}
+                sessionId={paneSessionId}
+                useTmux={session.useTmux}
+                tmuxSessionName={paneTmuxName}
+                tmuxHistoryLimit={session.tmuxHistoryLimit}
+                onStatusChange={isSplit ? handleSplitStatusChange(session.id, paneId) : handleStatusChange(session.id)}
+                onReconnect={() => onReconnectSession(session.id)}
+                onRegisterCommand={isPrimaryPane ? onRegisterTerminalCommand : undefined}
+                onUnregisterCommand={isPrimaryPane ? onUnregisterTerminalCommand : undefined}
+                onClose={() => onCloseSession(session.id)}
+              />
+            </div>
+          );
+        })}
       </div>
     );
   }, [
@@ -375,6 +388,7 @@ function MainAreaContainer({
     onReconnectSession,
     onRegisterTerminalCommand,
     onUnregisterTerminalCommand,
+    onFocusSplitPane,
     reconnectBySessionId,
     splitBySessionId,
   ]);
@@ -392,6 +406,7 @@ function MainAreaContainer({
       onUnregisterTerminalCommand={onUnregisterTerminalCommand}
       onRunReviewAgentRequest={onRunReviewAgentRequest}
       splitBySessionId={splitBySessionId}
+      onFocusSplitPane={onFocusSplitPane}
       reconnectBySessionId={reconnectBySessionId}
       onReconnectSession={onReconnectSession}
       sessionList={sessionList}

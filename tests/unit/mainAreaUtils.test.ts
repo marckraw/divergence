@@ -20,8 +20,8 @@ describe("main area utils", () => {
   });
 
   it("aggregates terminal statuses", () => {
-    expect(getAggregatedTerminalStatus({ pane1: "idle", pane2: "active" })).toBe("active");
-    expect(getAggregatedTerminalStatus({ pane1: "busy", pane2: "idle" })).toBe("busy");
-    expect(getAggregatedTerminalStatus({ pane1: "idle", pane2: "idle" })).toBe("idle");
+    expect(getAggregatedTerminalStatus(["idle", "active"])).toBe("active");
+    expect(getAggregatedTerminalStatus(["busy", "idle", "active"])).toBe("busy");
+    expect(getAggregatedTerminalStatus(["idle", "idle", "idle"])).toBe("idle");
   });
 });

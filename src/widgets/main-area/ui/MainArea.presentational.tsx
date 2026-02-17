@@ -84,6 +84,8 @@ function MainAreaPresentational({
   const panelTransition = shouldReduceMotion
     ? FAST_EASE_OUT
     : { type: "spring", stiffness: 240, damping: 28, mass: 0.9 };
+  const activePaneCount = activeSplit?.paneIds.length ?? 1;
+  const canAddSplitPane = Boolean(activeSession) && activePaneCount < 3;
 
   return (
     <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
@@ -212,14 +214,14 @@ function MainAreaPresentational({
         <div className="flex items-center gap-2 ml-2">
           <ToolbarButton
             onClick={() => activeSession && onSplitSession(activeSession.id, "vertical")}
-            disabled={!activeSession}
+            disabled={!canAddSplitPane}
             title="Split side-by-side (Cmd+D)"
           >
             Split V
           </ToolbarButton>
           <ToolbarButton
             onClick={() => activeSession && onSplitSession(activeSession.id, "horizontal")}
-            disabled={!activeSession}
+            disabled={!canAddSplitPane}
             title="Split top/bottom (Cmd+Shift+D)"
           >
             Split H

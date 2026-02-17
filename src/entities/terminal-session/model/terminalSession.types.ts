@@ -15,3 +15,11 @@ export interface TerminalSession {
 }
 
 export type SplitOrientation = "vertical" | "horizontal";
+export type SplitPaneId = "pane-1" | "pane-2" | "pane-3";
+
+export interface SplitSessionState {
+  orientation: SplitOrientation;
+  paneIds: SplitPaneId[];
+  focusedPaneId: SplitPaneId;
+  primaryPaneId: SplitPaneId;
+}

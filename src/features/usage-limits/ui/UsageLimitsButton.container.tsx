@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAppSettings } from "../../../shared";
 import { useUsageLimits } from "../model/useUsageLimits";
 import {
   getSummaryUsageLevel,
@@ -7,8 +8,9 @@ import {
 import UsageLimitsButtonPresentational from "./UsageLimitsButton.presentational";
 
 function UsageLimitsButton() {
+  const { settings } = useAppSettings();
   const { claude, codex, status, loading, lastFetchedAtMs, refresh } =
-    useUsageLimits();
+    useUsageLimits(settings.claudeOAuthToken);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

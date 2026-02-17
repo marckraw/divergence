@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildTmuxBootstrapCommand,
   sanitizeTmuxSessionNameForShell,
+  SHELL_BOOTSTRAP_TIMEOUT_MS,
   TMUX_BOOTSTRAP_TIMEOUT_MS,
   buildBootstrapTimeoutMessage,
 } from "../../src/widgets/main-area/lib/terminalTmux.pure";
@@ -22,12 +23,13 @@ describe("terminal tmux utils", () => {
 
   it("exports bootstrap timeout constant", () => {
     expect(TMUX_BOOTSTRAP_TIMEOUT_MS).toBe(15_000);
+    expect(SHELL_BOOTSTRAP_TIMEOUT_MS).toBe(20_000);
   });
 
-  it("builds bootstrap timeout message with seconds", () => {
+  it("builds bootstrap timeout message with seconds and stalled hint", () => {
     const msg = buildBootstrapTimeoutMessage(15_000);
     expect(msg).toContain("15s");
-    expect(msg).toContain("Reconnecting");
+    expect(msg).toContain("stalled");
   });
 
   it("rounds timeout message to nearest second", () => {

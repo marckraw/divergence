@@ -33,7 +33,15 @@ import {
 } from "../entities/inbox-event";
 import { useAppSettings } from "../shared";
 import { useUpdater } from "../shared";
-import type { Project, Divergence, TerminalSession, SplitOrientation, BackgroundTask } from "../entities";
+import type {
+  Project,
+  Divergence,
+  TerminalSession,
+  SplitOrientation,
+  SplitPaneId,
+  SplitSessionState,
+  BackgroundTask,
+} from "../entities";
 import { buildSplitTmuxSessionName } from "../entities/terminal-session";
 import { getRalphyConfigSummary } from "../shared/api/ralphyConfig.api";
 import { killTmuxSession } from "../shared/api/tmuxSessions.api";
@@ -45,6 +53,12 @@ import {
 import { notifyCommandFinished } from "../shared";
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
 import { buildTerminalSession, buildWorkspaceKey, generateSessionEntropy } from "./lib/sessionBuilder.pure";
+import {
+  buildNextSplitState,
+  closeFocusedSplitPane,
+  focusSplitPane,
+  isDefaultSinglePaneState,
+} from "./lib/splitSession.pure";
 import {
   buildIdleNotificationTargetLabel,
   shouldNotifyIdle,
@@ -78,7 +92,7 @@ function App() {
   const { settings: appSettings } = useAppSettings();
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [splitBySessionId, setSplitBySessionId] = useState<Map<string, { orientation: SplitOrientation }>>(new Map());
+  const [splitBySessionId, setSplitBySessionId] = useState<Map<string, SplitSessionState>>(new Map());
   const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
@@ -432,16 +446,19 @@ function App() {
 
   const handleCloseSessionAndKillTmux = useCallback(async (sessionId: string) => {
     const session = sessionsRef.current.get(sessionId);
+    const splitState = splitBySessionId.get(sessionId) ?? null;
     handleCloseSession(sessionId);
 
     if (!session?.useTmux) {
       return;
     }
 
-    const tmuxNames = Array.from(new Set([
-      session.tmuxSessionName,
-      buildSplitTmuxSessionName(session.tmuxSessionName, "pane-2"),
-    ]));
+    const paneIds = splitState?.paneIds ?? ["pane-1"];
+    const tmuxNames = Array.from(new Set(paneIds.map((paneId) => (
+      paneId === "pane-1"
+        ? session.tmuxSessionName
+        : buildSplitTmuxSessionName(session.tmuxSessionName, paneId)
+    ))));
     for (const tmuxName of tmuxNames) {
       try {
         await killTmuxSession(tmuxName);
@@ -449,7 +466,7 @@ function App() {
         console.warn(`Failed to kill tmux session ${tmuxName}:`, error);
       }
     }
-  }, [handleCloseSession]);
+  }, [handleCloseSession, splitBySessionId]);
 
   const handleRegisterTerminalCommand = useCallback((sessionId: string, sendCommand: (command: string) => void) => {
     commandBySessionIdRef.current.set(sessionId, sendCommand);
@@ -573,7 +590,24 @@ function App() {
   const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
     setSplitBySessionId(prev => {
       const next = new Map(prev);
-      next.set(sessionId, { orientation });
+      const current = next.get(sessionId);
+      next.set(sessionId, buildNextSplitState(current, orientation));
+      return next;
+    });
+  }, []);
+
+  const handleFocusSplitPane = useCallback((sessionId: string, paneId: SplitPaneId) => {
+    setSplitBySessionId((prev) => {
+      const current = prev.get(sessionId);
+      if (!current) {
+        return prev;
+      }
+      const nextState = focusSplitPane(current, paneId);
+      if (nextState === current) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(sessionId, nextState);
       return next;
     });
   }, []);
@@ -1039,7 +1073,25 @@ function App() {
         return;
       case "close_active_session":
         if (activeSessionId) {
-          handleCloseSession(activeSessionId);
+          const splitState = splitBySessionId.get(activeSessionId) ?? null;
+          if (splitState && splitState.paneIds.length > 1) {
+            setSplitBySessionId((prev) => {
+              const current = prev.get(activeSessionId);
+              if (!current || current.paneIds.length <= 1) {
+                return prev;
+              }
+              const nextState = closeFocusedSplitPane(current);
+              const next = new Map(prev);
+              if (!nextState || isDefaultSinglePaneState(nextState)) {
+                next.delete(activeSessionId);
+              } else {
+                next.set(activeSessionId, nextState);
+              }
+              return next;
+            });
+          } else {
+            handleCloseSession(activeSessionId);
+          }
         }
         return;
       case "new_divergence": {
@@ -1086,6 +1138,7 @@ function App() {
   }, [
     sessions,
     activeSessionId,
+    splitBySessionId,
     createDivergenceFor,
     resolveProjectForNewDivergenceCallback,
     handleCloseSession,
@@ -1209,6 +1262,7 @@ function App() {
           onProjectSettingsSaved={updateProjectSettings}
           splitBySessionId={splitBySessionId}
           onSplitSession={handleSplitSession}
+          onFocusSplitPane={handleFocusSplitPane}
           onResetSplitSession={handleResetSplitSession}
           reconnectBySessionId={reconnectBySessionId}
           onReconnectSession={handleReconnectSession}
