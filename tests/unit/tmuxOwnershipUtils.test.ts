@@ -3,6 +3,7 @@ import type { Divergence, Project, TmuxSessionEntry } from "../../src/types";
 import {
   annotateTmuxSessions,
   buildTmuxOwnershipMap,
+  buildSplitTmuxSessionName,
   countOrphanTmuxSessions,
 } from "../../src/entities/terminal-session";
 import { buildTmuxSessionName } from "../../src/entities/terminal-session";
@@ -33,10 +34,18 @@ describe("tmux ownership utils", () => {
       projectName: project.name,
       projectId: project.id,
     });
+    const projectPaneThreeName = buildSplitTmuxSessionName(projectSessionName, "pane-3");
 
     const sessions: TmuxSessionEntry[] = [
       {
         name: projectSessionName,
+        created: "now",
+        attached: true,
+        window_count: 1,
+        activity: "now",
+      },
+      {
+        name: projectPaneThreeName,
         created: "now",
         attached: true,
         window_count: 1,
@@ -53,7 +62,8 @@ describe("tmux ownership utils", () => {
 
     const annotated = annotateTmuxSessions(sessions, map, true);
     expect(annotated[0].ownership.kind).toBe("project");
-    expect(annotated[1].ownership.kind).toBe("orphan");
+    expect(annotated[1].ownership.kind).toBe("project");
+    expect(annotated[2].ownership.kind).toBe("orphan");
     expect(countOrphanTmuxSessions(annotated, true)).toBe(1);
   });
 

@@ -6,7 +6,9 @@ export type {
   GitChangeStatus,
 } from "./divergence";
 export type {
+  SplitPaneId,
   SplitOrientation,
+  SplitSessionState,
   TerminalSession,
 } from "./terminal-session";
 export type {

@@ -4,7 +4,8 @@ import type {
   Divergence,
   GitChangeEntry,
   Project,
-  SplitOrientation,
+  SplitPaneId,
+  SplitSessionState,
   TerminalSession,
 } from "../../../entities";
 import type { EditorThemeId } from "../../../shared";
@@ -31,8 +32,9 @@ export interface MainAreaProps {
     briefMarkdown: string;
   }) => Promise<void>;
   onProjectSettingsSaved: (settings: ProjectSettings) => void;
-  splitBySessionId: Map<string, { orientation: SplitOrientation }>;
-  onSplitSession: (sessionId: string, orientation: SplitOrientation) => void;
+  splitBySessionId: Map<string, SplitSessionState>;
+  onSplitSession: (sessionId: string, orientation: SplitSessionState["orientation"]) => void;
+  onFocusSplitPane: (sessionId: string, paneId: SplitPaneId) => void;
   onResetSplitSession: (sessionId: string) => void;
   reconnectBySessionId: Map<string, number>;
   onReconnectSession: (sessionId: string) => void;
@@ -60,7 +62,7 @@ export interface MainAreaOpenDiff {
 export interface MainAreaPresentationalProps extends MainAreaProps {
   sessionList: TerminalSession[];
   activeProject: Project | null;
-  activeSplit: { orientation: SplitOrientation } | null;
+  activeSplit: SplitSessionState | null;
   activeRootPath: string | null;
   rightPanelTab: RightPanelTab;
   openFilePath: string | null;

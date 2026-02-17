@@ -23,14 +23,13 @@ export function formatBytes(bytes: number): string {
   return `${mb.toFixed(1)} MB`;
 }
 
-export function getAggregatedTerminalStatus(entry: {
-  pane1: TerminalSession["status"];
-  pane2: TerminalSession["status"];
-}): TerminalSession["status"] {
-  if (entry.pane1 === "busy" || entry.pane2 === "busy") {
+export function getAggregatedTerminalStatus(
+  statuses: TerminalSession["status"][],
+): TerminalSession["status"] {
+  if (statuses.some((status) => status === "busy")) {
     return "busy";
   }
-  if (entry.pane1 === "active" || entry.pane2 === "active") {
+  if (statuses.some((status) => status === "active")) {
     return "active";
   }
   return "idle";

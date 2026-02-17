@@ -31,6 +31,7 @@ export function buildTmuxOwnershipMap(
     });
     map.set(baseName, ownership);
     map.set(buildSplitTmuxSessionName(baseName, "pane-2"), ownership);
+    map.set(buildSplitTmuxSessionName(baseName, "pane-3"), ownership);
     map.set(buildLegacyTmuxSessionName(`project-${project.id}`), ownership);
 
     const divergences = divergencesByProject.get(project.id) ?? [];
@@ -50,6 +51,7 @@ export function buildTmuxOwnershipMap(
       });
       map.set(divergenceBase, divergenceOwnership);
       map.set(buildSplitTmuxSessionName(divergenceBase, "pane-2"), divergenceOwnership);
+      map.set(buildSplitTmuxSessionName(divergenceBase, "pane-3"), divergenceOwnership);
       map.set(buildLegacyTmuxSessionName(`divergence-${divergence.id}`), divergenceOwnership);
     }
   }
