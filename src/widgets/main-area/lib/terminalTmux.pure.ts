@@ -1,8 +1,9 @@
 export const TMUX_BOOTSTRAP_TIMEOUT_MS = 15_000;
+export const SHELL_BOOTSTRAP_TIMEOUT_MS = 20_000;
 
 export function buildBootstrapTimeoutMessage(timeoutMs: number): string {
   const seconds = Math.round(timeoutMs / 1000);
-  return `[tmux bootstrap did not respond within ${seconds}s. Reconnecting...]`;
+  return `[tmux bootstrap did not respond within ${seconds}s. Terminal startup may be stalled.]`;
 }
 
 export function sanitizeTmuxSessionNameForShell(

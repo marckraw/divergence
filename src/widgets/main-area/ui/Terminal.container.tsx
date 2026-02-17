@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../shared";
 import "@xterm/xterm/css/xterm.css";
 import { useAppSettings } from "../../../shared";
+import { relaunchApp } from "../../../shared/api/updater.api";
 import {
   type PtyProcess,
   spawnInteractiveShellPty,
@@ -12,6 +13,7 @@ import {
 import {
   buildTmuxBootstrapCommand,
   sanitizeTmuxSessionNameForShell,
+  SHELL_BOOTSTRAP_TIMEOUT_MS,
   TMUX_BOOTSTRAP_TIMEOUT_MS,
   buildBootstrapTimeoutMessage,
 } from "../lib/terminalTmux.pure";
@@ -34,6 +36,11 @@ interface TerminalProps {
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
   onReconnect?: () => void;
   onClose?: () => void;
+}
+
+interface StartupIssueState {
+  message: string;
+  details: string;
 }
 
 const TERMINAL_THEME_DARK: ITheme = {
@@ -113,6 +120,8 @@ function Terminal({
   const initRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const spawnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [startupIssue, setStartupIssue] = useState<StartupIssueState | null>(null);
+  const [isRestartingApp, setIsRestartingApp] = useState(false);
   const activityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initializedRef = useRef(false);
   const onStatusChangeRef = useRef<TerminalProps["onStatusChange"]>(onStatusChange);
@@ -143,6 +152,36 @@ function Terminal({
     }
     statusRef.current = status;
     onStatusChangeRef.current?.(status);
+  }, []);
+
+  const handleReconnectNow = useCallback(() => {
+    setStartupIssue(null);
+    onReconnectRef.current?.();
+  }, []);
+
+  const handleRestartApp = useCallback(async () => {
+    setIsRestartingApp(true);
+    try {
+      await relaunchApp();
+    } catch (relaunchError) {
+      const message = relaunchError instanceof Error
+        ? relaunchError.message
+        : String(relaunchError);
+      setStartupIssue((current) => {
+        if (!current) {
+          return {
+            message: "Failed to restart the app from this screen.",
+            details: `Error: ${message}`,
+          };
+        }
+        return {
+          ...current,
+          details: `${current.details} • Restart failed: ${message}`,
+        };
+      });
+    } finally {
+      setIsRestartingApp(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -256,6 +295,8 @@ function Terminal({
         const tmuxCommand = buildTmuxBootstrapCommand();
 
         try {
+          setStartupIssue(null);
+          setIsRestartingApp(false);
           const pty = useTmux
             ? spawnTmuxPty({
                 cols: terminal.cols,
@@ -275,17 +316,29 @@ function Terminal({
           console.log(`[${sessionId}] PTY spawned`);
           terminal.write("\r\x1b[2K");
 
-          if (useTmux) {
-            startupTimerRef.current = setTimeout(() => {
-              startupTimerRef.current = null;
-              if (isDisposedRef.current || hasReceivedDataRef.current) {
-                return;
-              }
-              console.warn(`[${sessionId}] tmux bootstrap timeout`);
-              terminal.write(`\r\n\x1b[33m${buildBootstrapTimeoutMessage(TMUX_BOOTSTRAP_TIMEOUT_MS)}\x1b[0m\r\n`);
-              onReconnectRef.current?.();
-            }, TMUX_BOOTSTRAP_TIMEOUT_MS);
+          const startupTimeoutMs = useTmux
+            ? TMUX_BOOTSTRAP_TIMEOUT_MS
+            : SHELL_BOOTSTRAP_TIMEOUT_MS;
+          if (startupTimerRef.current) {
+            clearTimeout(startupTimerRef.current);
           }
+          startupTimerRef.current = setTimeout(() => {
+            startupTimerRef.current = null;
+            if (isDisposedRef.current || hasReceivedDataRef.current) {
+              return;
+            }
+
+            const stallMessage = useTmux
+              ? buildBootstrapTimeoutMessage(startupTimeoutMs)
+              : `[shell did not respond within ${Math.round(startupTimeoutMs / 1000)}s. Terminal startup may be stalled.]`;
+            console.warn(`[${sessionId}] terminal startup stalled (${startupTimeoutMs}ms)`);
+            terminal.write(`\r\n\x1b[33m${stallMessage}\x1b[0m\r\n`);
+            setStartupIssue({
+              message: "Terminal startup is taking longer than expected.",
+              details: `session=${sessionId} • mode=${useTmux ? "tmux" : "shell"} • cwd=${cwd}`,
+            });
+            updateStatus("idle");
+          }, startupTimeoutMs);
 
           const sendCommand = (command: string) => {
             if (!command.trim()) {
@@ -307,6 +360,7 @@ function Terminal({
                 clearTimeout(startupTimerRef.current);
                 startupTimerRef.current = null;
               }
+              setStartupIssue(null);
             }
             reconnectAttemptRef.current = 0;
             terminal.write(new Uint8Array(data));
@@ -327,6 +381,10 @@ function Terminal({
           ptyExitDisposableRef.current = pty.onExit(({ exitCode }: { exitCode: number }) => {
             if (isDisposedRef.current || !terminalRef.current) {
               return;
+            }
+            if (startupTimerRef.current) {
+              clearTimeout(startupTimerRef.current);
+              startupTimerRef.current = null;
             }
             console.log(`[${sessionId}] PTY exited: ${exitCode}`);
             terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
@@ -465,6 +523,39 @@ function Terminal({
 
   return (
     <TerminalPresentational>
+      {startupIssue && (
+        <div className="absolute left-3 right-3 top-3 z-20 rounded border border-yellow/40 bg-main/95 p-3 shadow-lg">
+          <p className="text-xs font-medium text-yellow">
+            {startupIssue.message}
+          </p>
+          <p className="mt-1 text-[11px] text-subtext break-all">
+            {startupIssue.details}
+          </p>
+          <p className="mt-1 text-[11px] text-subtext">
+            Reconnect this terminal first. If all terminals are stuck, restart the app.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleReconnectNow}
+              disabled={!onReconnect}
+              className="px-2 py-1 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-40"
+            >
+              Reconnect terminal
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleRestartApp();
+              }}
+              disabled={isRestartingApp}
+              className="px-2 py-1 text-xs rounded bg-yellow/20 text-yellow hover:bg-yellow/30 disabled:opacity-40"
+            >
+              {isRestartingApp ? "Restarting..." : "Restart app"}
+            </button>
+          </div>
+        </div>
+      )}
       <div
         ref={containerRef}
         className="absolute inset-0 overflow-hidden p-2 bg-main"
