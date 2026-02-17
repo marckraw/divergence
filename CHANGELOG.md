@@ -1,5 +1,11 @@
 # divergence
 
+## 0.16.4
+
+### Patch Changes
+
+- 541e900: Usage limits now prioritize the Claude OAuth token from Divergence settings and resolve long-lived tokens before falling back to keychain credentials.
+
 ## 0.16.3
 
 ### Patch Changes
