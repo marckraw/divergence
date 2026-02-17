@@ -1,5 +1,11 @@
 # divergence
 
+## 0.16.3
+
+### Patch Changes
+
+- 2b42752: Colocate pure tests with \*.pure.ts files and enforce sibling pairing via Chaperone.
+
 ## 0.16.2
 
 ### Patch Changes
