@@ -77,7 +77,7 @@ struct OAuthTokenResponse {
 
 #[tauri::command]
 pub async fn get_usage_limits_status(claude_oauth_token: Option<String>) -> Result<UsageLimitsStatus, String> {
-    let claude_found = normalize_non_empty_token(claude_oauth_token).is_some()
+    let claude_found = normalize_claude_auth_token(claude_oauth_token).is_some()
         || read_claude_oauth_token_from_env().is_some()
         || read_claude_keychain().is_some()
         || get_claude_credentials_path().is_some_and(|p| p.exists());
@@ -93,10 +93,16 @@ pub async fn get_usage_limits_status(claude_oauth_token: Option<String>) -> Resu
 pub async fn fetch_claude_usage(
     claude_oauth_token: Option<String>,
 ) -> Result<ClaudeUsageResult, String> {
-    let access_token = if let Some(token) =
-        normalize_non_empty_token(claude_oauth_token).or_else(read_claude_oauth_token_from_env)
-    {
-        token
+    let (access_token, token_source) = if let Some(token) = normalize_claude_auth_token(claude_oauth_token) {
+        (
+            resolve_claude_supplied_token(token).await,
+            "settings token".to_string(),
+        )
+    } else if let Some(token) = read_claude_oauth_token_from_env() {
+        (
+            resolve_claude_supplied_token(token).await,
+            "CLAUDE_CODE_OAUTH_TOKEN".to_string(),
+        )
     } else {
         let content = match load_claude_credentials_json() {
             Some(c) => c,
@@ -131,7 +137,10 @@ pub async fn fetch_claude_usage(
             }
         };
 
-        resolve_claude_token(&oauth).await?
+        (
+            resolve_claude_token(&oauth).await?,
+            "Claude keychain/credentials".to_string(),
+        )
     };
 
     let client = Client::new();
@@ -151,7 +160,9 @@ pub async fn fetch_claude_usage(
         let body = resp.text().await.unwrap_or_default();
         return Ok(ClaudeUsageResult {
             available: false,
-            error: Some(format!("Claude API returned {status}: {body}")),
+            error: Some(format!(
+                "Claude API returned {status} (using {token_source}): {body}"
+            )),
             windows: vec![],
         });
     }
@@ -281,11 +292,28 @@ fn normalize_non_empty_token(token: Option<String>) -> Option<String> {
     })
 }
 
-fn read_claude_oauth_token_from_env() -> Option<String> {
-    normalize_non_empty_token(std::env::var("CLAUDE_CODE_OAUTH_TOKEN").ok())
+fn normalize_claude_auth_token(token: Option<String>) -> Option<String> {
+    let token = normalize_non_empty_token(token)?;
+    let normalized = if token
+        .get(..7)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("bearer "))
+    {
+        token[7..].trim().to_string()
+    } else {
+        token
+    };
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
 }
 
-/// Read Claude credentials from macOS Keychain (primary source).
+fn read_claude_oauth_token_from_env() -> Option<String> {
+    normalize_claude_auth_token(std::env::var("CLAUDE_CODE_OAUTH_TOKEN").ok())
+}
+
+/// Read Claude credentials from macOS Keychain.
 fn read_claude_keychain() -> Option<String> {
     let output = Command::new("security")
         .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
@@ -355,21 +383,36 @@ async fn resolve_claude_token(oauth: &ClaudeOAuth) -> Result<String, String> {
         None => return Ok(oauth.access_token.clone()),
     };
 
+    if let Some(token) = refresh_claude_access_token(refresh_token).await? {
+        return Ok(token);
+    }
+
+    // Fall back to existing token if refresh fails.
+    Ok(oauth.access_token.clone())
+}
+
+async fn resolve_claude_supplied_token(token: String) -> String {
+    match refresh_claude_access_token(&token).await {
+        Ok(Some(access_token)) => access_token,
+        _ => token,
+    }
+}
+
+async fn refresh_claude_access_token(refresh_token: &str) -> Result<Option<String>, String> {
     let client = Client::new();
     let resp = client
         .post("https://platform.claude.com/v1/oauth/token")
         .form(&[
             ("client_id", "9d1c250a-e61b-44d9-88ed-5944d1962f5e"),
             ("grant_type", "refresh_token"),
-            ("refresh_token", refresh_token.as_str()),
+            ("refresh_token", refresh_token),
         ])
         .send()
         .await
         .map_err(|e| format!("Claude token refresh failed: {e}"))?;
 
     if !resp.status().is_success() {
-        // Fall back to existing token if refresh fails
-        return Ok(oauth.access_token.clone());
+        return Ok(None);
     }
 
     let token_resp: OAuthTokenResponse = resp
@@ -377,7 +420,7 @@ async fn resolve_claude_token(oauth: &ClaudeOAuth) -> Result<String, String> {
         .await
         .map_err(|e| format!("Failed to parse token refresh response: {e}"))?;
 
-    Ok(token_resp.access_token)
+    Ok(Some(token_resp.access_token))
 }
 
 async fn resolve_codex_token(tokens: &CodexTokens) -> Result<String, String> {
