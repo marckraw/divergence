@@ -16,6 +16,14 @@ Source of truth:
 - `docs/plans/phase-8-legacy-cleanup-plan.md`
 - `docs/architecture/quick-reference.md`
 
+### FSD-lite (what this is)
+
+This repo follows **FSD-lite** (Feature-Sliced Design, lightweight adaptation):
+- layered slices: `app`, `widgets`, `features`, `entities`, `shared`
+- one-way dependencies from higher layers to lower layers only
+- cross-slice imports via each slice `index.ts` public API
+- UI split by role (`*.container.tsx` orchestration, `*.presentational.tsx` render-only)
+
 ### Required folder strategy
 
 Organize TypeScript code using these layers:

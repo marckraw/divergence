@@ -1,0 +1,79 @@
+import { describe, expect, it } from "vitest";
+import type { Divergence } from "../../divergence";
+import type { Project } from "../../project";
+import type { TmuxSessionEntry } from "../model/tmux.types";
+import {
+  annotateTmuxSessions,
+  buildTmuxOwnershipMap,
+  countOrphanTmuxSessions,
+} from "./tmuxOwnership.pure";
+import {
+  buildSplitTmuxSessionName,
+  buildTmuxSessionName,
+} from "../../../shared/lib/tmux.pure";
+
+const project: Project = {
+  id: 1,
+  name: "Alpha",
+  path: "/alpha",
+  createdAt: "2026-01-01",
+};
+
+const divergence: Divergence = {
+  id: 9,
+  projectId: 1,
+  name: "Alpha div",
+  branch: "feat/search",
+  path: "/alpha/div",
+  createdAt: "2026-01-01",
+  hasDiverged: false,
+};
+
+describe("tmux ownership utils", () => {
+  it("builds ownership map and annotates sessions", () => {
+    const map = buildTmuxOwnershipMap([project], new Map([[1, [divergence]]]));
+
+    const projectSessionName = buildTmuxSessionName({
+      type: "project",
+      projectName: project.name,
+      projectId: project.id,
+    });
+    const projectPaneThreeName = buildSplitTmuxSessionName(projectSessionName, "pane-3");
+
+    const sessions: TmuxSessionEntry[] = [
+      {
+        name: projectSessionName,
+        created: "now",
+        attached: true,
+        window_count: 1,
+        activity: "now",
+      },
+      {
+        name: projectPaneThreeName,
+        created: "now",
+        attached: true,
+        window_count: 1,
+        activity: "now",
+      },
+      {
+        name: "divergence-random",
+        created: "now",
+        attached: false,
+        window_count: 1,
+        activity: "now",
+      },
+    ];
+
+    const annotated = annotateTmuxSessions(sessions, map, true);
+    expect(annotated[0].ownership.kind).toBe("project");
+    expect(annotated[1].ownership.kind).toBe("project");
+    expect(annotated[2].ownership.kind).toBe("orphan");
+    expect(countOrphanTmuxSessions(annotated, true)).toBe(1);
+  });
+
+  it("marks unknown when ownership is not ready", () => {
+    const annotated = annotateTmuxSessions([], new Map(), false);
+    expect(annotated).toEqual([]);
+    expect(countOrphanTmuxSessions(annotated, false)).toBe(0);
+  });
+});
