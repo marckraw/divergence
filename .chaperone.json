@@ -205,12 +205,46 @@
         "id": "pure-function-exports-referenced-in-unit-tests",
         "severity": "error",
         "sourceFiles": "src/**/*.pure.ts",
-        "targetFiles": "tests/unit/**/*.test.ts",
+        "targetFiles": "src/**/*.pure.test.ts",
         "symbolKinds": [
           "function-declaration",
           "function-variable"
         ],
         "message": "Exported pure functions must be referenced in unit tests"
+      },
+      {
+        "type": "file-pairing",
+        "id": "pure-files-require-sibling-tests",
+        "severity": "error",
+        "files": "src/**/*.pure.ts",
+        "pair": {
+          "from": "^(.*)\\.pure\\.ts$",
+          "to": "$1.pure.test.ts"
+        },
+        "mustExist": true,
+        "requireTransformMatch": true,
+        "message": "Every *.pure.ts file must have a sibling *.pure.test.ts file"
+      },
+      {
+        "type": "file-pairing",
+        "id": "pure-tests-require-sibling-source",
+        "severity": "error",
+        "files": "src/**/*.pure.test.ts",
+        "pair": {
+          "from": "^(.*)\\.pure\\.test\\.ts$",
+          "to": "$1.pure.ts"
+        },
+        "mustExist": true,
+        "requireTransformMatch": true,
+        "message": "Every *.pure.test.ts file must have a sibling *.pure.ts file"
+      },
+      {
+        "type": "regex",
+        "id": "no-pure-tests-in-legacy-unit-folder",
+        "severity": "error",
+        "files": "tests/unit/**/*.test.ts",
+        "pattern": "\\.pure",
+        "message": "Pure tests must be colocated as sibling *.pure.test.ts files under src/**"
       },
       {
         "type": "regex",
@@ -243,7 +277,8 @@
     ]
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "tests/**/*"
   ],
   "exclude": [
     "node_modules",

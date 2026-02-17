@@ -5,6 +5,7 @@ import {
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeTmuxHistoryLimit,
 } from "../../../shared/lib/appSettings.pure";
+import { normalizeSkipList } from "../lib/projectSettings.pure";
 
 export const DEFAULT_COPY_IGNORED_SKIP = [
   "node_modules",
@@ -24,25 +25,6 @@ export interface ProjectSettings {
   useTmux: boolean;
   useWebgl: boolean;
   tmuxHistoryLimit: number | null;
-}
-
-export function normalizeSkipList(entries: string[]): string[] {
-  const result: string[] = [];
-  const seen = new Set<string>();
-
-  for (const entry of entries) {
-    const trimmed = entry.trim();
-    if (!trimmed) {
-      continue;
-    }
-    if (seen.has(trimmed)) {
-      continue;
-    }
-    seen.add(trimmed);
-    result.push(trimmed);
-  }
-
-  return result;
 }
 
 export async function loadProjectSettings(projectId: number): Promise<ProjectSettings> {

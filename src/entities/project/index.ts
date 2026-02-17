@@ -8,9 +8,9 @@ export {
   DEFAULT_TMUX_HISTORY_LIMIT,
   DEFAULT_USE_TMUX,
   loadProjectSettings,
-  normalizeSkipList,
   saveProjectSettings,
 } from "./api/projectSettings.api";
+export { normalizeSkipList } from "./lib/projectSettings.pure";
 export {
   deleteProjectWithRelations,
   insertProject,
