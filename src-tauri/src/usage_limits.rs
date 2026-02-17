@@ -76,8 +76,10 @@ struct OAuthTokenResponse {
 // ── Tauri commands ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub async fn get_usage_limits_status() -> Result<UsageLimitsStatus, String> {
-    let claude_found = read_claude_keychain().is_some()
+pub async fn get_usage_limits_status(claude_oauth_token: Option<String>) -> Result<UsageLimitsStatus, String> {
+    let claude_found = normalize_non_empty_token(claude_oauth_token).is_some()
+        || read_claude_oauth_token_from_env().is_some()
+        || read_claude_keychain().is_some()
         || get_claude_credentials_path().is_some_and(|p| p.exists());
     let codex_found = get_codex_auth_path().is_some_and(|p| p.exists());
 
@@ -88,41 +90,49 @@ pub async fn get_usage_limits_status() -> Result<UsageLimitsStatus, String> {
 }
 
 #[tauri::command]
-pub async fn fetch_claude_usage() -> Result<ClaudeUsageResult, String> {
-    let content = match load_claude_credentials_json() {
-        Some(c) => c,
-        None => {
-            return Ok(ClaudeUsageResult {
-                available: false,
-                error: Some("Claude credentials not found (checked Keychain and ~/.claude/.credentials.json)".into()),
-                windows: vec![],
-            });
-        }
-    };
+pub async fn fetch_claude_usage(
+    claude_oauth_token: Option<String>,
+) -> Result<ClaudeUsageResult, String> {
+    let access_token = if let Some(token) =
+        normalize_non_empty_token(claude_oauth_token).or_else(read_claude_oauth_token_from_env)
+    {
+        token
+    } else {
+        let content = match load_claude_credentials_json() {
+            Some(c) => c,
+            None => {
+                return Ok(ClaudeUsageResult {
+                    available: false,
+                    error: Some("Claude credentials not found (checked settings token, CLAUDE_CODE_OAUTH_TOKEN, Keychain, and ~/.claude/.credentials.json)".into()),
+                    windows: vec![],
+                });
+            }
+        };
 
-    let creds: ClaudeCredentials = match serde_json::from_str(&content) {
-        Ok(c) => c,
-        Err(e) => {
-            return Ok(ClaudeUsageResult {
-                available: false,
-                error: Some(format!("Failed to parse credentials: {e}")),
-                windows: vec![],
-            });
-        }
-    };
+        let creds: ClaudeCredentials = match serde_json::from_str(&content) {
+            Ok(c) => c,
+            Err(e) => {
+                return Ok(ClaudeUsageResult {
+                    available: false,
+                    error: Some(format!("Failed to parse credentials: {e}")),
+                    windows: vec![],
+                });
+            }
+        };
 
-    let oauth = match creds.claude_ai_oauth {
-        Some(o) => o,
-        None => {
-            return Ok(ClaudeUsageResult {
-                available: false,
-                error: Some("No claudeAiOauth in credentials".into()),
-                windows: vec![],
-            });
-        }
-    };
+        let oauth = match creds.claude_ai_oauth {
+            Some(o) => o,
+            None => {
+                return Ok(ClaudeUsageResult {
+                    available: false,
+                    error: Some("No claudeAiOauth in credentials".into()),
+                    windows: vec![],
+                });
+            }
+        };
 
-    let access_token = resolve_claude_token(&oauth).await?;
+        resolve_claude_token(&oauth).await?
+    };
 
     let client = Client::new();
     let resp = client
@@ -259,6 +269,21 @@ pub async fn fetch_codex_usage() -> Result<CodexUsageResult, String> {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+fn normalize_non_empty_token(token: Option<String>) -> Option<String> {
+    token.and_then(|value| {
+        let trimmed = value.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
+}
+
+fn read_claude_oauth_token_from_env() -> Option<String> {
+    normalize_non_empty_token(std::env::var("CLAUDE_CODE_OAUTH_TOKEN").ok())
+}
 
 /// Read Claude credentials from macOS Keychain (primary source).
 fn read_claude_keychain() -> Option<String> {

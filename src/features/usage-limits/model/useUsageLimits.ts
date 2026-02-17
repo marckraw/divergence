@@ -13,7 +13,7 @@ import type {
 const INITIAL_DELAY_MS = 3_000;
 const POLL_INTERVAL_MS = 60_000;
 
-export function useUsageLimits() {
+export function useUsageLimits(claudeOAuthToken?: string) {
   const [claude, setClaude] = useState<ClaudeUsageResult | null>(null);
   const [codex, setCodex] = useState<CodexUsageResult | null>(null);
   const [status, setStatus] = useState<UsageLimitsStatus | null>(null);
@@ -27,7 +27,8 @@ export function useUsageLimits() {
     setLoading(true);
 
     try {
-      const limitsStatus = await getUsageLimitsStatus();
+      const token = claudeOAuthToken?.trim() || undefined;
+      const limitsStatus = await getUsageLimitsStatus(token);
       setStatus(limitsStatus);
 
       const promises: [
@@ -35,7 +36,7 @@ export function useUsageLimits() {
         Promise<CodexUsageResult | null>,
       ] = [
         limitsStatus.claudeCredentialsFound
-          ? fetchClaudeUsage()
+          ? fetchClaudeUsage(token)
           : Promise.resolve(null),
         limitsStatus.codexCredentialsFound
           ? fetchCodexUsage()
@@ -53,7 +54,7 @@ export function useUsageLimits() {
       setLoading(false);
       inFlightRef.current = false;
     }
-  }, []);
+  }, [claudeOAuthToken]);
 
   useEffect(() => {
     const initialTimer = setTimeout(() => {
