@@ -1,4 +1,4 @@
-export { MenuButton, StatusIndicator, TabButton, ToolbarButton } from "./ui";
+export { MenuButton, SearchOverlay, StatusIndicator, TabButton, ToolbarButton } from "./ui";
 
 export {
   FAST_EASE_OUT,

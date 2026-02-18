@@ -218,6 +218,35 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
     const error = errorsByPath.get(path);
     const isLoading = loadingDirs.has(path);
     const enableMotion = !shouldReduceMotion && entries.length <= MOTION_ENTRY_LIMIT;
+    const renderEntryButton = (entry: FileEntry, isExpanded: boolean, isActive: boolean) => (
+      <button
+        type="button"
+        className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+          isActive
+            ? "bg-accent/20 text-text"
+            : "text-subtext hover:text-text hover:bg-surface/60"
+        }`}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+        onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
+        onContextMenu={(event) => handleContextMenuOpen(event, entry, path)}
+      >
+        {entry.isDir ? (
+          <>
+            <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              {isExpanded ? (
+                <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
+              ) : (
+                <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
+              )}
+            </svg>
+            <FolderIcon />
+          </>
+        ) : (
+          <FileBadge name={entry.name} />
+        )}
+        <span className="truncate">{entry.name}</span>
+      </button>
+    );
 
     return (
       <div className="space-y-0.5">
@@ -243,33 +272,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                   layout="position"
                   transition={layoutTransition}
                 >
-                  <button
-                    type="button"
-                    className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
-                      isActive
-                        ? "bg-accent/20 text-text"
-                        : "text-subtext hover:text-text hover:bg-surface/60"
-                    }`}
-                    style={{ paddingLeft: `${depth * 12 + 8}px` }}
-                    onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
-                    onContextMenu={(event) => handleContextMenuOpen(event, entry, path)}
-                  >
-                    {entry.isDir ? (
-                      <>
-                        <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          {isExpanded ? (
-                            <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
-                          ) : (
-                            <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
-                          )}
-                        </svg>
-                        <FolderIcon />
-                      </>
-                    ) : (
-                      <FileBadge name={entry.name} />
-                    )}
-                    <span className="truncate">{entry.name}</span>
-                  </button>
+                  {renderEntryButton(entry, isExpanded, isActive)}
                   {entry.isDir && (
                     <AnimatePresence initial={false}>
                       {isExpanded && (
@@ -296,33 +299,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
             const isActive = activeFilePath === entry.path;
             return (
               <div key={entry.path}>
-                <button
-                  type="button"
-                  className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
-                    isActive
-                      ? "bg-accent/20 text-text"
-                      : "text-subtext hover:text-text hover:bg-surface/60"
-                  }`}
-                  style={{ paddingLeft: `${depth * 12 + 8}px` }}
-                  onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
-                  onContextMenu={(event) => handleContextMenuOpen(event, entry, path)}
-                >
-                  {entry.isDir ? (
-                    <>
-                      <svg className="w-3 h-3 text-subtext" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        {isExpanded ? (
-                          <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M6 15l6-6 6 6" />
-                        ) : (
-                          <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
-                        )}
-                      </svg>
-                      <FolderIcon />
-                    </>
-                  ) : (
-                    <FileBadge name={entry.name} />
-                  )}
-                  <span className="truncate">{entry.name}</span>
-                </button>
+                {renderEntryButton(entry, isExpanded, isActive)}
                 {entry.isDir && isExpanded && renderEntries(entry.path, depth + 1)}
               </div>
             );
