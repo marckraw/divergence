@@ -10,17 +10,9 @@ export const IMPORT_COMPLETION_EXTENSIONS = new Set([
   ".d.ts",
 ]);
 
-const OMIT_EXTENSION_FOR_IMPORT = new Set([
-  "ts",
-  "tsx",
-  "mts",
-  "cts",
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "d.ts",
-]);
+const OMIT_EXTENSION_FOR_IMPORT = new Set(
+  Array.from(IMPORT_COMPLETION_EXTENSIONS, (ext) => ext.slice(1)),
+);
 
 export function normalizePath(value: string): string {
   return value.replace(/\\/g, "/");

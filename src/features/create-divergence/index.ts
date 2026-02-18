@@ -7,8 +7,5 @@ export {
   listRemoteBranches,
 } from "./api/createDivergence.api";
 export type {
-  CreateDivergenceRunTask,
-  CreateDivergenceTaskControls,
-  CreateDivergenceTaskOptions,
   ExecuteCreateDivergenceParams,
 } from "./model/createDivergence.types";
