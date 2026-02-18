@@ -1,5 +1,12 @@
 # divergence
 
+## 0.16.5
+
+### Patch Changes
+
+- d174237: feat(debug): add in-app Debug Console with live terminal/tmux diagnostics, search/filter controls, and failure-focused views for production troubleshooting
+- b782696: fix(usage): detect Claude OAuth scope error and show actionable message instead of raw API JSON
+
 ## 0.16.4
 
 ### Patch Changes
