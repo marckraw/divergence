@@ -4,7 +4,7 @@ import type { UpdaterPresentation } from "../lib/updaterPresentation.pure";
 import type { Project } from "../../../entities";
 import type {
   Automation,
-  AutomationAgent,
+  AutomationEditorFormState,
   AutomationRun,
   CreateAutomationInput,
   UpdateAutomationInput,
@@ -46,16 +46,7 @@ export interface SettingsState {
   claudeOAuthToken: string;
 }
 
-export interface SettingsAutomationFormState {
-  id: number | null;
-  name: string;
-  projectId: number | null;
-  agent: AutomationAgent;
-  prompt: string;
-  intervalHours: number;
-  enabled: boolean;
-  keepSessionAlive: boolean;
-}
+export type SettingsAutomationFormState = AutomationEditorFormState;
 
 export type UpdateSettingHandler = <K extends keyof SettingsState>(
   key: K,

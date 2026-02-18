@@ -1,22 +1,13 @@
 import type { Project } from "../../../entities";
 import type {
   Automation,
-  AutomationAgent,
+  AutomationEditorFormState,
   AutomationRun,
   CreateAutomationInput,
   UpdateAutomationInput,
 } from "../../../entities/automation";
 
-export interface AutomationFormState {
-  id: number | null;
-  name: string;
-  projectId: number | null;
-  agent: AutomationAgent;
-  prompt: string;
-  intervalHours: number;
-  enabled: boolean;
-  keepSessionAlive: boolean;
-}
+export type AutomationFormState = AutomationEditorFormState;
 
 export interface AutomationsPanelProps {
   projects: Project[];

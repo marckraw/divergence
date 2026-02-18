@@ -1,41 +1,10 @@
-import type { Automation } from "../../../entities/automation";
+import {
+  AutomationEditorModal,
+  formatAutomationRunStatus,
+  formatAutomationTimestamp,
+  type Automation,
+} from "../../../entities/automation";
 import type { AutomationsPanelPresentationalProps } from "./AutomationsPanel.types";
-
-function formatNextRun(value: number | null): string {
-  if (!value) {
-    return "Not scheduled";
-  }
-  return new Date(value).toLocaleString();
-}
-
-function formatLastRun(value: number | null): string {
-  if (!value) {
-    return "Never";
-  }
-  return new Date(value).toLocaleString();
-}
-
-function formatRunStatus(status?: string): string {
-  if (!status) {
-    return "No runs yet";
-  }
-  if (status === "success") {
-    return "Success";
-  }
-  if (status === "error") {
-    return "Failed";
-  }
-  if (status === "running") {
-    return "Running";
-  }
-  if (status === "queued") {
-    return "Queued";
-  }
-  if (status === "skipped") {
-    return "Skipped";
-  }
-  return status;
-}
 
 function AutomationCard({
   automation,
@@ -65,13 +34,13 @@ function AutomationCard({
           </div>
         </div>
         <div className="text-xs text-subtext">
-          {formatRunStatus(runStatus)}
+          {formatAutomationRunStatus(runStatus)}
         </div>
       </div>
 
       <div className="mt-3 text-xs text-subtext space-y-1">
-        <div>Last run: {formatLastRun(automation.lastRunAtMs)}</div>
-        <div>Next run: {formatNextRun(automation.nextRunAtMs)}</div>
+        <div>Last run: {formatAutomationTimestamp(automation.lastRunAtMs, "Never")}</div>
+        <div>Next run: {formatAutomationTimestamp(automation.nextRunAtMs, "Not scheduled")}</div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -121,174 +90,6 @@ function AutomationTemplateCard({
         Configure prompt, agent, and interval. Runs while the app is open.
       </div>
     </button>
-  );
-}
-
-function AutomationEditorModal({
-  projects,
-  form,
-  formError,
-  isSubmitting,
-  submitLabel,
-  cancelEditVisible,
-  onFormChange,
-  onSubmitForm,
-  onCloseEditor,
-}: Pick<
-  AutomationsPanelPresentationalProps,
-  | "projects"
-  | "form"
-  | "formError"
-  | "isSubmitting"
-  | "submitLabel"
-  | "cancelEditVisible"
-  | "onFormChange"
-  | "onSubmitForm"
-  | "onCloseEditor"
->) {
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl rounded-md border border-surface bg-sidebar max-h-[90vh] overflow-y-auto">
-        <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm text-text font-semibold">
-              {form.id === null ? "New automation" : "Edit automation"}
-            </h3>
-            <p className="text-xs text-subtext mt-1">
-              Configure scheduled runs for this automation template.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onCloseEditor}
-            className="w-7 h-7 rounded border border-surface text-subtext hover:text-text hover:bg-surface"
-            disabled={isSubmitting}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="p-4 space-y-3">
-          <div>
-            <label className="block text-xs text-subtext mb-1">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(event) => onFormChange("name", event.target.value)}
-              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              placeholder="Daily repo audit"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-subtext mb-1">Project</label>
-            <select
-              value={form.projectId ?? ""}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                onFormChange("projectId", Number.isFinite(value) ? value : null);
-              }}
-              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-            >
-              <option value="">Select project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-subtext mb-1">Agent</label>
-              <select
-                value={form.agent}
-                onChange={(event) => onFormChange("agent", event.target.value as typeof form.agent)}
-                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              >
-                <option value="claude">Claude</option>
-                <option value="codex">Codex</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-subtext mb-1">Every (hours)</label>
-              <input
-                type="number"
-                min={1}
-                value={form.intervalHours}
-                onChange={(event) => onFormChange("intervalHours", Number(event.target.value))}
-                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-subtext mb-1">Prompt</label>
-            <textarea
-              value={form.prompt}
-              onChange={(event) => onFormChange("prompt", event.target.value)}
-              className="w-full min-h-[180px] px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              placeholder="Audit this repository for important regressions and propose fixes."
-            />
-          </div>
-
-          <label className="inline-flex items-center gap-2 text-xs text-subtext">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(event) => onFormChange("enabled", event.target.checked)}
-              className="accent-accent"
-            />
-            Enabled
-          </label>
-
-          <div>
-            <label className="inline-flex items-center gap-2 text-xs text-text">
-              <input
-                type="checkbox"
-                checked={form.keepSessionAlive}
-                onChange={(event) => onFormChange("keepSessionAlive", event.target.checked)}
-                className="accent-accent"
-              />
-              Keep terminal session alive after completion
-            </label>
-            <div className="text-[11px] text-subtext ml-5 mt-1">
-              When enabled, the tmux session won't be killed after the agent finishes,
-              allowing you to attach and inspect the results.
-            </div>
-          </div>
-
-          {formError && (
-            <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
-              {formError}
-            </div>
-          )}
-        </div>
-
-        <div className="px-4 py-3 border-t border-surface flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={onCloseEditor}
-            className="px-3 py-2 text-xs rounded border border-surface text-text hover:bg-surface"
-            disabled={isSubmitting}
-          >
-            {cancelEditVisible ? "Cancel edit" : "Cancel"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void onSubmitForm();
-            }}
-            className="px-3 py-2 text-xs rounded bg-accent text-main hover:bg-accent/80 disabled:opacity-60"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Saving..." : submitLabel}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -389,7 +190,12 @@ function AutomationsPanelPresentational({
           formError={formError}
           isSubmitting={isSubmitting}
           submitLabel={submitLabel}
-          cancelEditVisible={cancelEditVisible}
+          description="Configure scheduled runs for this automation template."
+          namePlaceholder="Daily repo audit"
+          promptPlaceholder="Audit this repository for important regressions and propose fixes."
+          enabledLabel="Enabled"
+          cancelLabel={cancelEditVisible ? "Cancel edit" : "Cancel"}
+          promptMinHeightClassName="min-h-[180px]"
           onFormChange={onFormChange}
           onSubmitForm={onSubmitForm}
           onCloseEditor={onCloseEditor}

@@ -73,41 +73,17 @@ async function reconcileSingleRun(
     const message = error instanceof Error ? error.message : String(error);
     if (message === "session_not_found") {
       // Session gone — check result file
-      const resultJson = await readAutomationResultFile(resultFilePath);
-      if (resultJson) {
-        const result = parseAutomationResult(resultJson);
-        if (result) {
-          const endedAtMs = Date.now();
-          const status = result.exitCode === 0 ? "success" : "error";
-          await updateAutomationRun(runId, {
-            status,
-            endedAtMs,
-            error: result.exitCode !== 0 ? `Agent exited with code ${result.exitCode}.` : null,
-            detailsJson: JSON.stringify(result),
-          });
-          await markAutomationRunSchedule(automationId, {
-            lastRunAtMs: endedAtMs,
-            nextRunAtMs: automation
-              ? computeNextScheduledRunAtMs(automation, endedAtMs)
-              : null,
-          });
-          return;
-        }
+      if (await tryCompleteRunFromResult(runId, automationId, resultFilePath, automation)) {
+        return;
       }
 
       // Session gone, no result file
-      const endedAtMs = Date.now();
-      await updateAutomationRun(runId, {
-        status: "error",
-        endedAtMs,
-        error: "Process lost during app restart.",
-      });
-      await markAutomationRunSchedule(automationId, {
-        lastRunAtMs: endedAtMs,
-        nextRunAtMs: automation
-          ? computeNextScheduledRunAtMs(automation, endedAtMs)
-          : null,
-      });
+      await markRunErrorAndSchedule(
+        runId,
+        automationId,
+        "Process lost during app restart.",
+        automation
+      );
       return;
     }
     throw error;
@@ -119,58 +95,92 @@ async function reconcileSingleRun(
   }
 
   // Session alive + process dead: read result, update DB, kill session
-  const resultJson = await readAutomationResultFile(resultFilePath);
-  if (resultJson) {
-    const result = parseAutomationResult(resultJson);
-    if (result) {
-      const endedAtMs = Date.now();
-      const status = result.exitCode === 0 ? "success" : "error";
-      await updateAutomationRun(runId, {
-        status,
-        endedAtMs,
-        error: result.exitCode !== 0 ? `Agent exited with code ${result.exitCode}.` : null,
-        detailsJson: JSON.stringify(result),
-      });
-      await markAutomationRunSchedule(automationId, {
-        lastRunAtMs: endedAtMs,
-        nextRunAtMs: automation
-          ? computeNextScheduledRunAtMs(automation, endedAtMs)
-          : null,
-      });
-
-      if (!keepSessionAlive) {
-        try {
-          await killAutomationTmuxSession(tmuxSessionName);
-        } catch {
-          // Best-effort cleanup
-        }
-      }
-      return;
-    }
+  if (await tryCompleteRunFromResult(runId, automationId, resultFilePath, automation)) {
+    await cleanupTmuxSession(tmuxSessionName, keepSessionAlive);
+    return;
   }
 
   // Process dead, no result
-  const endedAtMs = Date.now();
   const exitCodeInfo = paneStatus.exitCode !== null
     ? ` (exit code: ${paneStatus.exitCode})`
     : "";
+  await markRunErrorAndSchedule(
+    runId,
+    automationId,
+    `Process exited without writing result file${exitCodeInfo}.`,
+    automation
+  );
+  await cleanupTmuxSession(tmuxSessionName, keepSessionAlive);
+}
+
+function computeScheduledNextRunAtMs(
+  automation: Automation | undefined,
+  endedAtMs: number
+): number | null {
+  return automation
+    ? computeNextScheduledRunAtMs(automation, endedAtMs)
+    : null;
+}
+
+async function markRunErrorAndSchedule(
+  runId: number,
+  automationId: number,
+  error: string,
+  automation: Automation | undefined
+): Promise<void> {
+  const endedAtMs = Date.now();
   await updateAutomationRun(runId, {
     status: "error",
     endedAtMs,
-    error: `Process exited without writing result file${exitCodeInfo}.`,
+    error,
   });
   await markAutomationRunSchedule(automationId, {
     lastRunAtMs: endedAtMs,
-    nextRunAtMs: automation
-      ? computeNextScheduledRunAtMs(automation, endedAtMs)
-      : null,
+    nextRunAtMs: computeScheduledNextRunAtMs(automation, endedAtMs),
   });
+}
 
-  if (!keepSessionAlive) {
-    try {
-      await killAutomationTmuxSession(tmuxSessionName);
-    } catch {
-      // Best-effort cleanup
-    }
+async function tryCompleteRunFromResult(
+  runId: number,
+  automationId: number,
+  resultFilePath: string,
+  automation: Automation | undefined
+): Promise<boolean> {
+  const resultJson = await readAutomationResultFile(resultFilePath);
+  if (!resultJson) {
+    return false;
+  }
+
+  const result = parseAutomationResult(resultJson);
+  if (!result) {
+    return false;
+  }
+
+  const endedAtMs = Date.now();
+  const status = result.exitCode === 0 ? "success" : "error";
+  await updateAutomationRun(runId, {
+    status,
+    endedAtMs,
+    error: result.exitCode !== 0 ? `Agent exited with code ${result.exitCode}.` : null,
+    detailsJson: JSON.stringify(result),
+  });
+  await markAutomationRunSchedule(automationId, {
+    lastRunAtMs: endedAtMs,
+    nextRunAtMs: computeScheduledNextRunAtMs(automation, endedAtMs),
+  });
+  return true;
+}
+
+async function cleanupTmuxSession(
+  tmuxSessionName: string,
+  keepSessionAlive: boolean
+): Promise<void> {
+  if (keepSessionAlive) {
+    return;
+  }
+  try {
+    await killAutomationTmuxSession(tmuxSessionName);
+  } catch {
+    // Best-effort cleanup
   }
 }
