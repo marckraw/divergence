@@ -7,6 +7,9 @@ import type { Divergence } from "../../divergence";
 import type { Project } from "../../project";
 import type { TmuxDiagnosticsEntry } from "../../../shared/api/tmuxSessions.types";
 import {
+  recordDebugEvent,
+} from "../../../shared";
+import {
   getTmuxDiagnostics,
   killAllTmuxSessions,
   killTmuxSession,
@@ -59,6 +62,12 @@ export function useTmuxSessions(
     setDiagnostics(null);
     try {
       const result = await listTmuxSessions();
+      recordDebugEvent({
+        level: "info",
+        category: "tmux",
+        message: "Tmux sessions fetched",
+        metadata: { sessionCount: result.length },
+      });
       console.info(`[divergence] tmux sessions fetched: ${result.length} session(s)`, result.length > 0 ? result.map(s => s.name) : "(none)");
       setRawSessions(result);
       // Auto-fetch diagnostics when no sessions found to help debug production issues
@@ -66,6 +75,15 @@ export function useTmuxSessions(
         try {
           const diag = await getTmuxDiagnostics();
           setDiagnostics(diag);
+          recordDebugEvent({
+            level: "warn",
+            category: "tmux",
+            message: "No tmux sessions found; diagnostics captured",
+            metadata: {
+              tmuxFound: Boolean(diag.resolved_tmux_path),
+              listSessionsExitCode: diag.list_sessions_raw.status_code ?? -1,
+            },
+          });
           console.info("[divergence] tmux diagnostics (no sessions found):", diag);
         } catch {
           // Diagnostics are best-effort
@@ -75,10 +93,25 @@ export function useTmuxSessions(
       const message =
         err instanceof Error ? err.message : "Failed to list tmux sessions.";
       setError(message);
+      recordDebugEvent({
+        level: "error",
+        category: "tmux",
+        message: "Failed to list tmux sessions",
+        details: message,
+      });
       // Also fetch diagnostics on error
       try {
         const diag = await getTmuxDiagnostics();
         setDiagnostics(diag);
+        recordDebugEvent({
+          level: "warn",
+          category: "tmux",
+          message: "Tmux diagnostics captured after list failure",
+          metadata: {
+            tmuxFound: Boolean(diag.resolved_tmux_path),
+            listSessionsExitCode: diag.list_sessions_raw.status_code ?? -1,
+          },
+        });
         console.info("[divergence] tmux diagnostics (error):", diag);
       } catch {
         // Diagnostics are best-effort

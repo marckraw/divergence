@@ -1,10 +1,14 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { DEFAULT_TMUX_HISTORY_LIMIT } from "../../../shared";
+import {
+  DEFAULT_TMUX_HISTORY_LIMIT,
+  recordDebugEvent,
+  useAppSettings,
+} from "../../../shared";
 import "@xterm/xterm/css/xterm.css";
-import { useAppSettings } from "../../../shared";
 import { relaunchApp } from "../../../shared/api/updater.api";
+import { getTmuxDiagnostics } from "../../../shared/api/tmuxSessions.api";
 import {
   type PtyProcess,
   spawnInteractiveShellPty,
@@ -94,6 +98,26 @@ const TERMINAL_THEME_LIGHT: ITheme = {
 const getTerminalTheme = (mode: "dark" | "light") =>
   mode === "light" ? TERMINAL_THEME_LIGHT : TERMINAL_THEME_DARK;
 
+interface PerformanceWithMemory extends Performance {
+  memory?: {
+    jsHeapSizeLimit: number;
+    totalJSHeapSize: number;
+    usedJSHeapSize: number;
+  };
+}
+
+function getMemorySnapshotMetadata(): Record<string, number> | undefined {
+  const memory = (performance as PerformanceWithMemory).memory;
+  if (!memory) {
+    return undefined;
+  }
+  return {
+    jsHeapUsedMb: Math.round(memory.usedJSHeapSize / (1024 * 1024)),
+    jsHeapTotalMb: Math.round(memory.totalJSHeapSize / (1024 * 1024)),
+    jsHeapLimitMb: Math.round(memory.jsHeapSizeLimit / (1024 * 1024)),
+  };
+}
+
 function Terminal({
   cwd,
   sessionId,
@@ -130,6 +154,8 @@ function Terminal({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasReceivedDataRef = useRef(false);
+  const hasLoggedFirstOutputRef = useRef(false);
+  const spawnStartedAtRef = useRef<number | null>(null);
   const statusRef = useRef<"idle" | "active" | "busy">("idle");
   const lastActiveUpdateRef = useRef(0);
   const themeModeRef = useRef<"dark" | "light">(themeMode);
@@ -154,10 +180,30 @@ function Terminal({
     onStatusChangeRef.current?.(status);
   }, []);
 
+  const logTerminalDebugEvent = useCallback((
+    level: "info" | "warn" | "error",
+    message: string,
+    details?: string,
+    metadata?: Record<string, string | number | boolean | null>
+  ) => {
+    recordDebugEvent({
+      level,
+      category: "terminal",
+      message,
+      details,
+      metadata: {
+        sessionId,
+        mode: useTmux ? "tmux" : "shell",
+        ...metadata,
+      },
+    });
+  }, [sessionId, useTmux]);
+
   const handleReconnectNow = useCallback(() => {
     setStartupIssue(null);
+    logTerminalDebugEvent("info", "Manual reconnect requested from startup banner");
     onReconnectRef.current?.();
-  }, []);
+  }, [logTerminalDebugEvent]);
 
   const handleRestartApp = useCallback(async () => {
     setIsRestartingApp(true);
@@ -167,6 +213,7 @@ function Terminal({
       const message = relaunchError instanceof Error
         ? relaunchError.message
         : String(relaunchError);
+      logTerminalDebugEvent("error", "Failed to restart app from terminal banner", message);
       setStartupIssue((current) => {
         if (!current) {
           return {
@@ -182,7 +229,7 @@ function Terminal({
     } finally {
       setIsRestartingApp(false);
     }
-  }, []);
+  }, [logTerminalDebugEvent]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -213,6 +260,10 @@ function Terminal({
 
       initializedRef.current = true;
       console.log(`[${sessionId}] Initializing terminal`);
+      logTerminalDebugEvent("info", "Initializing terminal", undefined, {
+        cwd,
+        tmuxSessionName: tmuxSessionName ?? null,
+      });
 
       // Phase 1 (immediate): Create XTerm, open in container, set up ResizeObserver
       const terminal = new XTerm({
@@ -297,6 +348,8 @@ function Terminal({
         try {
           setStartupIssue(null);
           setIsRestartingApp(false);
+          spawnStartedAtRef.current = Date.now();
+          hasLoggedFirstOutputRef.current = false;
           const pty = useTmux
             ? spawnTmuxPty({
                 cols: terminal.cols,
@@ -314,6 +367,11 @@ function Terminal({
           ptyRef.current = pty;
           hasReceivedDataRef.current = false;
           console.log(`[${sessionId}] PTY spawned`);
+          logTerminalDebugEvent("info", "PTY spawned", undefined, {
+            cwd,
+            tmuxSessionName: safeSessionName,
+            startupTimeoutMs: useTmux ? TMUX_BOOTSTRAP_TIMEOUT_MS : SHELL_BOOTSTRAP_TIMEOUT_MS,
+          });
           terminal.write("\r\x1b[2K");
 
           const startupTimeoutMs = useTmux
@@ -331,13 +389,80 @@ function Terminal({
             const stallMessage = useTmux
               ? buildBootstrapTimeoutMessage(startupTimeoutMs)
               : `[shell did not respond within ${Math.round(startupTimeoutMs / 1000)}s. Terminal startup may be stalled.]`;
+            const elapsedMs = spawnStartedAtRef.current
+              ? Date.now() - spawnStartedAtRef.current
+              : startupTimeoutMs;
+            const memorySnapshot = getMemorySnapshotMetadata();
             console.warn(`[${sessionId}] terminal startup stalled (${startupTimeoutMs}ms)`);
+            logTerminalDebugEvent(
+              "warn",
+              "Terminal startup stalled",
+              stallMessage,
+              {
+                cwd,
+                tmuxSessionName: safeSessionName,
+                startupTimeoutMs,
+                elapsedMs,
+                ...(memorySnapshot ?? {}),
+              }
+            );
             terminal.write(`\r\n\x1b[33m${stallMessage}\x1b[0m\r\n`);
             setStartupIssue({
               message: "Terminal startup is taking longer than expected.",
-              details: `session=${sessionId} • mode=${useTmux ? "tmux" : "shell"} • cwd=${cwd}`,
+              details: `session=${sessionId} • mode=${useTmux ? "tmux" : "shell"} • cwd=${cwd} • elapsed=${Math.round(elapsedMs / 1000)}s`,
             });
             updateStatus("idle");
+
+            if (useTmux) {
+              void getTmuxDiagnostics()
+                .then((diag) => {
+                  const tmuxVersion = diag.version.stdout.trim() || diag.version.error || "unknown";
+                  const listSessionsErr = diag.list_sessions_raw.stderr.trim()
+                    || diag.list_sessions_raw.error
+                    || "none";
+                  const tmpdirMismatch = Boolean(
+                    diag.env_tmpdir
+                    && diag.login_shell_tmpdir
+                    && diag.env_tmpdir !== diag.login_shell_tmpdir
+                  );
+                  recordDebugEvent({
+                    level: tmpdirMismatch ? "error" : "warn",
+                    category: "tmux",
+                    message: tmpdirMismatch
+                      ? "TMPDIR mismatch detected during terminal stall"
+                      : "Tmux diagnostics captured after terminal stall",
+                    details: [
+                      `tmux_path=${diag.resolved_tmux_path ?? "NOT FOUND"}`,
+                      `login_shell_tmux_path=${diag.login_shell_tmux_path ?? "unresolved"}`,
+                      `tmux_version=${tmuxVersion}`,
+                      `list_sessions_exit=${diag.list_sessions_raw.status_code ?? "N/A"}`,
+                      `list_sessions_stderr=${listSessionsErr}`,
+                      `env_tmpdir=${diag.env_tmpdir ?? "UNSET"}`,
+                      `login_tmpdir=${diag.login_shell_tmpdir ?? "UNSET"}`,
+                    ].join("\n"),
+                    metadata: {
+                      sessionId,
+                      tmuxSessionName: safeSessionName,
+                      tmpdirMismatch,
+                    },
+                  });
+                })
+                .catch((diagnosticsError: unknown) => {
+                  const message = diagnosticsError instanceof Error
+                    ? diagnosticsError.message
+                    : String(diagnosticsError);
+                  recordDebugEvent({
+                    level: "error",
+                    category: "tmux",
+                    message: "Failed to capture tmux diagnostics during terminal stall",
+                    details: message,
+                    metadata: {
+                      sessionId,
+                      tmuxSessionName: safeSessionName,
+                    },
+                  });
+                });
+            }
           }, startupTimeoutMs);
 
           const sendCommand = (command: string) => {
@@ -361,6 +486,16 @@ function Terminal({
                 startupTimerRef.current = null;
               }
               setStartupIssue(null);
+              if (!hasLoggedFirstOutputRef.current) {
+                hasLoggedFirstOutputRef.current = true;
+                const firstOutputLatencyMs = spawnStartedAtRef.current
+                  ? Date.now() - spawnStartedAtRef.current
+                  : 0;
+                logTerminalDebugEvent("info", "Received first terminal output", undefined, {
+                  firstOutputLatencyMs,
+                  tmuxSessionName: safeSessionName,
+                });
+              }
             }
             reconnectAttemptRef.current = 0;
             terminal.write(new Uint8Array(data));
@@ -387,6 +522,10 @@ function Terminal({
               startupTimerRef.current = null;
             }
             console.log(`[${sessionId}] PTY exited: ${exitCode}`);
+            logTerminalDebugEvent(exitCode === 0 ? "info" : "warn", "PTY exited", undefined, {
+              exitCode,
+              tmuxSessionName: safeSessionName,
+            });
             terminal.write(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
             updateStatus("idle");
 
@@ -394,6 +533,11 @@ function Terminal({
             if (shouldAutoReconnect(exitCode, useTmux, attempt)) {
               const delayMs = getReconnectDelayMs(attempt);
               const delaySec = Math.round(delayMs / 1000);
+              logTerminalDebugEvent("warn", "Scheduling terminal auto-reconnect", undefined, {
+                exitCode,
+                attempt: attempt + 1,
+                delayMs,
+              });
               terminal.write(`\x1b[33m[Reconnecting in ${delaySec}s... (attempt ${attempt + 1})]\x1b[0m\r\n`);
               reconnectAttemptRef.current = attempt + 1;
               reconnectTimerRef.current = setTimeout(() => {
@@ -403,6 +547,10 @@ function Terminal({
                 }
               }, delayMs);
             } else if (exitCode !== 0) {
+              logTerminalDebugEvent("warn", "Auto-reconnect limit reached", undefined, {
+                exitCode,
+                attempts: attempt,
+              });
               terminal.write("\x1b[33m[Max reconnect attempts reached. Reconnect manually.]\x1b[0m\r\n");
             }
           });
@@ -429,6 +577,10 @@ function Terminal({
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err);
           console.error(`[${sessionId}] PTY error:`, err);
+          logTerminalDebugEvent("error", "PTY startup failed", errorMessage, {
+            cwd,
+            tmuxSessionName: safeSessionName,
+          });
           setError(errorMessage);
           terminal.write(`\r\n\x1b[31mFailed to start terminal: ${errorMessage}\x1b[0m\r\n`);
         }
@@ -439,6 +591,7 @@ function Terminal({
 
     return () => {
       console.log(`[${sessionId}] Cleanup`);
+      logTerminalDebugEvent("info", "Terminal cleanup");
       if (spawnTimerRef.current) {
         clearTimeout(spawnTimerRef.current);
         spawnTimerRef.current = null;
@@ -477,12 +630,24 @@ function Terminal({
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
+      spawnStartedAtRef.current = null;
+      hasLoggedFirstOutputRef.current = false;
       ptyRef.current = null;
       terminalRef.current = null;
       fitAddonRef.current = null;
       initializedRef.current = false;
     };
-  }, [cwd, sessionId, updateStatus, useTmux, tmuxSessionName, onRegisterCommand, onUnregisterCommand, tmuxHistoryLimit]);
+  }, [
+    cwd,
+    sessionId,
+    updateStatus,
+    useTmux,
+    tmuxSessionName,
+    onRegisterCommand,
+    onUnregisterCommand,
+    tmuxHistoryLimit,
+    logTerminalDebugEvent,
+  ]);
 
   useEffect(() => {
     const terminal = terminalRef.current;

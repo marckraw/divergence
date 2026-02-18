@@ -46,7 +46,7 @@ export interface SidebarContextMenuState {
 
 export interface SidebarPresentationalProps extends SidebarProps {
   expandedProjects: Set<number>;
-  deletingDivergence: SidebarDeleteState | null;
+  deletingDivergences: SidebarDeleteState[];
   deleteError: string | null;
   contextMenu: SidebarContextMenuState | null;
   hasExpandableProjects: boolean;
@@ -62,7 +62,7 @@ export interface SidebarPresentationalProps extends SidebarProps {
   onContextMenuClose: () => void;
   onContextMenuRemoveProject: () => Promise<void>;
   onContextMenuCreateAdditionalSession: () => void;
-  onContextMenuDeleteDivergence: () => Promise<void>;
+  onContextMenuDeleteDivergence: () => void;
   onContextMenuCloseSession: () => void;
   onContextMenuCloseSessionAndKillTmux: () => Promise<void>;
 }

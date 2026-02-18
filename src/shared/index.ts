@@ -15,6 +15,18 @@ export { getImportPathMatchFromPrefix, type ImportPathMatch } from "./lib/import
 export { renderTemplateCommand } from "./lib/templateRendering.pure";
 export { notifyCommandFinished } from "./service/notifications.service";
 export {
+  clearDebugEvents,
+  getDebugEventsSnapshot,
+  recordDebugEvent,
+  subscribeDebugEvents,
+} from "./service/debugEvents.service";
+export type {
+  DebugEvent,
+  DebugEventCategory,
+  DebugEventLevel,
+  RecordDebugEventInput,
+} from "./service/debugEvents.types";
+export {
   buildLegacyTmuxSessionName,
   buildSplitTmuxSessionName,
   buildTmuxSessionName,
@@ -52,6 +64,7 @@ export {
 } from "./lib/editorThemes.pure";
 
 export { useAppSettings } from "./hooks/useAppSettings";
+export { useDebugEvents } from "./hooks/useDebugEvents";
 export { useUpdater, type UpdateStatus } from "./hooks/useUpdater";
 export {
   useRalphyConfig,

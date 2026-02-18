@@ -31,8 +31,7 @@ import {
   getGithubPollState,
   upsertGithubPollState,
 } from "../entities/inbox-event";
-import { useAppSettings } from "../shared";
-import { useUpdater } from "../shared";
+import { recordDebugEvent, useAppSettings, useUpdater } from "../shared";
 import type {
   Project,
   Divergence,
@@ -73,6 +72,7 @@ import {
 } from "./lib/githubInbox.pure";
 import { fetchGithubPullRequests } from "./api/githubPullRequests.api";
 import type { GithubRepoTarget } from "./model/githubPullRequests.types";
+import { DebugConsolePanel } from "../features/debug-console";
 
 const NOTIFY_MIN_BUSY_MS = 5000;
 const NOTIFY_IDLE_DELAY_MS = 1500;
@@ -179,10 +179,23 @@ function App() {
   // Automation run poller — monitors running tmux-based automation runs
   useAutomationRunPoller({
     onRunCompleted: useCallback((runId: number) => {
+      recordDebugEvent({
+        level: "info",
+        category: "automation",
+        message: "Automation run completed",
+        metadata: { runId },
+      });
       console.log(`Automation run ${runId} completed successfully.`);
       void refreshAutomations();
     }, [refreshAutomations]),
     onRunFailed: useCallback((runId: number, error: string) => {
+      recordDebugEvent({
+        level: "warn",
+        category: "automation",
+        message: "Automation run failed",
+        details: error,
+        metadata: { runId },
+      });
       console.warn(`Automation run ${runId} failed: ${error}`);
       void refreshAutomations();
     }, [refreshAutomations]),
@@ -197,6 +210,41 @@ function App() {
       void refreshAutomations();
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleWindowError = (event: ErrorEvent) => {
+      recordDebugEvent({
+        level: "error",
+        category: "app",
+        message: "Unhandled window error",
+        details: event.message,
+        metadata: {
+          source: event.filename ?? "unknown",
+          line: event.lineno ?? 0,
+          column: event.colno ?? 0,
+        },
+      });
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason instanceof Error
+        ? event.reason.message
+        : String(event.reason);
+      recordDebugEvent({
+        level: "error",
+        category: "app",
+        message: "Unhandled promise rejection",
+        details: reason,
+      });
+    };
+
+    window.addEventListener("error", handleWindowError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+    return () => {
+      window.removeEventListener("error", handleWindowError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
   }, []);
 
   useEffect(() => {
@@ -1247,6 +1295,7 @@ function App() {
               onRunAutomationNow={handleRunAutomationNow}
             />
           )}
+          {workTab === "debug" && <DebugConsolePanel />}
         </div>
       ) : (
         <MainArea

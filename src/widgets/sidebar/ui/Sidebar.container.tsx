@@ -30,14 +30,14 @@ function SidebarContainer({
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
   const hasUserToggledExpansion = useRef(false);
-  const [deletingDivergence, setDeletingDivergence] = useState<SidebarDeleteState | null>(null);
+  const [deletingDivergences, setDeletingDivergences] = useState<SidebarDeleteState[]>([]);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
 
   useEffect(() => {
     if (mode === "work") {
       setContextMenu(null);
-      setDeletingDivergence(null);
+      setDeletingDivergences([]);
       setDeleteError(null);
     }
   }, [mode]);
@@ -129,26 +129,32 @@ function SidebarContainer({
     handleContextMenuClose();
   }, [contextMenu, handleContextMenuClose, onCreateAdditionalSession]);
 
-  const handleContextMenuDeleteDivergence = useCallback(async () => {
+  const handleContextMenuDeleteDivergence = useCallback(() => {
     if (contextMenu?.type === "divergence") {
       const divergence = contextMenu.item as Divergence;
-      setDeletingDivergence({ id: divergence.id, branch: divergence.branch });
-      setDeleteError(null);
-
-      try {
-        await onDeleteDivergence(divergence, "sidebar_context_menu");
+      const isAlreadyDeleting = deletingDivergences.some((item) => item.id === divergence.id);
+      if (isAlreadyDeleting) {
         handleContextMenuClose();
-      } catch (error) {
-        console.error("Failed to delete divergence:", error);
-        setDeleteError(error instanceof Error ? error.message : String(error));
-      } finally {
-        setDeletingDivergence((current) => (current?.id === divergence.id ? null : current));
+        return;
       }
+
+      setDeletingDivergences((previous) => [...previous, { id: divergence.id, branch: divergence.branch }]);
+      setDeleteError(null);
+      handleContextMenuClose();
+
+      void onDeleteDivergence(divergence, "sidebar_context_menu")
+        .catch((error) => {
+          console.error("Failed to delete divergence:", error);
+          setDeleteError(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          setDeletingDivergences((current) => current.filter((item) => item.id !== divergence.id));
+        });
       return;
     }
 
     handleContextMenuClose();
-  }, [contextMenu, handleContextMenuClose, onDeleteDivergence]);
+  }, [contextMenu, deletingDivergences, handleContextMenuClose, onDeleteDivergence]);
 
   const handleContextMenuCloseSession = useCallback(() => {
     if (contextMenu?.type === "session") {
@@ -181,7 +187,7 @@ function SidebarContainer({
       onCloseSession={onCloseSession}
       onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
       expandedProjects={expandedProjects}
-      deletingDivergence={deletingDivergence}
+      deletingDivergences={deletingDivergences}
       deleteError={deleteError}
       contextMenu={contextMenu}
       hasExpandableProjects={hasExpandableProjects}

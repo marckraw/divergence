@@ -22,6 +22,7 @@ const WORK_NAV_ITEMS: Array<{ id: WorkSidebarTab; label: string }> = [
   { id: "inbox", label: "Inbox" },
   { id: "task_center", label: "Task Center" },
   { id: "automations", label: "Automations" },
+  { id: "debug", label: "Debug" },
 ];
 
 function SidebarPresentational({
@@ -43,7 +44,7 @@ function SidebarPresentational({
   onCreateDivergence,
   isCollapsed,
   expandedProjects,
-  deletingDivergence,
+  deletingDivergences,
   deleteError,
   contextMenu,
   hasExpandableProjects,
@@ -72,6 +73,9 @@ function SidebarPresentational({
   const contextSession = contextMenu?.type === "session"
     ? contextMenu.item as TerminalSession
     : null;
+  const deletingDivergenceIds = new Set(deletingDivergences.map((item) => item.id));
+  const isContextMenuDivergenceDeleting = contextMenu?.type === "divergence"
+    && deletingDivergenceIds.has(contextMenu.id as number);
 
   return (
     <>
@@ -116,13 +120,17 @@ function SidebarPresentational({
         </div>
 
         <div className="flex-1 overflow-y-auto p-2" onClick={onContextMenuClose}>
-          {mode === "projects" && deletingDivergence && (
+          {mode === "projects" && deletingDivergences.length > 0 && (
             <div className="px-2 py-2 mb-2 text-xs text-subtext border border-surface rounded-md bg-surface/30 flex items-center gap-2">
               <svg className="w-3 h-3 animate-spin text-accent" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                 <path className="opacity-90" fill="currentColor" d="M22 12a10 10 0 00-10-10v4a6 6 0 016 6h4z" />
               </svg>
-              <span>Deleting divergence: {deletingDivergence.branch}</span>
+              <span>
+                {deletingDivergences.length === 1
+                  ? `Deleting divergence: ${deletingDivergences[0]?.branch ?? ""}`
+                  : `Deleting ${deletingDivergences.length} divergences`}
+              </span>
             </div>
           )}
           {mode === "projects" && deleteError && (
@@ -441,9 +449,9 @@ function SidebarPresentational({
                 <MenuButton
                   tone="danger"
                   onClick={onContextMenuDeleteDivergence}
-                  disabled={Boolean(deletingDivergence)}
+                  disabled={isContextMenuDivergenceDeleting}
                 >
-                  {deletingDivergence?.id === contextMenu.id ? "Deleting..." : "Delete Divergence"}
+                  {isContextMenuDivergenceDeleting ? "Deleting..." : "Delete Divergence"}
                 </MenuButton>
               </>
             )}
