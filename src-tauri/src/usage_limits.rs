@@ -158,11 +158,26 @@ pub async fn fetch_claude_usage(
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
+
+        let error_msg = if status.as_u16() == 403
+            && (body.contains("permission_error") || body.contains("scope"))
+        {
+            format!(
+                "Usage data unavailable: your OAuth token lacks the required \
+                 user:profile scope (using {token_source}). Tokens from \
+                 `claude setup-token` only include user:inference. This is a \
+                 known upstream limitation \
+                 (github.com/anthropics/claude-code/issues/11985). Run \
+                 `claude login` in a terminal for a token with full scopes, \
+                 but note this may invalidate your long-lived automation token."
+            )
+        } else {
+            format!("Claude API returned {status} (using {token_source}): {body}")
+        };
+
         return Ok(ClaudeUsageResult {
             available: false,
-            error: Some(format!(
-                "Claude API returned {status} (using {token_source}): {body}"
-            )),
+            error: Some(error_msg),
             windows: vec![],
         });
     }
