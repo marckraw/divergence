@@ -877,7 +877,7 @@ dependencies = [
 
 [[package]]
 name = "divergence"
-version = "0.16.3"
+version = "0.16.4"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
