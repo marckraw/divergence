@@ -1,6 +1,6 @@
 export interface TerminalSession {
   id: string;
-  type: "project" | "divergence";
+  type: "project" | "divergence" | "workspace" | "workspace_divergence";
   targetId: number;
   projectId: number;
   workspaceKey: string;

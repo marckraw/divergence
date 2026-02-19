@@ -2,7 +2,11 @@ export type BackgroundTaskKind =
   | "create_divergence"
   | "delete_divergence"
   | "remove_project"
-  | "automation_run";
+  | "automation_run"
+  | "create_workspace"
+  | "delete_workspace"
+  | "create_workspace_divergences"
+  | "delete_workspace_divergence";
 
 export type BackgroundTaskStatus = "queued" | "running" | "success" | "error";
 
@@ -13,9 +17,10 @@ export interface BackgroundTaskPhaseEvent {
 }
 
 export interface BackgroundTaskTarget {
-  type: "project" | "divergence" | "system";
+  type: "project" | "divergence" | "system" | "workspace";
   projectId?: number;
   divergenceId?: number;
+  workspaceId?: number;
   projectName?: string;
   branch?: string;
   path?: string;

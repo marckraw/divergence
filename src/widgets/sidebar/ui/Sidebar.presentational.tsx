@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { Project, TerminalSession } from "../../../entities";
+import type { Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
 import { MenuButton, StatusIndicator } from "../../../shared";
 import CreateDivergenceModal from "../../../features/create-divergence";
 import {
@@ -59,6 +59,18 @@ function SidebarPresentational({
   onContextMenuDeleteDivergence,
   onContextMenuCloseSession,
   onContextMenuCloseSessionAndKillTmux,
+  workspaces,
+  membersByWorkspaceId,
+  onSelectWorkspace,
+  onCreateWorkspace,
+  onDeleteWorkspace,
+  onOpenWorkspaceSettings,
+  onCreateWorkspaceDivergence,
+  workspaceDivergencesByWorkspaceId,
+  onSelectWorkspaceDivergence,
+  onDeleteWorkspaceDivergence,
+  expandedWorkspaces,
+  onToggleWorkspaceExpand,
 }: SidebarPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
   const contextMenuVariants = useMemo(
@@ -116,6 +128,15 @@ function SidebarPresentational({
             >
               Work
             </button>
+            <button
+              type="button"
+              onClick={() => onModeChange("workspaces")}
+              className={`px-2 py-1 text-xs rounded ${
+                mode === "workspaces" ? "bg-accent text-main" : "text-subtext hover:text-text"
+              }`}
+            >
+              Workspaces
+            </button>
           </div>
         </div>
 
@@ -170,6 +191,133 @@ function SidebarPresentational({
                 );
               })}
             </div>
+          ) : mode === "workspaces" ? (
+            <>
+              <div className="flex items-center justify-between px-2 py-2">
+                <div className="text-xs uppercase text-subtext font-medium">
+                  Workspaces
+                </div>
+              </div>
+
+              {workspaces.length === 0 ? (
+                <div className="px-2 py-8 text-center text-subtext text-sm">
+                  <p>No workspaces yet</p>
+                  <p className="text-xs mt-1">Click "Create Workspace" to group projects</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {workspaces.map((workspace) => {
+                    const members = membersByWorkspaceId.get(workspace.id) ?? [];
+                    const memberCount = members.length;
+                    const wsDivergences = workspaceDivergencesByWorkspaceId.get(workspace.id) ?? [];
+                    const hasWsDivergences = wsDivergences.length > 0;
+                    const isWsExpanded = expandedWorkspaces.has(workspace.id);
+
+                    return (
+                      <div key={workspace.id}>
+                        <div
+                          className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group hover:bg-surface/50 transition-colors"
+                          onClick={() => onSelectWorkspace(workspace)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            onContextMenuOpen(event, "workspace", workspace);
+                          }}
+                        >
+                          {hasWsDivergences ? (
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onToggleWorkspaceExpand(workspace.id);
+                              }}
+                              className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
+                            >
+                              <svg
+                                className={`w-3 h-3 transition-transform ${isWsExpanded ? "rotate-90" : ""}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </button>
+                          ) : (
+                            <div className="w-4" />
+                          )}
+                          <svg
+                            className="w-4 h-4 text-accent shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                            />
+                          </svg>
+                          <span className="flex-1 truncate text-sm text-text">
+                            {workspace.name}
+                          </span>
+                          <span className="text-[11px] text-subtext bg-surface px-1.5 py-0.5 rounded-full">
+                            {memberCount}
+                          </span>
+                        </div>
+                        <AnimatePresence initial={false}>
+                          {isWsExpanded && hasWsDivergences && (
+                            <motion.div
+                              className="overflow-hidden"
+                              variants={collapseVariants}
+                              initial="hidden"
+                              animate="visible"
+                              exit="exit"
+                              transition={layoutTransition}
+                            >
+                              <div className="ml-4 mt-1 space-y-1">
+                                {wsDivergences.map((wd) => (
+                                  <div
+                                    key={wd.id}
+                                    className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-surface/50 transition-colors"
+                                    onClick={() => onSelectWorkspaceDivergence(wd)}
+                                    onContextMenu={(event) => {
+                                      event.preventDefault();
+                                      onContextMenuOpen(event, "workspace_divergence", wd);
+                                    }}
+                                  >
+                                    <div className="w-4" />
+                                    <svg
+                                      className="w-4 h-4 text-accent shrink-0"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                                      />
+                                    </svg>
+                                    <span className="flex-1 truncate text-sm text-text">
+                                      {wd.branch}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div className="flex items-center justify-between px-2 py-2">
@@ -403,6 +551,29 @@ function SidebarPresentational({
             </button>
           </div>
         )}
+        {mode === "workspaces" && (
+          <div className="p-2 border-t border-surface">
+            <button
+              className="w-full px-3 py-2 bg-surface hover:bg-surface/80 text-text text-sm rounded-md flex items-center justify-center gap-2 transition-colors"
+              onClick={onCreateWorkspace}
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Create Workspace
+            </button>
+          </div>
+        )}
       </aside>
 
       <AnimatePresence>
@@ -452,6 +623,64 @@ function SidebarPresentational({
                   disabled={isContextMenuDivergenceDeleting}
                 >
                   {isContextMenuDivergenceDeleting ? "Deleting..." : "Delete Divergence"}
+                </MenuButton>
+              </>
+            )}
+            {contextMenu.type === "workspace" && (
+              <>
+                <MenuButton
+                  onClick={() => {
+                    onSelectWorkspace(contextMenu.item as Workspace);
+                    onContextMenuClose();
+                  }}
+                >
+                  Open Terminal
+                </MenuButton>
+                <MenuButton
+                  onClick={() => {
+                    onOpenWorkspaceSettings(contextMenu.item as Workspace);
+                    onContextMenuClose();
+                  }}
+                >
+                  Settings
+                </MenuButton>
+                <MenuButton
+                  onClick={() => {
+                    onCreateWorkspaceDivergence(contextMenu.item as Workspace);
+                    onContextMenuClose();
+                  }}
+                >
+                  Create Divergence
+                </MenuButton>
+                <MenuButton
+                  tone="danger"
+                  onClick={() => {
+                    void onDeleteWorkspace(contextMenu.item as Workspace);
+                    onContextMenuClose();
+                  }}
+                >
+                  Delete Workspace
+                </MenuButton>
+              </>
+            )}
+            {contextMenu.type === "workspace_divergence" && (
+              <>
+                <MenuButton
+                  onClick={() => {
+                    onSelectWorkspaceDivergence(contextMenu.item as WorkspaceDivergence);
+                    onContextMenuClose();
+                  }}
+                >
+                  Open Terminal
+                </MenuButton>
+                <MenuButton
+                  tone="danger"
+                  onClick={() => {
+                    void onDeleteWorkspaceDivergence(contextMenu.item as WorkspaceDivergence);
+                    onContextMenuClose();
+                  }}
+                >
+                  Delete
                 </MenuButton>
               </>
             )}

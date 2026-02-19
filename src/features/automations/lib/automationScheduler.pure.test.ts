@@ -135,6 +135,7 @@ describe("automation scheduler utils", () => {
         nextRunAtMs: 1000,
         createdAtMs: 500,
         updatedAtMs: 500,
+        workspaceId: null,
         ...overrides,
       };
     }

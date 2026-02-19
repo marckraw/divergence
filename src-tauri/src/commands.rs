@@ -1,4 +1,4 @@
-use crate::db::{get_divergence_dir, get_repos_dir};
+use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -863,4 +863,218 @@ pub async fn write_review_brief_file(
     Ok(WriteReviewBriefResponse {
         path: path_to_string(&file_path),
     })
+}
+
+// ── Workspace commands ──────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceProjectInput {
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceFolderResult {
+    pub folder_path: String,
+    pub claude_md_path: String,
+    pub agents_md_path: String,
+}
+
+fn generate_workspace_claude_md(name: &str, projects: &[WorkspaceProjectInput]) -> String {
+    let mut md = format!("# Workspace: {}\n\n", name);
+    md.push_str("This is an AI workspace that groups multiple projects together.\n");
+    md.push_str("Each project is accessible via a symlink in this directory.\n\n");
+    md.push_str("## Projects\n\n");
+
+    for project in projects {
+        let link_name = project.name.replace(' ', "-").to_lowercase();
+        md.push_str(&format!(
+            "- **{}** (`./{}`) — `{}`\n",
+            project.name, link_name, project.path
+        ));
+    }
+
+    md.push_str("\n## Cross-Project Notes\n\n");
+    md.push_str("- All projects are symlinked in this directory for unified access.\n");
+    md.push_str("- Changes made via symlinks affect the original project files.\n");
+    md.push_str("- Use relative paths from this workspace root to reference files across projects.\n");
+    md
+}
+
+fn generate_workspace_agents_md(name: &str, projects: &[WorkspaceProjectInput]) -> String {
+    let mut md = format!("# Workspace: {}\n\n", name);
+    md.push_str("## Project Directory\n\n");
+    md.push_str("| Project | Symlink | Path |\n");
+    md.push_str("|---------|---------|------|\n");
+
+    for project in projects {
+        let link_name = project.name.replace(' ', "-").to_lowercase();
+        md.push_str(&format!(
+            "| {} | `./{}` | `{}` |\n",
+            project.name, link_name, project.path
+        ));
+    }
+
+    md.push_str("\n## Usage\n\n");
+    md.push_str("This workspace provides unified access to all member projects.\n");
+    md.push_str("Navigate into any symlinked directory to work with that project.\n");
+    md
+}
+
+#[tauri::command]
+pub async fn create_workspace_folder(
+    slug: String,
+    workspace_name: String,
+    projects: Vec<WorkspaceProjectInput>,
+) -> Result<WorkspaceFolderResult, String> {
+    let workspaces_dir = get_workspaces_dir();
+    let folder_path = workspaces_dir.join(&slug);
+
+    fs::create_dir_all(&folder_path)
+        .map_err(|e| format!("Failed to create workspace folder: {}", e))?;
+
+    // Create symlinks for each project
+    for project in &projects {
+        let link_name = project.name.replace(' ', "-").to_lowercase();
+        let link_path = folder_path.join(&link_name);
+        let target_path = PathBuf::from(&project.path);
+
+        // Remove existing symlink if present
+        if link_path.exists() || link_path.symlink_metadata().is_ok() {
+            let _ = fs::remove_file(&link_path);
+        }
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&target_path, &link_path)
+            .map_err(|e| format!("Failed to create symlink for {}: {}", project.name, e))?;
+
+        #[cfg(not(unix))]
+        return Err("Symlinks are only supported on Unix systems".to_string());
+    }
+
+    // Generate CLAUDE.md
+    let claude_md_content = generate_workspace_claude_md(&workspace_name, &projects);
+    let claude_md_path = folder_path.join("CLAUDE.md");
+    fs::write(&claude_md_path, &claude_md_content)
+        .map_err(|e| format!("Failed to write CLAUDE.md: {}", e))?;
+
+    // Generate agents.md
+    let agents_md_content = generate_workspace_agents_md(&workspace_name, &projects);
+    let agents_md_path = folder_path.join("agents.md");
+    fs::write(&agents_md_path, &agents_md_content)
+        .map_err(|e| format!("Failed to write agents.md: {}", e))?;
+
+    // Generate .claude/settings.json
+    let claude_dir = folder_path.join(".claude");
+    fs::create_dir_all(&claude_dir)
+        .map_err(|e| format!("Failed to create .claude directory: {}", e))?;
+
+    let additional_dirs: Vec<String> = projects.iter().map(|p| p.path.clone()).collect();
+    let settings = serde_json::json!({
+        "additionalDirectories": additional_dirs,
+    });
+    let settings_path = claude_dir.join("settings.json");
+    fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap_or_default())
+        .map_err(|e| format!("Failed to write .claude/settings.json: {}", e))?;
+
+    Ok(WorkspaceFolderResult {
+        folder_path: path_to_string(&folder_path),
+        claude_md_path: path_to_string(&claude_md_path),
+        agents_md_path: path_to_string(&agents_md_path),
+    })
+}
+
+#[tauri::command]
+pub async fn update_workspace_folder(
+    folder_path: String,
+    workspace_name: String,
+    projects: Vec<WorkspaceProjectInput>,
+) -> Result<WorkspaceFolderResult, String> {
+    let folder = PathBuf::from(&folder_path);
+    if !folder.is_dir() {
+        return Err(format!("Workspace folder does not exist: {}", folder_path));
+    }
+
+    // Remove old symlinks (only symlinks, not regular files/dirs)
+    if let Ok(entries) = fs::read_dir(&folder) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+                let _ = fs::remove_file(&path);
+            }
+        }
+    }
+
+    // Recreate symlinks
+    for project in &projects {
+        let link_name = project.name.replace(' ', "-").to_lowercase();
+        let link_path = folder.join(&link_name);
+        let target_path = PathBuf::from(&project.path);
+
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&target_path, &link_path)
+            .map_err(|e| format!("Failed to create symlink for {}: {}", project.name, e))?;
+
+        #[cfg(not(unix))]
+        return Err("Symlinks are only supported on Unix systems".to_string());
+    }
+
+    // Regenerate CLAUDE.md
+    let claude_md_content = generate_workspace_claude_md(&workspace_name, &projects);
+    let claude_md_path = folder.join("CLAUDE.md");
+    fs::write(&claude_md_path, &claude_md_content)
+        .map_err(|e| format!("Failed to write CLAUDE.md: {}", e))?;
+
+    // Regenerate agents.md
+    let agents_md_content = generate_workspace_agents_md(&workspace_name, &projects);
+    let agents_md_path = folder.join("agents.md");
+    fs::write(&agents_md_path, &agents_md_content)
+        .map_err(|e| format!("Failed to write agents.md: {}", e))?;
+
+    // Regenerate .claude/settings.json
+    let claude_dir = folder.join(".claude");
+    fs::create_dir_all(&claude_dir)
+        .map_err(|e| format!("Failed to create .claude directory: {}", e))?;
+
+    let additional_dirs: Vec<String> = projects.iter().map(|p| p.path.clone()).collect();
+    let settings = serde_json::json!({
+        "additionalDirectories": additional_dirs,
+    });
+    let settings_path = claude_dir.join("settings.json");
+    fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap_or_default())
+        .map_err(|e| format!("Failed to write .claude/settings.json: {}", e))?;
+
+    Ok(WorkspaceFolderResult {
+        folder_path: path_to_string(&folder),
+        claude_md_path: path_to_string(&claude_md_path),
+        agents_md_path: path_to_string(&agents_md_path),
+    })
+}
+
+#[tauri::command]
+pub async fn delete_workspace_folder(folder_path: String) -> Result<(), String> {
+    let folder = PathBuf::from(&folder_path);
+
+    // Safety check: path must be within the workspaces directory
+    let workspaces_dir = get_workspaces_dir();
+    if !folder.starts_with(&workspaces_dir) {
+        return Err("Cannot delete path outside of workspaces directory".to_string());
+    }
+
+    if folder.exists() {
+        let delete_path = folder.clone();
+        tauri::async_runtime::spawn_blocking(move || fs::remove_dir_all(&delete_path))
+            .await
+            .map_err(|e| format!("Failed to delete workspace folder: {}", e))?
+            .map_err(|e| format!("Failed to delete workspace folder: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_workspaces_base_path() -> Result<String, String> {
+    Ok(path_to_string(&get_workspaces_dir()))
 }

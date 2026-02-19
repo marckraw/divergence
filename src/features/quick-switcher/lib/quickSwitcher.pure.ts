@@ -1,8 +1,8 @@
-import type { Divergence, Project, TerminalSession } from "../../../entities";
+import type { Divergence, Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
 
 export interface QuickSwitcherSearchResult {
-  type: "project" | "divergence" | "session";
-  item: Project | Divergence | TerminalSession;
+  type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence";
+  item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence;
   projectName?: string;
   workspaceName?: string;
 }
@@ -10,7 +10,9 @@ export interface QuickSwitcherSearchResult {
 export function buildQuickSwitcherSearchResults(
   projects: Project[],
   divergencesByProject: Map<number, Divergence[]>,
-  sessions: Map<string, TerminalSession>
+  sessions: Map<string, TerminalSession>,
+  workspaces?: Workspace[],
+  workspaceDivergences?: WorkspaceDivergence[],
 ): QuickSwitcherSearchResult[] {
   const items: QuickSwitcherSearchResult[] = [];
   const projectById = new Map<number, Project>();
@@ -26,6 +28,26 @@ export function buildQuickSwitcherSearchResults(
         item: divergence,
         projectName: project.name,
       });
+    }
+  }
+
+  if (workspaces) {
+    const workspaceById = new Map<number, Workspace>();
+    workspaces.forEach((ws) => workspaceById.set(ws.id, ws));
+
+    for (const workspace of workspaces) {
+      items.push({ type: "workspace", item: workspace });
+    }
+
+    if (workspaceDivergences) {
+      for (const wd of workspaceDivergences) {
+        const parentWs = workspaceById.get(wd.workspaceId);
+        items.push({
+          type: "workspace_divergence",
+          item: wd,
+          workspaceName: parentWs?.name,
+        });
+      }
     }
   }
 
@@ -72,6 +94,21 @@ export function filterQuickSwitcherSearchResults(
         || session.path.toLowerCase().includes(lowerQuery)
         || session.sessionRole.toLowerCase().includes(lowerQuery)
         || result.projectName?.toLowerCase().includes(lowerQuery)
+        || result.workspaceName?.toLowerCase().includes(lowerQuery)
+      );
+    }
+    if (result.type === "workspace") {
+      const workspace = result.item as Workspace;
+      return (
+        name.includes(lowerQuery)
+        || workspace.slug.toLowerCase().includes(lowerQuery)
+      );
+    }
+    if (result.type === "workspace_divergence") {
+      const wd = result.item as WorkspaceDivergence;
+      return (
+        name.includes(lowerQuery)
+        || wd.branch.toLowerCase().includes(lowerQuery)
         || result.workspaceName?.toLowerCase().includes(lowerQuery)
       );
     }

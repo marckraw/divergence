@@ -70,6 +70,7 @@ export const automations = sqliteTable(
     nextRunAtMs: integer("next_run_at_ms"),
     createdAtMs: integer("created_at_ms").notNull(),
     updatedAtMs: integer("updated_at_ms").notNull(),
+    workspaceId: integer("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
   },
   (table) => [
     index("idx_automations_project_id").on(table.projectId),
@@ -126,6 +127,7 @@ export const inboxEvents = sqliteTable(
     payloadJson: text("payload_json"),
     read: integer("read", { mode: "boolean" }).notNull().default(false),
     createdAtMs: integer("created_at_ms").notNull(),
+    workspaceId: integer("workspace_id"),
   },
   (table) => [
     uniqueIndex("idx_inbox_events_external_id").on(table.externalId).where(sql`external_id IS NOT NULL`),
@@ -144,3 +146,62 @@ export const githubPollState = sqliteTable("github_poll_state", {
 });
 
 export type GithubPollState = typeof githubPollState.$inferSelect;
+
+// ── Workspaces ──────────────────────────────────────────────────────────────
+
+export const workspaces = sqliteTable("workspaces", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  folderPath: text("folder_path").notNull().unique(),
+  createdAtMs: integer("created_at_ms").notNull(),
+  updatedAtMs: integer("updated_at_ms").notNull(),
+});
+
+export type WorkspaceRow = typeof workspaces.$inferSelect;
+export type InsertWorkspaceRow = typeof workspaces.$inferInsert;
+
+// ── Workspace Members ───────────────────────────────────────────────────────
+
+// ── Workspace Divergences ────────────────────────────────────────────────
+
+export const workspaceDivergences = sqliteTable(
+  "workspace_divergences",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    branch: text("branch").notNull(),
+    folderPath: text("folder_path").notNull().unique(),
+    createdAtMs: integer("created_at_ms").notNull(),
+  },
+  (table) => [
+    index("idx_workspace_divergences_workspace_id").on(table.workspaceId),
+  ],
+);
+
+export type WorkspaceDivergenceRow = typeof workspaceDivergences.$inferSelect;
+export type InsertWorkspaceDivergenceRow = typeof workspaceDivergences.$inferInsert;
+
+// ── Workspace Members ───────────────────────────────────────────────────
+
+export const workspaceMembers = sqliteTable(
+  "workspace_members",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    addedAtMs: integer("added_at_ms").notNull(),
+  },
+  (table) => [
+    index("idx_workspace_members_workspace_id").on(table.workspaceId),
+    index("idx_workspace_members_project_id").on(table.projectId),
+  ],
+);

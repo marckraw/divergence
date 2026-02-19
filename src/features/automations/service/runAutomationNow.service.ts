@@ -1,4 +1,4 @@
-import type { Project, RunBackgroundTask } from "../../../entities";
+import type { Project, RunBackgroundTask, Workspace } from "../../../entities";
 import {
   insertAutomationRun,
   markAutomationRunSchedule,
@@ -48,6 +48,7 @@ function sleep(ms: number): Promise<void> {
 export interface RunAutomationNowInput {
   automation: Automation;
   project: Pick<Project, "id" | "name" | "path"> | null;
+  workspace?: Pick<Workspace, "id" | "name" | "folderPath"> | null;
   runTask: RunBackgroundTask;
   agentCommandClaude: string;
   agentCommandCodex: string;
@@ -145,41 +146,50 @@ export async function runAutomationNow(
     };
   }
 
-  // ── Create divergence (branch-isolated clone) ──
+  // ── Resolve working directory ──
+  // When a workspace is provided, run directly in the workspace folder
+  // (no divergence creation). Otherwise, create a branch-isolated clone.
   let divergencePath: string;
   let divergenceId: number;
-  try {
-    const settings = await deps.loadProjectSettings(project.id);
-    const branchName = buildAutomationBranchName(input.automation.id, input.automation.name, deps.now());
-    const divergence = await deps.createDivergenceRepository({
-      project,
-      branchName,
-      copyIgnoredSkip: settings.copyIgnoredSkip,
-      useExistingBranch: false,
-    });
-    divergenceId = await deps.insertDivergenceRecord(divergence);
-    await deps.updateAutomationRunDivergence(runId, divergenceId);
-    divergencePath = divergence.path;
-  } catch (err) {
-    const endedAtMs = deps.now();
-    const errorMessage = `Failed to create divergence: ${err instanceof Error ? err.message : String(err)}`;
-    await Promise.all([
-      deps.updateAutomationRun(runId, {
+  const useWorkspaceMode = Boolean(input.workspace);
+
+  if (useWorkspaceMode && input.workspace) {
+    divergencePath = input.workspace.folderPath;
+    divergenceId = 0;
+  } else {
+    try {
+      const settings = await deps.loadProjectSettings(project.id);
+      const branchName = buildAutomationBranchName(input.automation.id, input.automation.name, deps.now());
+      const divergence = await deps.createDivergenceRepository({
+        project,
+        branchName,
+        copyIgnoredSkip: settings.copyIgnoredSkip,
+        useExistingBranch: false,
+      });
+      divergenceId = await deps.insertDivergenceRecord(divergence);
+      await deps.updateAutomationRunDivergence(runId, divergenceId);
+      divergencePath = divergence.path;
+    } catch (err) {
+      const endedAtMs = deps.now();
+      const errorMessage = `Failed to create divergence: ${err instanceof Error ? err.message : String(err)}`;
+      await Promise.all([
+        deps.updateAutomationRun(runId, {
+          status: "error",
+          startedAtMs,
+          endedAtMs,
+          error: errorMessage,
+        }),
+        deps.markAutomationRunSchedule(input.automation.id, {
+          lastRunAtMs: endedAtMs,
+          nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
+        }),
+      ]);
+      return {
+        runId,
         status: "error",
-        startedAtMs,
-        endedAtMs,
         error: errorMessage,
-      }),
-      deps.markAutomationRunSchedule(input.automation.id, {
-        lastRunAtMs: endedAtMs,
-        nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
-      }),
-    ]);
-    return {
-      runId,
-      status: "error",
-      error: errorMessage,
-    };
+      };
+    }
   }
 
   let dbFinalized = false;

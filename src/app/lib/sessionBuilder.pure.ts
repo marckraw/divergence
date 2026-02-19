@@ -1,4 +1,4 @@
-import type { Project, Divergence, TerminalSession } from "../../entities";
+import type { Project, Divergence, TerminalSession, Workspace, WorkspaceDivergence } from "../../entities";
 import type { ProjectSettings } from "../../entities/project";
 import { DEFAULT_USE_TMUX } from "../../entities/project";
 import { buildTmuxSessionName } from "../../entities/terminal-session";
@@ -16,11 +16,29 @@ export interface BuildTerminalSessionInput {
   tmuxSessionName?: string;
 }
 
+export interface BuildWorkspaceSessionInput {
+  workspace: Workspace;
+  globalTmuxHistoryLimit: number;
+  sessionId?: string;
+  sessionName?: string;
+  sessionRole?: TerminalSession["sessionRole"];
+  tmuxSessionName?: string;
+}
+
+export interface BuildWorkspaceDivergenceSessionInput {
+  workspaceDivergence: WorkspaceDivergence;
+  globalTmuxHistoryLimit: number;
+  sessionId?: string;
+  sessionName?: string;
+  sessionRole?: TerminalSession["sessionRole"];
+  tmuxSessionName?: string;
+}
+
 export function generateSessionEntropy(): string {
   return `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }
 
-export function buildWorkspaceKey(type: "project" | "divergence", targetId: number): string {
+export function buildWorkspaceKey(type: "project" | "divergence" | "workspace" | "workspace_divergence", targetId: number): string {
   return `${type}:${targetId}`;
 }
 
@@ -57,6 +75,54 @@ export function buildTerminalSession(input: BuildTerminalSessionInput): Terminal
     useTmux,
     tmuxSessionName,
     tmuxHistoryLimit,
+    status: "idle",
+  };
+}
+
+export function buildWorkspaceTerminalSession(input: BuildWorkspaceSessionInput): TerminalSession {
+  const { workspace, globalTmuxHistoryLimit } = input;
+  const tmuxSessionName = input.tmuxSessionName ?? buildTmuxSessionName({
+    type: "workspace",
+    projectName: workspace.name,
+    projectId: workspace.id,
+  });
+
+  return {
+    id: input.sessionId ?? `workspace-${workspace.id}`,
+    type: "workspace",
+    targetId: workspace.id,
+    projectId: 0,
+    workspaceKey: buildWorkspaceKey("workspace", workspace.id),
+    sessionRole: input.sessionRole ?? "default",
+    name: input.sessionName ?? workspace.name,
+    path: workspace.folderPath,
+    useTmux: true,
+    tmuxSessionName,
+    tmuxHistoryLimit: globalTmuxHistoryLimit,
+    status: "idle",
+  };
+}
+
+export function buildWorkspaceDivergenceTerminalSession(input: BuildWorkspaceDivergenceSessionInput): TerminalSession {
+  const { workspaceDivergence, globalTmuxHistoryLimit } = input;
+  const tmuxSessionName = input.tmuxSessionName ?? buildTmuxSessionName({
+    type: "workspace_divergence",
+    projectName: workspaceDivergence.name,
+    projectId: workspaceDivergence.id,
+  });
+
+  return {
+    id: input.sessionId ?? `workspace_divergence-${workspaceDivergence.id}`,
+    type: "workspace_divergence",
+    targetId: workspaceDivergence.id,
+    projectId: 0,
+    workspaceKey: buildWorkspaceKey("workspace_divergence", workspaceDivergence.id),
+    sessionRole: input.sessionRole ?? "default",
+    name: input.sessionName ?? workspaceDivergence.name,
+    path: workspaceDivergence.folderPath,
+    useTmux: true,
+    tmuxSessionName,
+    tmuxHistoryLimit: globalTmuxHistoryLimit,
     status: "idle",
   };
 }

@@ -1,4 +1,4 @@
-export type TmuxSessionKind = "project" | "divergence";
+export type TmuxSessionKind = "project" | "divergence" | "workspace" | "workspace_divergence";
 
 const MAX_SESSION_NAME_LENGTH = 120;
 
@@ -20,7 +20,7 @@ interface TmuxSessionNameInput {
 
 export function buildTmuxSessionName(input: TmuxSessionNameInput): string {
   const projectLabel = sanitizeTmuxLabel(input.projectName) || "project";
-  const kindLabel = input.type === "divergence" ? "branch" : "project";
+  const kindLabel = input.type === "divergence" ? "branch" : input.type === "workspace" ? "workspace" : input.type === "workspace_divergence" ? "ws-div" : "project";
   const parts = ["divergence", kindLabel, projectLabel];
 
   if (input.type === "divergence") {

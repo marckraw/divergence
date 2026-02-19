@@ -21,7 +21,7 @@ jobs:
 
       - name: Install Chaperone
         env:
-          CHAPERONE_VERSION: v0.3.0
+          CHAPERONE_VERSION: v0.4.0
           CHAPERONE_REPO: marckraw/chaperone-cli
         run: |
           case "$(uname -m)" in
