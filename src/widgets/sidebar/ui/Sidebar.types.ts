@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import type { Project, Divergence, TerminalSession } from "../../../entities";
+import type { Project, Divergence, TerminalSession, Workspace, WorkspaceMember, WorkspaceDivergence } from "../../../entities";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../../features/work-sidebar";
 
 export interface SidebarProps {
@@ -29,6 +29,16 @@ export interface SidebarProps {
   ) => void;
   onDeleteDivergence: (divergence: Divergence, origin: string) => Promise<void>;
   isCollapsed: boolean;
+  workspaces: Workspace[];
+  membersByWorkspaceId: Map<number, WorkspaceMember[]>;
+  onSelectWorkspace: (workspace: Workspace) => void;
+  onCreateWorkspace: () => void;
+  onDeleteWorkspace: (workspace: Workspace) => Promise<void>;
+  onOpenWorkspaceSettings: (workspace: Workspace) => void;
+  onCreateWorkspaceDivergence: (workspace: Workspace) => void;
+  workspaceDivergencesByWorkspaceId: Map<number, WorkspaceDivergence[]>;
+  onSelectWorkspaceDivergence: (wd: WorkspaceDivergence) => void;
+  onDeleteWorkspaceDivergence: (wd: WorkspaceDivergence) => Promise<void>;
 }
 
 export interface SidebarDeleteState {
@@ -37,11 +47,11 @@ export interface SidebarDeleteState {
 }
 
 export interface SidebarContextMenuState {
-  type: "project" | "divergence" | "session";
+  type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence";
   id: number | string;
   x: number;
   y: number;
-  item: Project | Divergence | TerminalSession;
+  item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence;
 }
 
 export interface SidebarPresentationalProps extends SidebarProps {
@@ -56,8 +66,8 @@ export interface SidebarPresentationalProps extends SidebarProps {
   onToggleAllProjects: () => void;
   onContextMenuOpen: (
     event: MouseEvent,
-    type: "project" | "divergence" | "session",
-    item: Project | Divergence | TerminalSession
+    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
+    item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence
   ) => void;
   onContextMenuClose: () => void;
   onContextMenuRemoveProject: () => Promise<void>;
@@ -65,4 +75,6 @@ export interface SidebarPresentationalProps extends SidebarProps {
   onContextMenuDeleteDivergence: () => void;
   onContextMenuCloseSession: () => void;
   onContextMenuCloseSessionAndKillTmux: () => Promise<void>;
+  expandedWorkspaces: Set<number>;
+  onToggleWorkspaceExpand: (workspaceId: number) => void;
 }

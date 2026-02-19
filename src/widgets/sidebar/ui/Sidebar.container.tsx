@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { MouseEvent } from "react";
-import type { Divergence, Project, TerminalSession } from "../../../entities";
+import type { Divergence, Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
 import { selectSingleDirectory } from "../../../shared/api/dialog.api";
 import {
   areAllExpanded,
@@ -29,13 +29,14 @@ function SidebarContainer({
   ...props
 }: SidebarProps) {
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
+  const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<number>>(new Set());
   const hasUserToggledExpansion = useRef(false);
   const [deletingDivergences, setDeletingDivergences] = useState<SidebarDeleteState[]>([]);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<SidebarContextMenuState | null>(null);
 
   useEffect(() => {
-    if (mode === "work") {
+    if (mode === "work" || mode === "workspaces") {
       setContextMenu(null);
       setDeletingDivergences([]);
       setDeleteError(null);
@@ -84,6 +85,18 @@ function SidebarContainer({
   const hasExpandableProjects = expandableProjectIds.length > 0;
   const isAllExpanded = areAllExpanded(expandedProjects, expandableProjectIds);
 
+  const handleToggleWorkspaceExpand = useCallback((workspaceId: number) => {
+    setExpandedWorkspaces((prev) => {
+      const next = new Set(prev);
+      if (next.has(workspaceId)) {
+        next.delete(workspaceId);
+      } else {
+        next.add(workspaceId);
+      }
+      return next;
+    });
+  }, []);
+
   const handleToggleAllProjects = useCallback(() => {
     hasUserToggledExpansion.current = true;
     setExpandedProjects((previous) => toggleAllExpandedProjects(previous, expandableProjectIds));
@@ -91,8 +104,8 @@ function SidebarContainer({
 
   const handleContextMenuOpen = useCallback((
     event: MouseEvent,
-    type: "project" | "divergence" | "session",
-    item: Project | Divergence | TerminalSession
+    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
+    item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence
   ) => {
     event.preventDefault();
     setContextMenu({
@@ -202,6 +215,8 @@ function SidebarContainer({
       onContextMenuDeleteDivergence={handleContextMenuDeleteDivergence}
       onContextMenuCloseSession={handleContextMenuCloseSession}
       onContextMenuCloseSessionAndKillTmux={handleContextMenuCloseSessionAndKillTmux}
+      expandedWorkspaces={expandedWorkspaces}
+      onToggleWorkspaceExpand={handleToggleWorkspaceExpand}
     />
   );
 }

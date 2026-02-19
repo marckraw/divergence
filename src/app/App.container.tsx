@@ -19,11 +19,21 @@ import {
 import { MergeNotification, useMergeDetection, type MergeNotificationData } from "../features/merge-detection";
 import { executeDeleteDivergence } from "../features/delete-divergence";
 import { executeRemoveProject } from "../features/remove-project";
+import {
+  CreateWorkspaceModal,
+  CreateWorkspaceDivergenceModal,
+  executeCreateWorkspace,
+  executeDeleteWorkspace,
+  executeCreateWorkspaceDivergences,
+  executeDeleteWorkspaceDivergence,
+} from "../features/workspace-management";
+import { WorkspaceSettings } from "../features/workspace-settings";
 import { TaskCenterPage, TaskToasts, useTaskCenter } from "../features/task-center";
 import { hydrateTasksFromAutomationRuns } from "../entities/task";
 import type { WorkSidebarMode, WorkSidebarTab } from "../features/work-sidebar";
 import { useAllDivergences } from "../entities/divergence";
 import { useProjectSettingsMap, useProjects } from "../entities/project";
+import { useWorkspaces } from "../entities/workspace";
 import { useAutomations } from "../entities/automation";
 import {
   useInboxEvents,
@@ -51,7 +61,7 @@ import {
 } from "../features/diff-review";
 import { notifyCommandFinished } from "../shared";
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
-import { buildTerminalSession, buildWorkspaceKey, generateSessionEntropy } from "./lib/sessionBuilder.pure";
+import { buildTerminalSession, buildWorkspaceKey, buildWorkspaceTerminalSession, buildWorkspaceDivergenceTerminalSession, generateSessionEntropy } from "./lib/sessionBuilder.pure";
 import {
   buildNextSplitState,
   closeFocusedSplitPane,
@@ -90,6 +100,12 @@ function App() {
   } = useAllDivergences();
   const { settingsByProjectId, updateProjectSettings } = useProjectSettingsMap(projects);
   const { settings: appSettings } = useAppSettings();
+  const {
+    workspaces: workspaceList,
+    membersByWorkspaceId,
+    workspaceDivergencesByWorkspaceId,
+    refresh: refreshWorkspaces,
+  } = useWorkspaces();
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [splitBySessionId, setSplitBySessionId] = useState<Map<string, SplitSessionState>>(new Map());
@@ -98,6 +114,9 @@ function App() {
   const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
+  const [activeWorkspaceSettingsId, setActiveWorkspaceSettingsId] = useState<number | null>(null);
+  const [createWorkspaceDivergenceFor, setCreateWorkspaceDivergenceFor] = useState<import("../entities").Workspace | null>(null);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -720,7 +739,7 @@ function App() {
 
   const handleSidebarModeChange = useCallback((mode: WorkSidebarMode) => {
     setSidebarMode(mode);
-    if (mode === "work") {
+    if (mode === "work" || mode === "workspaces") {
       setShowQuickSwitcher(false);
       setShowSettings(false);
     }
@@ -823,6 +842,119 @@ function App() {
       refreshDivergences,
     });
   }, [closeSessionsForDivergence, projectsById, refreshDivergences, runTask]);
+
+  const handleSelectWorkspace = useCallback((workspace: import("../entities").Workspace) => {
+    const id = `workspace-${workspace.id}`;
+    const existing = sessionsRef.current.get(id);
+    if (existing) {
+      setActiveSessionId(existing.id);
+      return;
+    }
+
+    const session = buildWorkspaceTerminalSession({
+      workspace,
+      globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+    });
+
+    setSessions((previous) => {
+      const next = new Map(previous);
+      next.set(id, session);
+      return next;
+    });
+    setActiveSessionId(session.id);
+  }, [appSettings.tmuxHistoryLimit]);
+
+  const handleCreateWorkspace = useCallback(async (
+    name: string,
+    description: string,
+    selectedProjectIds: number[],
+  ): Promise<void> => {
+    const selectedProjects = projects.filter((p) => selectedProjectIds.includes(p.id));
+    await executeCreateWorkspace({
+      name,
+      description,
+      selectedProjects,
+      runTask,
+      refreshWorkspaces,
+    });
+  }, [projects, refreshWorkspaces, runTask]);
+
+  const closeSessionsForWorkspaceDivergence = useCallback((wdId: number) => {
+    const sessionsToClose = Array.from(sessionsRef.current.entries())
+      .filter(([, s]) => s.type === "workspace_divergence" && s.targetId === wdId)
+      .map(([sessionId]) => sessionId);
+    sessionsToClose.forEach(handleCloseSession);
+  }, [handleCloseSession]);
+
+  const handleDeleteWorkspace = useCallback(async (
+    workspace: import("../entities").Workspace,
+  ): Promise<void> => {
+    await executeDeleteWorkspace({
+      workspace,
+      runTask,
+      closeSessionsForWorkspace: () => {
+        const sessionsToClose = Array.from(sessionsRef.current.entries())
+          .filter(([, s]) => s.type === "workspace" && s.targetId === workspace.id)
+          .map(([sessionId]) => sessionId);
+        sessionsToClose.forEach(handleCloseSession);
+      },
+      closeSessionsForWorkspaceDivergence,
+      refreshWorkspaces,
+    });
+  }, [closeSessionsForWorkspaceDivergence, handleCloseSession, refreshWorkspaces, runTask]);
+
+  const handleSelectWorkspaceDivergence = useCallback((wd: import("../entities").WorkspaceDivergence) => {
+    const id = `workspace_divergence-${wd.id}`;
+    const existing = sessionsRef.current.get(id);
+    if (existing) {
+      setActiveSessionId(existing.id);
+      return;
+    }
+
+    const session = buildWorkspaceDivergenceTerminalSession({
+      workspaceDivergence: wd,
+      globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+    });
+
+    setSessions((previous) => {
+      const next = new Map(previous);
+      next.set(id, session);
+      return next;
+    });
+    setActiveSessionId(session.id);
+  }, [appSettings.tmuxHistoryLimit]);
+
+  const handleDeleteWorkspaceDivergence = useCallback(async (
+    wd: import("../entities").WorkspaceDivergence,
+  ): Promise<void> => {
+    await executeDeleteWorkspaceDivergence({
+      workspaceDivergence: wd,
+      runTask,
+      closeSessionsForWorkspaceDivergence,
+      refreshWorkspaces,
+    });
+  }, [closeSessionsForWorkspaceDivergence, refreshWorkspaces, runTask]);
+
+  const handleOpenWorkspaceSettings = useCallback((workspace: import("../entities").Workspace) => {
+    setActiveWorkspaceSettingsId(workspace.id);
+  }, []);
+
+  const handleCreateWorkspaceDivergences = useCallback(async (
+    workspace: import("../entities").Workspace,
+    memberProjects: Project[],
+    branchName: string,
+    useExistingBranch: boolean,
+  ): Promise<void> => {
+    await executeCreateWorkspaceDivergences({
+      workspace,
+      memberProjects,
+      branchName,
+      useExistingBranch,
+      runTask,
+      refreshDivergences,
+      refreshWorkspaces,
+    });
+  }, [refreshDivergences, refreshWorkspaces, runTask]);
 
   const handleRemoveProject = useCallback(async (id: number): Promise<void> => {
     const projectName = projectsById.get(id)?.name ?? "project";
@@ -1246,6 +1378,16 @@ function App() {
           onCreateAdditionalSession={handleCreateAdditionalSession}
           onDeleteDivergence={handleDeleteDivergence}
           isCollapsed={!isSidebarOpen}
+          workspaces={workspaceList}
+          membersByWorkspaceId={membersByWorkspaceId}
+          onSelectWorkspace={handleSelectWorkspace}
+          onCreateWorkspace={() => setCreateWorkspaceOpen(true)}
+          onDeleteWorkspace={handleDeleteWorkspace}
+          onOpenWorkspaceSettings={handleOpenWorkspaceSettings}
+          onCreateWorkspaceDivergence={setCreateWorkspaceDivergenceFor}
+          workspaceDivergencesByWorkspaceId={workspaceDivergencesByWorkspaceId}
+          onSelectWorkspaceDivergence={handleSelectWorkspaceDivergence}
+          onDeleteWorkspaceDivergence={handleDeleteWorkspaceDivergence}
         />
       </div>
       {isSidebarOpen && (
@@ -1255,7 +1397,16 @@ function App() {
           onDoubleClick={handleSidebarDragDoubleClick}
         />
       )}
-      {sidebarMode === "work" ? (
+      {activeWorkspaceSettingsId !== null ? (
+        <WorkspaceSettings
+          workspaceId={activeWorkspaceSettingsId}
+          projects={projects}
+          onClose={() => setActiveWorkspaceSettingsId(null)}
+          onWorkspaceDeleted={() => setActiveWorkspaceSettingsId(null)}
+          onDeleteWorkspace={handleDeleteWorkspace}
+          refreshWorkspaces={refreshWorkspaces}
+        />
+      ) : sidebarMode === "work" ? (
         <div className="flex-1 min-w-0 h-full">
           {workTab === "inbox" && (
             <InboxPanel
@@ -1336,11 +1487,17 @@ function App() {
             projects={projects}
             divergencesByProject={divergencesByProject}
             sessions={sessions}
+            workspaces={workspaceList}
+            workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
             onSelect={(type, item) => {
               if (type === "project") {
                 handleSelectProject(item as Project);
               } else if (type === "divergence") {
                 handleSelectDivergence(item as Divergence);
+              } else if (type === "workspace") {
+                handleSelectWorkspace(item as import("../entities").Workspace);
+              } else if (type === "workspace_divergence") {
+                handleSelectWorkspaceDivergence(item as import("../entities").WorkspaceDivergence);
               } else {
                 setSidebarMode("projects");
                 setActiveSessionId((item as TerminalSession).id);
@@ -1383,6 +1540,34 @@ function App() {
             onDeleteDivergence={handleDeleteDivergence}
           />
         )}
+      </AnimatePresence>
+
+      {/* Create Workspace Modal */}
+      <AnimatePresence>
+        {createWorkspaceOpen && (
+          <CreateWorkspaceModal
+            projects={projects}
+            onClose={() => setCreateWorkspaceOpen(false)}
+            onCreate={handleCreateWorkspace}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Create Workspace Divergence Modal */}
+      <AnimatePresence>
+        {createWorkspaceDivergenceFor && (() => {
+          const wsMembers = membersByWorkspaceId.get(createWorkspaceDivergenceFor.id) ?? [];
+          const memberProjectIds = new Set(wsMembers.map((m) => m.projectId));
+          const memberProjects = projects.filter((p) => memberProjectIds.has(p.id));
+          return (
+            <CreateWorkspaceDivergenceModal
+              workspace={createWorkspaceDivergenceFor}
+              memberProjects={memberProjects}
+              onClose={() => setCreateWorkspaceDivergenceFor(null)}
+              onCreateDivergences={handleCreateWorkspaceDivergences}
+            />
+          );
+        })()}
       </AnimatePresence>
 
       <TaskToasts
