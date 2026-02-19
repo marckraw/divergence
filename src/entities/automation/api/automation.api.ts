@@ -27,6 +27,7 @@ export async function insertAutomation(input: CreateAutomationInput): Promise<nu
       intervalHours: input.intervalHours,
       enabled: input.enabled,
       keepSessionAlive: input.keepSessionAlive,
+      workspaceId: input.workspaceId ?? null,
       lastRunAtMs: null,
       nextRunAtMs,
       createdAtMs: nowMs,
@@ -60,6 +61,7 @@ export async function updateAutomation(input: UpdateAutomationInput): Promise<vo
       intervalHours: input.intervalHours,
       enabled: input.enabled,
       keepSessionAlive: input.keepSessionAlive,
+      workspaceId: input.workspaceId ?? null,
       nextRunAtMs,
       updatedAtMs: nowMs,
     })

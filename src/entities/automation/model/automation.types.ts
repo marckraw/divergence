@@ -14,6 +14,7 @@ export interface CreateAutomationInput {
   intervalHours: number;
   enabled: boolean;
   keepSessionAlive: boolean;
+  workspaceId?: number | null;
 }
 
 export interface UpdateAutomationInput extends CreateAutomationInput {
