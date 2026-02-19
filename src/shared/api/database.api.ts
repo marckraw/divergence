@@ -160,6 +160,67 @@ const MIGRATIONS: Migration[] = [
       { sql: "ALTER TABLE automation_runs ADD COLUMN divergence_id INTEGER REFERENCES divergences(id) ON DELETE SET NULL", safeAddColumn: true },
     ],
   },
+  {
+    version: 4,
+    description: "Add workspaces and workspace_members tables",
+    statements: [
+      {
+        sql: `CREATE TABLE IF NOT EXISTS workspaces (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          slug TEXT NOT NULL UNIQUE,
+          description TEXT,
+          folder_path TEXT NOT NULL UNIQUE,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL
+        )`,
+      },
+      {
+        sql: `CREATE TABLE IF NOT EXISTS workspace_members (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL,
+          project_id INTEGER NOT NULL,
+          added_at_ms INTEGER NOT NULL,
+          FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          UNIQUE(workspace_id, project_id)
+        )`,
+      },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace_id ON workspace_members(workspace_id)" },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_workspace_members_project_id ON workspace_members(project_id)" },
+    ],
+  },
+  {
+    version: 5,
+    description: "Add workspace_id to automations",
+    statements: [
+      { sql: "ALTER TABLE automations ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL", safeAddColumn: true },
+    ],
+  },
+  {
+    version: 6,
+    description: "Add workspace_id to inbox_events",
+    statements: [
+      { sql: "ALTER TABLE inbox_events ADD COLUMN workspace_id INTEGER", safeAddColumn: true },
+    ],
+  },
+  {
+    version: 7,
+    description: "Add workspace_divergences table",
+    statements: [
+      {
+        sql: `CREATE TABLE IF NOT EXISTS workspace_divergences (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          branch TEXT NOT NULL,
+          folder_path TEXT NOT NULL UNIQUE,
+          created_at_ms INTEGER NOT NULL
+        )`,
+      },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_workspace_divergences_workspace_id ON workspace_divergences(workspace_id)" },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────

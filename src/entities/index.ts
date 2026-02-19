@@ -37,3 +37,14 @@ export type {
   InboxEventKind,
   InboxFilter,
 } from "./inbox-event";
+export type {
+  CreateWorkspaceInput,
+  UpdateWorkspaceInput,
+  Workspace,
+  WorkspaceMember,
+  WorkspaceWithMembers,
+} from "./workspace";
+export type {
+  InsertWorkspaceDivergenceInput,
+  WorkspaceDivergence,
+} from "./workspace-divergence";
