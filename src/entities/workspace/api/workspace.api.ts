@@ -51,7 +51,8 @@ export async function updateWorkspace(input: UpdateWorkspaceInput): Promise<void
 }
 
 export async function deleteWorkspaceWithRelations(workspaceId: number): Promise<void> {
-  await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId));
+  // workspaceMembers and workspaceDivergences have ON DELETE CASCADE,
+  // so deleting the workspace row handles child cleanup automatically.
   await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
 }
 

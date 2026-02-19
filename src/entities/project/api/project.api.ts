@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../../shared/api/drizzle.api";
-import { divergences, projects, projectSettings } from "../../../shared/api/schema.types";
+import { projects } from "../../../shared/api/schema.types";
 import type { Project } from "../model/project.types";
 
 export async function listProjects(): Promise<Project[]> {
@@ -12,9 +12,9 @@ export async function insertProject(name: string, path: string): Promise<void> {
 }
 
 export async function deleteProjectWithRelations(projectId: number): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx.delete(divergences).where(eq(divergences.projectId, projectId));
-    await tx.delete(projectSettings).where(eq(projectSettings.projectId, projectId));
-    await tx.delete(projects).where(eq(projects.id, projectId));
-  });
+  // All child tables (divergences, projectSettings, automations, workspaceMembers)
+  // have ON DELETE CASCADE, so deleting the project row handles everything.
+  // Avoid db.transaction() — the sqlite-proxy driver sends BEGIN/COMMIT as
+  // separate statements which can land on different pooled connections.
+  await db.delete(projects).where(eq(projects.id, projectId));
 }
