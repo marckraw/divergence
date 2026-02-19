@@ -1,6 +1,6 @@
 import type { Divergence, Project, TerminalSession } from "../../../entities";
 
-export type SessionType = "project" | "divergence";
+export type SessionType = "project" | "divergence" | "workspace" | "workspace_divergence";
 
 export function buildSessionId(type: SessionType, id: number): string {
   return `${type}-${id}`;
