@@ -1078,3 +1078,11 @@ pub async fn delete_workspace_folder(folder_path: String) -> Result<(), String> 
 pub async fn get_workspaces_base_path() -> Result<String, String> {
     Ok(path_to_string(&get_workspaces_dir()))
 }
+
+#[tauri::command]
+pub async fn check_port_available(port: u16) -> Result<bool, String> {
+    match std::net::TcpListener::bind(("127.0.0.1", port)) {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}

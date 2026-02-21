@@ -22,6 +22,7 @@ const WORK_NAV_ITEMS: Array<{ id: WorkSidebarTab; label: string }> = [
   { id: "inbox", label: "Inbox" },
   { id: "task_center", label: "Task Center" },
   { id: "automations", label: "Automations" },
+  { id: "ports", label: "Ports" },
   { id: "debug", label: "Debug" },
 ];
 

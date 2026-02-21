@@ -370,6 +370,7 @@ function MainAreaContainer({
                 useTmux={session.useTmux}
                 tmuxSessionName={paneTmuxName}
                 tmuxHistoryLimit={session.tmuxHistoryLimit}
+                portEnv={session.portEnv}
                 onStatusChange={isSplit ? handleSplitStatusChange(session.id, paneId) : handleStatusChange(session.id)}
                 onReconnect={() => onReconnectSession(session.id)}
                 onRegisterCommand={isPrimaryPane ? onRegisterTerminalCommand : undefined}

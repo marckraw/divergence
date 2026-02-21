@@ -48,3 +48,8 @@ export type {
   InsertWorkspaceDivergenceInput,
   WorkspaceDivergence,
 } from "./workspace-divergence";
+export type {
+  PortAllocation,
+  PortEntityType,
+  AllocatePortInput,
+} from "./port-management";

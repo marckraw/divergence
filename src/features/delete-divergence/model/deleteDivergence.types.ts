@@ -16,4 +16,5 @@ export interface DeleteDivergenceParams {
   runTask: DeleteDivergenceRunTask;
   closeSessionsForDivergence: (divergenceId: number) => void;
   refreshDivergences: () => Promise<void>;
+  refreshPortAllocations?: () => void;
 }

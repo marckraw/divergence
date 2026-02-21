@@ -25,6 +25,8 @@ export interface ProjectSettings {
   useTmux: boolean;
   useWebgl: boolean;
   tmuxHistoryLimit: number | null;
+  defaultPort: number | null;
+  framework: string | null;
 }
 
 export async function loadProjectSettings(projectId: number): Promise<ProjectSettings> {
@@ -41,6 +43,8 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
       useTmux: DEFAULT_USE_TMUX,
       useWebgl: true,
       tmuxHistoryLimit: null,
+      defaultPort: null,
+      framework: null,
     };
   }
 
@@ -56,6 +60,8 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
         tmuxHistoryLimit: historyLimit === null || historyLimit === undefined
           ? null
           : normalizeTmuxHistoryLimit(historyLimit, DEFAULT_TMUX_HISTORY_LIMIT),
+        defaultPort: row.defaultPort ?? null,
+        framework: row.framework ?? null,
       };
     }
   } catch {
@@ -68,6 +74,8 @@ export async function loadProjectSettings(projectId: number): Promise<ProjectSet
     useTmux: DEFAULT_USE_TMUX,
     useWebgl: true,
     tmuxHistoryLimit: null,
+    defaultPort: null,
+    framework: null,
   };
 }
 
@@ -76,7 +84,9 @@ export async function saveProjectSettings(
   copyIgnoredSkip: string[],
   useTmux: boolean,
   useWebgl: boolean,
-  tmuxHistoryLimit: number | null
+  tmuxHistoryLimit: number | null,
+  defaultPort: number | null = null,
+  framework: string | null = null,
 ): Promise<ProjectSettings> {
   const normalized = normalizeSkipList(copyIgnoredSkip);
   const normalizedHistoryLimit = tmuxHistoryLimit === null
@@ -91,6 +101,8 @@ export async function saveProjectSettings(
       useTmux,
       useWebgl,
       tmuxHistoryLimit: normalizedHistoryLimit,
+      defaultPort,
+      framework,
     })
     .onConflictDoUpdate({
       target: projectSettings.projectId,
@@ -99,6 +111,8 @@ export async function saveProjectSettings(
         useTmux,
         useWebgl,
         tmuxHistoryLimit: normalizedHistoryLimit,
+        defaultPort,
+        framework,
       },
     });
 
@@ -108,5 +122,7 @@ export async function saveProjectSettings(
     useTmux,
     useWebgl,
     tmuxHistoryLimit: normalizedHistoryLimit,
+    defaultPort,
+    framework,
   };
 }

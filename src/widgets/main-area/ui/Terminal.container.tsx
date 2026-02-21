@@ -35,6 +35,7 @@ interface TerminalProps {
   useTmux?: boolean;
   tmuxSessionName?: string;
   tmuxHistoryLimit?: number;
+  portEnv?: Record<string, string>;
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterCommand?: (sessionId: string) => void;
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
@@ -124,6 +125,7 @@ function Terminal({
   useTmux = false,
   tmuxSessionName,
   tmuxHistoryLimit,
+  portEnv,
   onRegisterCommand,
   onUnregisterCommand,
   onStatusChange,
@@ -339,6 +341,7 @@ function Terminal({
             TERM: "xterm-256color",
             COLORTERM: "truecolor",
             DIVERGENCE_APP: "1",
+            ...portEnv,
           },
         });
 
@@ -360,6 +363,7 @@ function Terminal({
                 historyLimit: tmuxHistoryLimit ?? DEFAULT_TMUX_HISTORY_LIMIT,
                 env: {
                   DIVERGENCE_APP: "1",
+                  ...portEnv,
                 },
               })
             : spawnShell();
@@ -643,6 +647,7 @@ function Terminal({
     updateStatus,
     useTmux,
     tmuxSessionName,
+    portEnv,
     onRegisterCommand,
     onUnregisterCommand,
     tmuxHistoryLimit,

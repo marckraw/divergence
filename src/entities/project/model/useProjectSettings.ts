@@ -35,12 +35,14 @@ export function useProjectSettings(projectId: number | null) {
     copyIgnoredSkip: string[],
     useTmux: boolean,
     useWebgl: boolean,
-    tmuxHistoryLimit: number | null
+    tmuxHistoryLimit: number | null,
+    defaultPort: number | null = null,
+    framework: string | null = null,
   ) => {
     if (projectId === null) {
       return;
     }
-    const saved = await saveProjectSettings(projectId, copyIgnoredSkip, useTmux, useWebgl, tmuxHistoryLimit);
+    const saved = await saveProjectSettings(projectId, copyIgnoredSkip, useTmux, useWebgl, tmuxHistoryLimit, defaultPort, framework);
     setSettings(saved);
     return saved;
   }, [projectId]);

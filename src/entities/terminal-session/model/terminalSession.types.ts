@@ -12,6 +12,7 @@ export interface TerminalSession {
   tmuxHistoryLimit: number;
   status: "idle" | "active" | "busy";
   lastActivity?: Date;
+  portEnv?: Record<string, string>;
 }
 
 export type SplitOrientation = "vertical" | "horizontal";
