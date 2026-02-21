@@ -1,7 +1,8 @@
-import type { Project, Divergence, TerminalSession, Workspace, WorkspaceDivergence } from "../../entities";
+import type { Project, Divergence, TerminalSession, Workspace, WorkspaceDivergence, PortAllocation } from "../../entities";
 import type { ProjectSettings } from "../../entities/project";
 import { DEFAULT_USE_TMUX } from "../../entities/project";
 import { buildTmuxSessionName } from "../../entities/terminal-session";
+import { buildPortEnvVars } from "../../entities/port-management";
 
 export interface BuildTerminalSessionInput {
   type: "project" | "divergence";
@@ -14,6 +15,7 @@ export interface BuildTerminalSessionInput {
   sessionRole?: TerminalSession["sessionRole"];
   workspaceKey?: string;
   tmuxSessionName?: string;
+  portAllocation?: PortAllocation | null;
 }
 
 export interface BuildWorkspaceSessionInput {
@@ -32,6 +34,7 @@ export interface BuildWorkspaceDivergenceSessionInput {
   sessionName?: string;
   sessionRole?: TerminalSession["sessionRole"];
   tmuxSessionName?: string;
+  portAllocation?: PortAllocation | null;
 }
 
 export function generateSessionEntropy(): string {
@@ -63,6 +66,11 @@ export function buildTerminalSession(input: BuildTerminalSessionInput): Terminal
     branch: branchName,
   });
 
+  const portAllocation = input.portAllocation ?? null;
+  const portEnv = portAllocation
+    ? buildPortEnvVars(portAllocation.port, portAllocation.framework, portAllocation.proxyHostname)
+    : undefined;
+
   return {
     id: input.sessionId ?? `${type}-${target.id}`,
     type,
@@ -76,6 +84,7 @@ export function buildTerminalSession(input: BuildTerminalSessionInput): Terminal
     tmuxSessionName,
     tmuxHistoryLimit,
     status: "idle",
+    portEnv,
   };
 }
 
@@ -111,6 +120,11 @@ export function buildWorkspaceDivergenceTerminalSession(input: BuildWorkspaceDiv
     projectId: workspaceDivergence.id,
   });
 
+  const portAllocation = input.portAllocation ?? null;
+  const portEnv = portAllocation
+    ? buildPortEnvVars(portAllocation.port, portAllocation.framework, portAllocation.proxyHostname)
+    : undefined;
+
   return {
     id: input.sessionId ?? `workspace_divergence-${workspaceDivergence.id}`,
     type: "workspace_divergence",
@@ -124,5 +138,6 @@ export function buildWorkspaceDivergenceTerminalSession(input: BuildWorkspaceDiv
     tmuxSessionName,
     tmuxHistoryLimit: globalTmuxHistoryLimit,
     status: "idle",
+    portEnv,
   };
 }

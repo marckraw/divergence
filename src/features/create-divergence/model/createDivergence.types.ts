@@ -15,4 +15,5 @@ export interface ExecuteCreateDivergenceParams {
   useExistingBranch: boolean;
   runTask: CreateDivergenceRunTask;
   refreshDivergences: () => Promise<void>;
+  refreshPortAllocations?: () => void;
 }

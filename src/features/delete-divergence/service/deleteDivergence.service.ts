@@ -1,4 +1,5 @@
 import { killDivergenceTmuxSessions } from "../../../shared/api/tmuxSessions.api";
+import { deletePortAllocation } from "../../../entities/port-management";
 import {
   deleteDivergenceFiles,
   deleteDivergenceRecord,
@@ -12,6 +13,7 @@ export async function executeDeleteDivergence({
   runTask,
   closeSessionsForDivergence,
   refreshDivergences,
+  refreshPortAllocations,
 }: DeleteDivergenceParams): Promise<void> {
   await runTask<void>({
     kind: "delete_divergence",
@@ -39,6 +41,14 @@ export async function executeDeleteDivergence({
 
       setPhase("Closing open tabs");
       closeSessionsForDivergence(divergence.id);
+
+      setPhase("Deallocating port");
+      try {
+        await deletePortAllocation("divergence", divergence.id);
+        refreshPortAllocations?.();
+      } catch (err) {
+        console.warn("Port deallocation failed (non-fatal):", err);
+      }
 
       setPhase("Removing database record");
       await deleteDivergenceRecord(divergence.id);

@@ -1,5 +1,10 @@
 import { loadProjectSettings } from "../../../entities/project";
 import type { Divergence } from "../../../entities";
+import {
+  allocatePort,
+  detectFrameworkForPath,
+  getAdapterById,
+} from "../../../entities/port-management";
 import { createDivergenceRepository, insertDivergenceRecord } from "../api/createDivergence.api";
 import type { ExecuteCreateDivergenceParams } from "../model/createDivergence.types";
 
@@ -9,6 +14,7 @@ export async function executeCreateDivergence({
   useExistingBranch,
   runTask,
   refreshDivergences,
+  refreshPortAllocations,
 }: ExecuteCreateDivergenceParams): Promise<Divergence> {
   return runTask<Divergence>({
     kind: "create_divergence",
@@ -40,6 +46,24 @@ export async function executeCreateDivergence({
 
       setPhase("Saving divergence record");
       const insertedId = await insertDivergenceRecord(divergence);
+
+      setPhase("Allocating port");
+      try {
+        const detectedFramework = settings.framework
+          ? getAdapterById(settings.framework)
+          : await detectFrameworkForPath(divergence.path);
+        const preferredPort = settings.defaultPort ?? detectedFramework?.defaultPort;
+        await allocatePort({
+          entityType: "divergence",
+          entityId: insertedId,
+          projectId: project.id,
+          framework: detectedFramework?.id ?? null,
+          preferredPort,
+        });
+        refreshPortAllocations?.();
+      } catch (err) {
+        console.warn("Port allocation failed (non-fatal):", err);
+      }
 
       setPhase("Refreshing divergences");
       await refreshDivergences();

@@ -46,6 +46,8 @@ export const projectSettings = sqliteTable("project_settings", {
   useTmux: integer("use_tmux", { mode: "boolean" }).notNull().default(true),
   useWebgl: integer("use_webgl", { mode: "boolean" }).notNull().default(true),
   tmuxHistoryLimit: integer("tmux_history_limit"),
+  defaultPort: integer("default_port"),
+  framework: text("framework"),
 });
 
 export type ProjectSettingsRow = typeof projectSettings.$inferSelect;
@@ -146,6 +148,30 @@ export const githubPollState = sqliteTable("github_poll_state", {
 });
 
 export type GithubPollState = typeof githubPollState.$inferSelect;
+
+// ── Port Allocations ────────────────────────────────────────────────────────
+
+export const portAllocations = sqliteTable(
+  "port_allocations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    entityType: text("entity_type", { enum: ["project", "divergence", "workspace_divergence"] }).notNull(),
+    entityId: integer("entity_id").notNull(),
+    projectId: integer("project_id"),
+    port: integer("port").notNull(),
+    framework: text("framework"),
+    proxyHostname: text("proxy_hostname"),
+    createdAtMs: integer("created_at_ms").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_port_alloc_entity").on(table.entityType, table.entityId),
+    index("idx_port_alloc_project").on(table.projectId),
+    uniqueIndex("idx_port_alloc_port").on(table.port),
+  ],
+);
+
+export type PortAllocationRow = typeof portAllocations.$inferSelect;
+export type InsertPortAllocationRow = typeof portAllocations.$inferInsert;
 
 // ── Workspaces ──────────────────────────────────────────────────────────────
 

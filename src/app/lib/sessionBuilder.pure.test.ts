@@ -58,6 +58,8 @@ describe("session builder utils", () => {
       useTmux: false,
       useWebgl: false,
       tmuxHistoryLimit: 12345,
+      defaultPort: null,
+      framework: null,
     }]]);
 
     const session = buildTerminalSession({

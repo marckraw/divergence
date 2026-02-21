@@ -34,6 +34,7 @@ import type { WorkSidebarMode, WorkSidebarTab } from "../features/work-sidebar";
 import { useAllDivergences } from "../entities/divergence";
 import { useProjectSettingsMap, useProjects } from "../entities/project";
 import { useWorkspaces } from "../entities/workspace";
+import { usePortAllocations, type PortAllocation } from "../entities/port-management";
 import { useAutomations } from "../entities/automation";
 import {
   useInboxEvents,
@@ -83,6 +84,7 @@ import {
 import { fetchGithubPullRequests } from "./api/githubPullRequests.api";
 import type { GithubRepoTarget } from "./model/githubPullRequests.types";
 import { DebugConsolePanel } from "../features/debug-console";
+import { PortDashboard } from "../features/port-dashboard";
 
 const NOTIFY_MIN_BUSY_MS = 5000;
 const NOTIFY_IDLE_DELAY_MS = 1500;
@@ -106,6 +108,7 @@ function App() {
     workspaceDivergencesByWorkspaceId,
     refresh: refreshWorkspaces,
   } = useWorkspaces();
+  const { allocations: portAllocations, refresh: refreshPortAllocations } = usePortAllocations();
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [splitBySessionId, setSplitBySessionId] = useState<Map<string, SplitSessionState>>(new Map());
@@ -291,6 +294,15 @@ function App() {
     return map;
   }, [projects]);
 
+  // Port allocation lookup by entity key
+  const portAllocationByEntityKey = useMemo(() => {
+    const map = new Map<string, PortAllocation>();
+    for (const alloc of portAllocations) {
+      map.set(`${alloc.entityType}:${alloc.entityId}`, alloc);
+    }
+    return map;
+  }, [portAllocations]);
+
   // Flatten divergences for merge detection
   const allDivergences = useMemo(() => {
     const all: Divergence[] = [];
@@ -406,12 +418,14 @@ function App() {
       return existing;
     }
 
+    const portAllocation = portAllocationByEntityKey.get(`${type}:${target.id}`) ?? null;
     const session = buildTerminalSession({
       type,
       target,
       settingsByProjectId,
       projectsById,
       globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+      portAllocation,
     });
 
     setSessions((previous) => {
@@ -420,7 +434,7 @@ function App() {
       return next;
     });
     return session;
-  }, [settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
+  }, [settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, portAllocationByEntityKey]);
 
   const createManualSession = useCallback((
     type: "project" | "divergence",
@@ -432,12 +446,14 @@ function App() {
       .filter((session) => session.type === type && session.targetId === target.id);
     const manualIndex = workspaceSessions.filter((session) => session.sessionRole === "manual").length + 1;
 
+    const portAllocation = portAllocationByEntityKey.get(`${type}:${target.id}`) ?? null;
     const base = buildTerminalSession({
       type,
       target,
       settingsByProjectId,
       projectsById,
       globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+      portAllocation,
     });
     const session: TerminalSession = {
       ...base,
@@ -458,7 +474,7 @@ function App() {
       return next;
     });
     return session;
-  }, [settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit]);
+  }, [settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, portAllocationByEntityKey]);
 
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
@@ -825,8 +841,9 @@ function App() {
       useExistingBranch,
       runTask,
       refreshDivergences,
+      refreshPortAllocations,
     });
-  }, [refreshDivergences, runTask]);
+  }, [refreshDivergences, refreshPortAllocations, runTask]);
 
   const handleDeleteDivergence = useCallback(async (
     divergence: Divergence,
@@ -840,8 +857,9 @@ function App() {
       runTask,
       closeSessionsForDivergence,
       refreshDivergences,
+      refreshPortAllocations,
     });
-  }, [closeSessionsForDivergence, projectsById, refreshDivergences, runTask]);
+  }, [closeSessionsForDivergence, projectsById, refreshDivergences, refreshPortAllocations, runTask]);
 
   const handleSelectWorkspace = useCallback((workspace: import("../entities").Workspace) => {
     const id = `workspace-${workspace.id}`;
@@ -911,9 +929,11 @@ function App() {
       return;
     }
 
+    const portAllocation = portAllocationByEntityKey.get(`workspace_divergence:${wd.id}`) ?? null;
     const session = buildWorkspaceDivergenceTerminalSession({
       workspaceDivergence: wd,
       globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+      portAllocation,
     });
 
     setSessions((previous) => {
@@ -922,7 +942,7 @@ function App() {
       return next;
     });
     setActiveSessionId(session.id);
-  }, [appSettings.tmuxHistoryLimit]);
+  }, [appSettings.tmuxHistoryLimit, portAllocationByEntityKey]);
 
   const handleDeleteWorkspaceDivergence = useCallback(async (
     wd: import("../entities").WorkspaceDivergence,
@@ -932,8 +952,9 @@ function App() {
       runTask,
       closeSessionsForWorkspaceDivergence,
       refreshWorkspaces,
+      refreshPortAllocations,
     });
-  }, [closeSessionsForWorkspaceDivergence, refreshWorkspaces, runTask]);
+  }, [closeSessionsForWorkspaceDivergence, refreshPortAllocations, refreshWorkspaces, runTask]);
 
   const handleOpenWorkspaceSettings = useCallback((workspace: import("../entities").Workspace) => {
     setActiveWorkspaceSettingsId(workspace.id);
@@ -953,8 +974,9 @@ function App() {
       runTask,
       refreshDivergences,
       refreshWorkspaces,
+      refreshPortAllocations,
     });
-  }, [refreshDivergences, refreshWorkspaces, runTask]);
+  }, [refreshDivergences, refreshPortAllocations, refreshWorkspaces, runTask]);
 
   const handleRemoveProject = useCallback(async (id: number): Promise<void> => {
     const projectName = projectsById.get(id)?.name ?? "project";
@@ -1062,12 +1084,14 @@ function App() {
     // user lands on the main automation output, not a random agent window.
     const entropy = generateSessionEntropy();
     const sessionId = `project-${projectId}#automation-${entropy}`;
+    const portAlloc = portAllocationByEntityKey.get(`project:${projectId}`) ?? null;
     const base = buildTerminalSession({
       type: "project",
       target: project,
       settingsByProjectId,
       projectsById,
       globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+      portAllocation: portAlloc,
     });
     const session: TerminalSession = {
       ...base,
@@ -1096,7 +1120,7 @@ function App() {
     } catch (err) {
       console.warn("Failed to attach to automation tmux session:", err);
     }
-  }, [projectById, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, sendCommandToSession]);
+  }, [projectById, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, portAllocationByEntityKey, sendCommandToSession]);
 
   const pollGithubInbox = useCallback(async (): Promise<void> => {
     if (githubPollingInFlightRef.current) {
@@ -1444,6 +1468,13 @@ function App() {
               onUpdateAutomation={handleUpdateAutomation}
               onDeleteAutomation={handleDeleteAutomation}
               onRunAutomationNow={handleRunAutomationNow}
+            />
+          )}
+          {workTab === "ports" && (
+            <PortDashboard
+              projects={projects}
+              divergencesByProject={divergencesByProject}
+              workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
             />
           )}
           {workTab === "debug" && <DebugConsolePanel />}

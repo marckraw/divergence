@@ -221,6 +221,30 @@ const MIGRATIONS: Migration[] = [
       { sql: "CREATE INDEX IF NOT EXISTS idx_workspace_divergences_workspace_id ON workspace_divergences(workspace_id)" },
     ],
   },
+  {
+    version: 8,
+    description: "Add port_allocations table and port columns to project_settings",
+    statements: [
+      {
+        sql: `CREATE TABLE IF NOT EXISTS port_allocations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          entity_type TEXT NOT NULL CHECK(entity_type IN ('project', 'divergence', 'workspace_divergence')),
+          entity_id INTEGER NOT NULL,
+          project_id INTEGER,
+          port INTEGER NOT NULL,
+          framework TEXT,
+          proxy_hostname TEXT,
+          created_at_ms INTEGER NOT NULL,
+          UNIQUE(entity_type, entity_id)
+        )`,
+      },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_port_alloc_entity ON port_allocations(entity_type, entity_id)" },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_port_alloc_project ON port_allocations(project_id)" },
+      { sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_port_alloc_port ON port_allocations(port)" },
+      { sql: "ALTER TABLE project_settings ADD COLUMN default_port INTEGER", safeAddColumn: true },
+      { sql: "ALTER TABLE project_settings ADD COLUMN framework TEXT", safeAddColumn: true },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────

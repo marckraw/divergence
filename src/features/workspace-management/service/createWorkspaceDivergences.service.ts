@@ -3,6 +3,11 @@ import { loadProjectSettings } from "../../../entities/project";
 import { generateWorkspaceSlug } from "../../../entities/workspace";
 import { insertWorkspaceDivergenceAndGetId } from "../../../entities/workspace-divergence";
 import {
+  allocatePort,
+  detectFrameworkForPath,
+  getAdapterById,
+} from "../../../entities/port-management";
+import {
   createDivergenceRepository,
   insertDivergenceRecord,
 } from "../../create-divergence/api/createDivergence.api";
@@ -21,6 +26,7 @@ export interface ExecuteCreateWorkspaceDivergencesParams {
   runTask: RunBackgroundTask;
   refreshDivergences: () => Promise<void>;
   refreshWorkspaces: () => Promise<void>;
+  refreshPortAllocations?: () => void;
 }
 
 export async function executeCreateWorkspaceDivergences({
@@ -31,6 +37,7 @@ export async function executeCreateWorkspaceDivergences({
   runTask,
   refreshDivergences,
   refreshWorkspaces,
+  refreshPortAllocations,
 }: ExecuteCreateWorkspaceDivergencesParams): Promise<void> {
   const total = memberProjects.length;
 
@@ -63,8 +70,25 @@ export async function executeCreateWorkspaceDivergences({
           useExistingBranch,
         });
 
-        await insertDivergenceRecord(divergence);
+        const insertedId = await insertDivergenceRecord(divergence);
         createdDivergences.push({ name: divergence.name, path: divergence.path });
+
+        // Allocate port for each divergence (non-fatal)
+        try {
+          const detectedFramework = settings.framework
+            ? getAdapterById(settings.framework)
+            : await detectFrameworkForPath(divergence.path);
+          const preferredPort = settings.defaultPort ?? detectedFramework?.defaultPort;
+          await allocatePort({
+            entityType: "divergence",
+            entityId: insertedId,
+            projectId: project.id,
+            framework: detectedFramework?.id ?? null,
+            preferredPort,
+          });
+        } catch (err) {
+          console.warn(`Port allocation failed for ${divergence.name} (non-fatal):`, err);
+        }
       }
 
       // Create the workspace divergence folder with symlinks to divergence paths
@@ -80,16 +104,29 @@ export async function executeCreateWorkspaceDivergences({
       );
 
       setPhase("Saving workspace divergence record");
-      await insertWorkspaceDivergenceAndGetId({
+      const wsDivId = await insertWorkspaceDivergenceAndGetId({
         workspaceId: workspace.id,
         name: wsDivSlug,
         branch: branchName,
         folderPath: folderResult.folderPath,
       });
 
+      // Allocate port for workspace divergence (non-fatal)
+      try {
+        await allocatePort({
+          entityType: "workspace_divergence",
+          entityId: wsDivId,
+          projectId: null,
+          framework: null,
+        });
+      } catch (err) {
+        console.warn("Port allocation for workspace divergence failed (non-fatal):", err);
+      }
+
       setPhase("Refreshing");
       await refreshDivergences();
       await refreshWorkspaces();
+      refreshPortAllocations?.();
     },
   });
 }
