@@ -1,6 +1,9 @@
 import type { RunBackgroundTask, WorkspaceDivergence } from "../../../entities";
 import { deleteWorkspaceDivergence } from "../../../entities/workspace-divergence";
-import { deletePortAllocation } from "../../../entities/port-management";
+import {
+  cleanupProxyForEntity,
+  deletePortAllocation,
+} from "../../../entities/port-management";
 import { deleteWorkspaceFolder } from "../api/workspaceFolder.api";
 
 export interface ExecuteDeleteWorkspaceDivergenceParams {
@@ -37,6 +40,7 @@ export async function executeDeleteWorkspaceDivergence({
 
       setPhase("Deallocating port");
       try {
+        await cleanupProxyForEntity("workspace_divergence", workspaceDivergence.id);
         await deletePortAllocation("workspace_divergence", workspaceDivergence.id);
         refreshPortAllocations?.();
       } catch (err) {

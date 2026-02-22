@@ -1,5 +1,8 @@
 import { killDivergenceTmuxSessions } from "../../../shared/api/tmuxSessions.api";
-import { deletePortAllocation } from "../../../entities/port-management";
+import {
+  cleanupProxyForEntity,
+  deletePortAllocation,
+} from "../../../entities/port-management";
 import {
   deleteDivergenceFiles,
   deleteDivergenceRecord,
@@ -44,6 +47,7 @@ export async function executeDeleteDivergence({
 
       setPhase("Deallocating port");
       try {
+        await cleanupProxyForEntity("divergence", divergence.id);
         await deletePortAllocation("divergence", divergence.id);
         refreshPortAllocations?.();
       } catch (err) {

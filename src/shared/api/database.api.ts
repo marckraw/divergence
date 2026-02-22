@@ -245,6 +245,19 @@ const MIGRATIONS: Migration[] = [
       { sql: "ALTER TABLE project_settings ADD COLUMN framework TEXT", safeAddColumn: true },
     ],
   },
+  {
+    version: 9,
+    description: "Add workspace_settings table",
+    statements: [
+      {
+        sql: `CREATE TABLE IF NOT EXISTS workspace_settings (
+          workspace_id INTEGER PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+          default_port INTEGER,
+          framework TEXT
+        )`,
+      },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────

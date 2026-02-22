@@ -188,6 +188,19 @@ export const workspaces = sqliteTable("workspaces", {
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 export type InsertWorkspaceRow = typeof workspaces.$inferInsert;
 
+// ── Workspace Settings ─────────────────────────────────────────────────────
+
+export const workspaceSettings = sqliteTable("workspace_settings", {
+  workspaceId: integer("workspace_id")
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: "cascade" }),
+  defaultPort: integer("default_port"),
+  framework: text("framework"),
+});
+
+export type WorkspaceSettingsRow = typeof workspaceSettings.$inferSelect;
+export type InsertWorkspaceSettingsRow = typeof workspaceSettings.$inferInsert;
+
 // ── Workspace Members ───────────────────────────────────────────────────────
 
 // ── Workspace Divergences ────────────────────────────────────────────────

@@ -47,6 +47,7 @@ export type {
   CreateWorkspaceInput,
   UpdateWorkspaceInput,
   Workspace,
+  WorkspaceSettings,
   WorkspaceMember,
   WorkspaceWithMembers,
 } from "./workspace";

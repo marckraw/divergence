@@ -11,6 +11,7 @@ export {
   listPortAllocationsForProject,
   updateProxyHostname,
 } from "./api/portAllocation.api";
+export { checkPortAvailable } from "./api/portAvailability.api";
 export { detectFrameworkForPath } from "./api/frameworkDetection.api";
 export {
   buildPortEnvVars,
@@ -28,3 +29,7 @@ export {
   usePortAllocations,
   useProjectPortAllocations,
 } from "./model/usePortAllocations";
+export {
+  cleanupProxyForEntity,
+  ensureProxyForEntity,
+} from "./service/proxyRoute.service";

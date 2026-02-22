@@ -4,6 +4,7 @@ import {
   getWorkspace,
   listWorkspaceMembers,
   removeWorkspaceMember,
+  saveWorkspaceSettings,
   updateWorkspace,
 } from "../../../entities/workspace";
 import { updateWorkspaceFolder } from "../../workspace-management/api/workspaceFolder.api";
@@ -36,10 +37,21 @@ export async function updateWorkspaceMembers(
   );
 }
 
-export async function saveWorkspaceMetadata(
-  workspaceId: number,
-  name: string,
-  description: string | null,
-): Promise<void> {
+interface SaveWorkspaceConfigurationInput {
+  workspaceId: number;
+  name: string;
+  description: string | null;
+  defaultPort: number | null;
+  framework: string | null;
+}
+
+export async function saveWorkspaceConfiguration({
+  workspaceId,
+  name,
+  description,
+  defaultPort,
+  framework,
+}: SaveWorkspaceConfigurationInput): Promise<void> {
   await updateWorkspace({ id: workspaceId, name, description });
+  await saveWorkspaceSettings(workspaceId, defaultPort, framework);
 }

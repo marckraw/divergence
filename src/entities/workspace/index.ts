@@ -2,6 +2,7 @@ export type {
   CreateWorkspaceInput,
   UpdateWorkspaceInput,
   Workspace,
+  WorkspaceSettings,
   WorkspaceMember,
   WorkspaceWithMembers,
 } from "./model/workspace.types";
@@ -17,6 +18,10 @@ export {
   removeWorkspaceMember,
   updateWorkspace,
 } from "./api/workspace.api";
+export {
+  loadWorkspaceSettings,
+  saveWorkspaceSettings,
+} from "./api/workspaceSettings.api";
 export {
   buildWorkspaceFolderPath,
   generateWorkspaceSlug,

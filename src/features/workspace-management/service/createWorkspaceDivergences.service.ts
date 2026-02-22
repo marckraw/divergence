@@ -1,10 +1,12 @@
 import type { Project, RunBackgroundTask, Workspace } from "../../../entities";
 import { loadProjectSettings } from "../../../entities/project";
+import { loadWorkspaceSettings } from "../../../entities/workspace";
 import { generateWorkspaceSlug } from "../../../entities/workspace";
 import { insertWorkspaceDivergenceAndGetId } from "../../../entities/workspace-divergence";
 import {
   allocatePort,
   detectFrameworkForPath,
+  ensureProxyForEntity,
   getAdapterById,
 } from "../../../entities/port-management";
 import {
@@ -55,6 +57,11 @@ export async function executeCreateWorkspaceDivergences({
     successMessage: `Created divergences for ${total} projects + workspace divergence`,
     errorMessage: `Failed to create workspace divergences`,
     run: async ({ setPhase }) => {
+      setPhase("Loading workspace settings");
+      const workspaceSettings = await loadWorkspaceSettings(workspace.id);
+      const workspaceFrameworkAdapter = workspaceSettings.framework
+        ? getAdapterById(workspaceSettings.framework)
+        : null;
       const createdDivergences: CreatedDivergenceInfo[] = [];
 
       for (let i = 0; i < memberProjects.length; i++) {
@@ -75,16 +82,28 @@ export async function executeCreateWorkspaceDivergences({
 
         // Allocate port for each divergence (non-fatal)
         try {
-          const detectedFramework = settings.framework
+          const projectFrameworkAdapter = settings.framework
             ? getAdapterById(settings.framework)
-            : await detectFrameworkForPath(divergence.path);
-          const preferredPort = settings.defaultPort ?? detectedFramework?.defaultPort;
-          await allocatePort({
+            : null;
+          const detectedFramework = workspaceFrameworkAdapter
+            ?? projectFrameworkAdapter
+            ?? await detectFrameworkForPath(divergence.path);
+          const preferredPort = workspaceSettings.defaultPort
+            ?? settings.defaultPort
+            ?? detectedFramework?.defaultPort;
+          const allocation = await allocatePort({
             entityType: "divergence",
             entityId: insertedId,
             projectId: project.id,
             framework: detectedFramework?.id ?? null,
             preferredPort,
+          });
+          await ensureProxyForEntity({
+            entityType: "divergence",
+            entityId: insertedId,
+            scopeName: project.name,
+            branchName,
+            targetPort: allocation.port,
           });
         } catch (err) {
           console.warn(`Port allocation failed for ${divergence.name} (non-fatal):`, err);
@@ -113,11 +132,19 @@ export async function executeCreateWorkspaceDivergences({
 
       // Allocate port for workspace divergence (non-fatal)
       try {
-        await allocatePort({
+        const allocation = await allocatePort({
           entityType: "workspace_divergence",
           entityId: wsDivId,
           projectId: null,
-          framework: null,
+          framework: workspaceFrameworkAdapter?.id ?? null,
+          preferredPort: workspaceSettings.defaultPort ?? undefined,
+        });
+        await ensureProxyForEntity({
+          entityType: "workspace_divergence",
+          entityId: wsDivId,
+          scopeName: workspace.name,
+          branchName,
+          targetPort: allocation.port,
         });
       } catch (err) {
         console.warn("Port allocation for workspace divergence failed (non-fatal):", err);

@@ -333,13 +333,20 @@ function MainAreaPresentational({
                         exit="exit"
                         transition={panelTransition}
                       >
-                        <ProjectSettingsPanel
-                          project={activeProject}
-                          globalTmuxHistoryLimit={globalTmuxHistoryLimit}
-                          onSaved={onProjectSettingsSaved}
-                          contextPath={activeRootPath}
-                          contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
-                        />
+                        {activeSession.type === "workspace" || activeSession.type === "workspace_divergence" ? (
+                          <div className="h-full p-4 text-sm text-subtext">
+                            Workspace sessions use workspace-level settings. Open workspace settings from the sidebar
+                            context menu to manage port defaults and metadata.
+                          </div>
+                        ) : (
+                          <ProjectSettingsPanel
+                            project={activeProject}
+                            globalTmuxHistoryLimit={globalTmuxHistoryLimit}
+                            onSaved={onProjectSettingsSaved}
+                            contextPath={activeRootPath}
+                            contextLabel={activeSession.type === "divergence" ? "Divergence" : "Project"}
+                          />
+                        )}
                       </motion.div>
                     ) : rightPanelTab === "files" ? (
                       <motion.div

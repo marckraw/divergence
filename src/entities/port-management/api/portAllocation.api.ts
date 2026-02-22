@@ -3,6 +3,11 @@ import { db } from "../../../shared/api/drizzle.api";
 import { portAllocations } from "../../../shared/api/schema.types";
 import type { PortAllocation, PortEntityType, AllocatePortInput } from "../model/portAllocation.types";
 import { findNextFreePort } from "../lib/portScanner.pure";
+import { checkPortAvailable } from "./portAvailability.api";
+
+function isValidPort(port: number | undefined): port is number {
+  return typeof port === "number" && Number.isInteger(port) && port >= 1 && port <= 65535;
+}
 
 function rowToAllocation(row: typeof portAllocations.$inferSelect): PortAllocation {
   return {
@@ -54,10 +59,33 @@ export async function allocatePort(input: AllocatePortInput): Promise<PortAlloca
 
   const allRows = await db.select({ port: portAllocations.port }).from(portAllocations);
   const allocatedPorts = new Set(allRows.map((r) => r.port));
+  let selectedPort: number | null = null;
+  const preferredPort = input.preferredPort;
 
-  const port = findNextFreePort(allocatedPorts, input.preferredPort);
-  if (port === null) {
-    throw new Error("No free ports available in the configured range (3100-3999).");
+  if (isValidPort(preferredPort) && !allocatedPorts.has(preferredPort)) {
+    const available = await checkPortAvailable(preferredPort);
+    if (available) {
+      selectedPort = preferredPort;
+    }
+  }
+
+  if (selectedPort === null) {
+    let candidate = findNextFreePort(allocatedPorts);
+    while (candidate !== null) {
+      const available = await checkPortAvailable(candidate);
+      if (available) {
+        selectedPort = candidate;
+        break;
+      }
+      allocatedPorts.add(candidate);
+      candidate = findNextFreePort(allocatedPorts);
+    }
+  }
+
+  if (selectedPort === null) {
+    throw new Error(
+      "No free and available ports were found in range 3100-3999 (and preferred port was unavailable).",
+    );
   }
 
   const nowMs = Date.now();
@@ -65,7 +93,7 @@ export async function allocatePort(input: AllocatePortInput): Promise<PortAlloca
     entityType: input.entityType,
     entityId: input.entityId,
     projectId: input.projectId,
-    port,
+    port: selectedPort,
     framework: input.framework,
     createdAtMs: nowMs,
   });

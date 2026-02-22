@@ -3,6 +3,7 @@ import type { Divergence } from "../../../entities";
 import {
   allocatePort,
   detectFrameworkForPath,
+  ensureProxyForEntity,
   getAdapterById,
 } from "../../../entities/port-management";
 import { createDivergenceRepository, insertDivergenceRecord } from "../api/createDivergence.api";
@@ -53,12 +54,19 @@ export async function executeCreateDivergence({
           ? getAdapterById(settings.framework)
           : await detectFrameworkForPath(divergence.path);
         const preferredPort = settings.defaultPort ?? detectedFramework?.defaultPort;
-        await allocatePort({
+        const allocation = await allocatePort({
           entityType: "divergence",
           entityId: insertedId,
           projectId: project.id,
           framework: detectedFramework?.id ?? null,
           preferredPort,
+        });
+        await ensureProxyForEntity({
+          entityType: "divergence",
+          entityId: insertedId,
+          scopeName: project.name,
+          branchName,
+          targetPort: allocation.port,
         });
         refreshPortAllocations?.();
       } catch (err) {
