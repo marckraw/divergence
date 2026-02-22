@@ -43,6 +43,10 @@ import {
   upsertGithubPollState,
 } from "../entities/inbox-event";
 import { recordDebugEvent, useAppSettings, useUpdater } from "../shared";
+import {
+  areSplitPaneSizesEqual,
+  normalizeSplitPaneSizes,
+} from "../entities";
 import type {
   Project,
   Divergence,
@@ -693,6 +697,26 @@ function App() {
       }
       const next = new Map(prev);
       next.set(sessionId, nextState);
+      return next;
+    });
+  }, []);
+
+  const handleResizeSplitPanes = useCallback((sessionId: string, paneSizes: number[]) => {
+    setSplitBySessionId((prev) => {
+      const current = prev.get(sessionId);
+      if (!current || current.paneIds.length <= 1) {
+        return prev;
+      }
+      const nextSizes = normalizeSplitPaneSizes(current.paneIds.length, paneSizes);
+      const currentSizes = normalizeSplitPaneSizes(current.paneIds.length, current.paneSizes);
+      if (areSplitPaneSizesEqual(currentSizes, nextSizes)) {
+        return prev;
+      }
+      const next = new Map(prev);
+      next.set(sessionId, {
+        ...current,
+        paneSizes: nextSizes,
+      });
       return next;
     });
   }, []);
@@ -1522,6 +1546,7 @@ function App() {
           splitBySessionId={splitBySessionId}
           onSplitSession={handleSplitSession}
           onFocusSplitPane={handleFocusSplitPane}
+          onResizeSplitPanes={handleResizeSplitPanes}
           onResetSplitSession={handleResetSplitSession}
           reconnectBySessionId={reconnectBySessionId}
           onReconnectSession={handleReconnectSession}

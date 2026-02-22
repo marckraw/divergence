@@ -21,3 +21,9 @@ export {
   buildTmuxOwnershipMap,
   countOrphanTmuxSessions,
 } from "./lib/tmuxOwnership.pure";
+export {
+  areSplitPaneSizesEqual,
+  buildEqualSplitPaneSizes,
+  normalizeSplitPaneSizes,
+  resizeSplitPaneSizes,
+} from "./lib/splitPaneSizes.pure";

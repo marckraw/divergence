@@ -1,3 +1,7 @@
+import {
+  buildEqualSplitPaneSizes,
+  normalizeSplitPaneSizes,
+} from "../../entities";
 import type {
   SplitOrientation,
   SplitPaneId,
@@ -25,6 +29,7 @@ export function buildNextSplitState(
     return {
       orientation,
       paneIds: ["pane-1", "pane-2"],
+      paneSizes: [0.5, 0.5],
       focusedPaneId: "pane-2",
       primaryPaneId: "pane-1",
     };
@@ -44,10 +49,14 @@ export function buildNextSplitState(
   const primaryPaneId = paneIds.includes(current.primaryPaneId)
     ? current.primaryPaneId
     : paneIds[0];
+  const paneSizes = paneIds.length === current.paneIds.length
+    ? normalizeSplitPaneSizes(paneIds.length, current.paneSizes)
+    : buildEqualSplitPaneSizes(paneIds.length);
 
   return {
     orientation,
     paneIds,
+    paneSizes,
     focusedPaneId: paneIds.includes(focusedPaneId) ? focusedPaneId : primaryPaneId,
     primaryPaneId,
   };
@@ -81,6 +90,14 @@ export function closeFocusedSplitPane(
   if (paneIds.length === 0) {
     return null;
   }
+  const normalizedPaneSizes = normalizeSplitPaneSizes(current.paneIds.length, current.paneSizes);
+  const paneSizeByPaneId = new Map<SplitPaneId, number>(
+    current.paneIds.map((paneId, index) => [paneId, normalizedPaneSizes[index] ?? 0])
+  );
+  const paneSizes = normalizeSplitPaneSizes(
+    paneIds.length,
+    paneIds.map((paneId) => paneSizeByPaneId.get(paneId) ?? 0)
+  );
 
   const primaryPaneId = paneIds.includes(current.primaryPaneId)
     ? current.primaryPaneId
@@ -92,6 +109,7 @@ export function closeFocusedSplitPane(
   return {
     ...current,
     paneIds,
+    paneSizes,
     primaryPaneId,
     focusedPaneId,
   };

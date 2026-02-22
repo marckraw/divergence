@@ -14,16 +14,22 @@ describe("split session utils", () => {
   it("creates split state and caps at max panes", () => {
     const first = buildNextSplitState(null, "vertical");
     expect(first.paneIds).toEqual(["pane-1", "pane-2"]);
+    expect(first.paneSizes).toEqual([0.5, 0.5]);
     expect(first.focusedPaneId).toBe("pane-2");
     expect(first.primaryPaneId).toBe("pane-1");
 
     const second = buildNextSplitState(first, "vertical");
     expect(second.paneIds).toEqual(["pane-1", "pane-2", "pane-3"]);
     expect(second.paneIds).toHaveLength(MAX_SPLIT_PANES);
+    expect(second.paneSizes).toHaveLength(MAX_SPLIT_PANES);
+    expect(second.paneSizes?.[0]).toBeCloseTo(1 / 3, 5);
+    expect(second.paneSizes?.[1]).toBeCloseTo(1 / 3, 5);
+    expect(second.paneSizes?.[2]).toBeCloseTo(1 / 3, 5);
 
     const third = buildNextSplitState(second, "horizontal");
     expect(third.paneIds).toEqual(["pane-1", "pane-2", "pane-3"]);
     expect(third.orientation).toBe("horizontal");
+    expect(third.paneSizes).toEqual(second.paneSizes);
   });
 
   it("tracks focus and closes focused pane", () => {
@@ -36,6 +42,7 @@ describe("split session utils", () => {
 
     const afterClose = closeFocusedSplitPane(focused);
     expect(afterClose?.paneIds).toEqual(["pane-1", "pane-3"]);
+    expect(afterClose?.paneSizes).toEqual([0.5, 0.5]);
     expect(afterClose?.focusedPaneId).toBe("pane-1");
   });
 
