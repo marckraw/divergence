@@ -31,7 +31,9 @@ export type AppShortcutAction =
   | { type: "reconnect_terminal" }
   | { type: "select_tab"; index: number }
   | { type: "select_previous_tab" }
-  | { type: "select_next_tab" };
+  | { type: "select_next_tab" }
+  | { type: "focus_previous_pane" }
+  | { type: "focus_next_pane" };
 
 export function resolveAppShortcut(
   event: AppShortcutEvent,
@@ -115,17 +117,17 @@ export function resolveAppShortcut(
   }
 
   if (isMeta && event.key === "[") {
-    if (!context.hasActiveSession || context.sessionCount <= 1) {
+    if (!context.hasActiveSession) {
       return null;
     }
-    return { type: "select_previous_tab" };
+    return { type: "focus_previous_pane" };
   }
 
   if (isMeta && event.key === "]") {
-    if (!context.hasActiveSession || context.sessionCount <= 1) {
+    if (!context.hasActiveSession) {
       return null;
     }
-    return { type: "select_next_tab" };
+    return { type: "focus_next_pane" };
   }
 
   return null;

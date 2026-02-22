@@ -36,6 +36,7 @@ interface TerminalProps {
   tmuxSessionName?: string;
   tmuxHistoryLimit?: number;
   portEnv?: Record<string, string>;
+  isFocused?: boolean;
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterCommand?: (sessionId: string) => void;
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
@@ -126,6 +127,7 @@ function Terminal({
   tmuxSessionName,
   tmuxHistoryLimit,
   portEnv,
+  isFocused,
   onRegisterCommand,
   onUnregisterCommand,
   onStatusChange,
@@ -671,6 +673,12 @@ function Terminal({
       terminal.refresh(0, terminal.rows - 1);
     }
   }, [themeMode, sessionId]);
+
+  useEffect(() => {
+    if (isFocused) {
+      terminalRef.current?.focus();
+    }
+  }, [isFocused]);
 
   if (error) {
     return (

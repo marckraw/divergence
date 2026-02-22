@@ -42,8 +42,8 @@ describe("app shortcuts utils", () => {
       type: "select_tab",
       index: 1,
     });
-    expect(resolveAppShortcut({ ...baseEvent, key: "[" }, baseContext)?.type).toBe("select_previous_tab");
-    expect(resolveAppShortcut({ ...baseEvent, key: "]" }, baseContext)?.type).toBe("select_next_tab");
+    expect(resolveAppShortcut({ ...baseEvent, key: "[" }, baseContext)?.type).toBe("focus_previous_pane");
+    expect(resolveAppShortcut({ ...baseEvent, key: "]" }, baseContext)?.type).toBe("focus_next_pane");
   });
 
   it("enforces preconditions", () => {

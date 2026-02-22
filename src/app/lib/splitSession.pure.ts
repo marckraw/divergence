@@ -97,6 +97,34 @@ export function closeFocusedSplitPane(
   };
 }
 
+export function focusNextSplitPane(
+  current: SplitSessionState,
+): SplitSessionState {
+  if (current.paneIds.length <= 1) {
+    return current;
+  }
+  const currentIndex = current.paneIds.indexOf(current.focusedPaneId);
+  const nextIndex = currentIndex < current.paneIds.length - 1 ? currentIndex + 1 : 0;
+  return {
+    ...current,
+    focusedPaneId: current.paneIds[nextIndex],
+  };
+}
+
+export function focusPreviousSplitPane(
+  current: SplitSessionState,
+): SplitSessionState {
+  if (current.paneIds.length <= 1) {
+    return current;
+  }
+  const currentIndex = current.paneIds.indexOf(current.focusedPaneId);
+  const prevIndex = currentIndex > 0 ? currentIndex - 1 : current.paneIds.length - 1;
+  return {
+    ...current,
+    focusedPaneId: current.paneIds[prevIndex],
+  };
+}
+
 export function isDefaultSinglePaneState(
   state: SplitSessionState,
 ): boolean {

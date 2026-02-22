@@ -354,6 +354,7 @@ function MainAreaContainer({
             ? session.tmuxSessionName
             : buildSplitTmuxSessionName(session.tmuxSessionName, paneId);
           const withDivider = index < paneIds.length - 1;
+          const isFocusedPane = isSplit && paneId === (splitState?.focusedPaneId ?? "pane-1");
 
           return (
             <div
@@ -371,6 +372,7 @@ function MainAreaContainer({
                 tmuxSessionName={paneTmuxName}
                 tmuxHistoryLimit={session.tmuxHistoryLimit}
                 portEnv={session.portEnv}
+                isFocused={isFocusedPane}
                 onStatusChange={isSplit ? handleSplitStatusChange(session.id, paneId) : handleStatusChange(session.id)}
                 onReconnect={() => onReconnectSession(session.id)}
                 onRegisterCommand={isPrimaryPane ? onRegisterTerminalCommand : undefined}
