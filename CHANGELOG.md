@@ -1,5 +1,11 @@
 # divergence
 
+## 0.20.0
+
+### Minor Changes
+
+- 5fd4cdb: Add draggable split-pane resizing for terminal sessions in both vertical and horizontal layouts.
+
 ## 0.19.0
 
 ### Minor Changes
