@@ -1,4 +1,5 @@
 import { buildAnchorLabel } from "../lib/diffReview.pure";
+import { Button } from "../../../shared";
 import type { ReviewDraftPanelPresentationalProps } from "./ReviewDraftPanel.types";
 
 function ReviewDraftPanelPresentational({
@@ -53,13 +54,15 @@ function ReviewDraftPanelPresentational({
                   <div key={comment.id} className="px-2 py-2 text-xs">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-subtext">{buildAnchorLabel(comment.anchor)}</span>
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="xs"
                         className="text-subtext hover:text-red"
                         onClick={() => onRemoveComment(comment.id)}
                       >
                         Remove
-                      </button>
+                      </Button>
                     </div>
                     <p className="text-text mt-1 whitespace-pre-wrap break-words">{comment.message}</p>
                   </div>
@@ -95,22 +98,26 @@ function ReviewDraftPanelPresentational({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
+          <Button
             type="button"
             onClick={onClear}
             disabled={isRunning || (!comments.length && finalComment.trim().length === 0)}
+            variant="secondary"
+            size="sm"
             className="flex-1 px-3 py-2 text-xs border border-surface rounded text-subtext hover:text-text disabled:opacity-50"
           >
             Clear Draft
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onRun}
             disabled={isRunning || !canRun}
+            variant="primary"
+            size="sm"
             className="flex-1 px-3 py-2 text-xs bg-accent text-main rounded hover:bg-accent/80 disabled:opacity-50"
           >
             {isRunning ? "Running..." : "Run Agent"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

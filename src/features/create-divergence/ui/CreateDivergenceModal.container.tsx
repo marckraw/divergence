@@ -92,10 +92,6 @@ function CreateDivergenceModalContainer({
       onUseExistingBranchChange={handleUseExistingBranchChange}
       onCreateClick={handleCreate}
       onInputKeyDown={handleInputKeyDown}
-      onOverlayClick={onClose}
-      onPanelClick={(event) => {
-        event.stopPropagation();
-      }}
     />
   );
 }

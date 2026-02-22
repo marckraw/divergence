@@ -4,7 +4,7 @@ import {
   DEFAULT_COPY_IGNORED_SKIP,
   DEFAULT_USE_TMUX,
 } from "../../../entities/project";
-import { normalizeTmuxHistoryLimit } from "../../../shared";
+import { Button, normalizeTmuxHistoryLimit } from "../../../shared";
 import type { ProjectSettings } from "../../../entities/project";
 import { useProjectSettings } from "../../../entities/project";
 import { useRalphyConfig } from "../../../shared";
@@ -302,14 +302,16 @@ function ProjectSettingsPanel({
                   </option>
                 ))}
               </select>
-              <button
+              <Button
                 type="button"
                 onClick={() => { void handleAutoDetectFramework(); }}
                 disabled={loading || isDetecting}
+                variant="secondary"
+                size="xs"
                 className="px-2 py-1 text-[10px] rounded border border-surface text-subtext hover:text-text hover:bg-surface disabled:opacity-40"
               >
                 {isDetecting ? "Detecting..." : "Detect"}
-              </button>
+              </Button>
             </div>
             <div className="flex items-center gap-3">
               <label className="text-xs text-subtext w-20 shrink-0">Default Port</label>
@@ -367,24 +369,28 @@ function ProjectSettingsPanel({
       </div>
 
       <div className="p-4 border-t border-surface flex items-center justify-between gap-2">
-        <button
+        <Button
           onClick={handleReset}
+          variant="ghost"
+          size="xs"
           className="text-xs text-subtext hover:text-text"
           disabled={loading || isSaving}
         >
           Reset to default
-        </button>
+        </Button>
         <div className="flex items-center gap-2">
           {savedAt && (
             <span className="text-xs text-subtext/70">Saved {savedAt}</span>
           )}
-          <button
+          <Button
             onClick={handleSave}
+            variant="primary"
+            size="sm"
             className="px-3 py-1.5 bg-accent text-main text-xs rounded hover:bg-accent/80 disabled:opacity-60"
             disabled={loading || isSaving}
           >
             {isSaving ? "Saving..." : "Save"}
-          </button>
+          </Button>
         </div>
       </div>
       </div>

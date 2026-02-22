@@ -5,6 +5,7 @@ import {
   getTaskStatusLabel,
   type BackgroundTask,
 } from "../../../entities/task";
+import { Button, IconButton, ModalShell } from "../../../shared";
 import type { TaskCenterPageProps } from "./TaskCenterPage.types";
 
 interface TaskCenterPagePresentationalProps extends TaskCenterPageProps {
@@ -33,7 +34,7 @@ function formatRelativeAge(atMs: number | undefined, nowMs: number): string {
 
 function formatDateTime(atMs: number | undefined): string {
   if (!atMs) {
-    return "—";
+    return "-";
   }
   return new Date(atMs).toLocaleString();
 }
@@ -87,7 +88,7 @@ function TaskCenterTaskCard({
 
       <div className="mt-2 text-xs text-subtext">
         <span>{task.phase}</span>
-        <span className="mx-1">•</span>
+        <span className="mx-1">-</span>
         <span>{formatElapsed(task.startedAtMs, task.endedAtMs, nowMs)}</span>
       </div>
       {task.status === "running" && (
@@ -107,40 +108,40 @@ function TaskCenterTaskCard({
       )}
 
       <div className="mt-3 flex items-center justify-end gap-2">
-        <button
-          type="button"
+        <Button
           onClick={(event) => {
             event.stopPropagation();
             onInspectTask(task.id);
           }}
-          className="px-2 py-1 text-xs rounded border border-surface text-text hover:bg-surface"
+          size="xs"
+          variant="secondary"
         >
           Inspect
-        </button>
+        </Button>
         {task.status === "error" && task.retryable && (
-          <button
-            type="button"
+          <Button
             onClick={(event) => {
               event.stopPropagation();
               void onRetryTask(task.id);
             }}
             disabled={isRetrying}
-            className="px-2 py-1 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-60"
+            size="xs"
+            variant="secondary"
           >
             {isRetrying ? "Retrying..." : "Retry"}
-          </button>
+          </Button>
         )}
         {(task.status === "success" || task.status === "error") && onDismissTask && (
-          <button
-            type="button"
+          <Button
             onClick={(event) => {
               event.stopPropagation();
               onDismissTask(task.id);
             }}
-            className="px-2 py-1 text-xs rounded border border-surface text-subtext hover:text-text hover:bg-surface"
+            size="xs"
+            variant="subtle"
           >
             Dismiss
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -161,21 +162,25 @@ function TaskInspectModal({
   const phaseEvents = (task.phaseEvents ?? []).slice().reverse();
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-md border border-surface bg-sidebar">
+    <ModalShell
+      onRequestClose={onClose}
+      size="lg"
+      surface="sidebar"
+      overlayClassName="z-50 p-4"
+      panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+    >
         <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm text-text font-semibold">Task Inspect</h3>
             <p className="text-xs text-subtext mt-1">{task.title}</p>
           </div>
-          <button
-            type="button"
+          <IconButton
             onClick={onClose}
-            className="w-7 h-7 rounded border border-surface text-subtext hover:text-text hover:bg-surface"
-            aria-label="Close"
-          >
-            ×
-          </button>
+            variant="subtle"
+            size="sm"
+            label="Close"
+            icon="x"
+          />
         </div>
 
         <div className="p-4 space-y-4">
@@ -244,7 +249,7 @@ function TaskInspectModal({
                   <div key={`${event.atMs}-${event.phase}-${index}`} className="rounded border border-surface bg-main p-2">
                     <div className="text-xs text-text">{event.phase}</div>
                     <div className="mt-1 text-[11px] text-subtext">
-                      {new Date(event.atMs).toLocaleTimeString()} • {formatRelativeAge(event.atMs, nowMs)}
+                      {new Date(event.atMs).toLocaleTimeString()} - {formatRelativeAge(event.atMs, nowMs)}
                     </div>
                   </div>
                 ))}
@@ -254,24 +259,24 @@ function TaskInspectModal({
 
           {task.kind === "automation_run" && task.target.tmuxSessionName && onAttachToAutomationSession && (
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-surface">
-              <button
-                type="button"
+              <Button
                 onClick={() => {
                   onAttachToAutomationSession(task);
                   onClose();
                 }}
-                className="px-3 py-1.5 text-xs rounded border border-accent/50 text-accent hover:bg-accent/10"
+                variant="secondary"
+                size="sm"
+                className="border-accent/50 text-accent hover:bg-accent/10"
               >
                 View Terminal
-              </button>
+              </Button>
               <span className="text-[11px] text-subtext">
                 Attach to the agent's tmux session
               </span>
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -336,13 +341,13 @@ function TaskCenterPagePresentational({
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-subtext">Recent</h3>
             {recentTasks.length > 0 && (
-              <button
-                type="button"
+              <Button
                 onClick={onDismissAllRecentTasks}
-                className="px-2 py-0.5 text-xs rounded border border-surface text-subtext hover:text-text hover:bg-surface"
+                size="xs"
+                variant="subtle"
               >
                 Clear All
-              </button>
+              </Button>
             )}
           </div>
           {recentTasks.length === 0 ? (

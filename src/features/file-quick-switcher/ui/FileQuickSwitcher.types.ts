@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MouseEvent, RefObject } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 
 export interface FileQuickSwitcherProps {
   rootPath: string;
@@ -18,7 +18,6 @@ export interface FileQuickSwitcherPresentationalProps {
   inputRef: RefObject<HTMLInputElement>;
   listRef: RefObject<HTMLDivElement>;
   onClose: () => void;
-  onPanelClick: (event: MouseEvent<HTMLDivElement>) => void;
   onQueryChange: (next: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSelectFile: (relativePath: string) => void;

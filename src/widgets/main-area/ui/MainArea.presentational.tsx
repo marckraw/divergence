@@ -8,7 +8,7 @@ import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared";
-import { TabButton, ToolbarButton } from "../../../shared";
+import { IconButton, TabButton, ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
 import type { MainAreaPresentationalProps } from "./MainArea.types";
 
@@ -184,27 +184,31 @@ function MainAreaPresentational({
                     </span>
                   )}
 
-                  <button
-                    className="w-4 h-4 flex items-center justify-center text-subtext hover:text-red rounded"
+                  <IconButton
+                    className="w-4 h-4 text-subtext hover:text-red rounded"
                     onClick={(event) => {
                       event.stopPropagation();
                       onCloseSession(session.id);
                     }}
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
+                    variant="ghost"
+                    size="xs"
+                    label={`Close session ${session.name}`}
+                    icon={(
+                      <svg
+                        className="w-3 h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    )}
+                  />
                 </motion.div>
               ))
             )}

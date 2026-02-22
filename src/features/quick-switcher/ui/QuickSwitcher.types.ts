@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MouseEvent, RefObject } from "react";
+import type { KeyboardEvent, RefObject } from "react";
 import type { Divergence, Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
 import type { QuickSwitcherSearchResult } from "../lib/quickSwitcher.pure";
 
@@ -22,7 +22,6 @@ export interface QuickSwitcherPresentationalProps {
   inputRef: RefObject<HTMLInputElement>;
   listRef: RefObject<HTMLDivElement>;
   onClose: () => void;
-  onPanelClick: (event: MouseEvent<HTMLDivElement>) => void;
   onQueryChange: (value: string) => void;
   onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSelectResult: (result: QuickSwitcherSearchResult) => void;

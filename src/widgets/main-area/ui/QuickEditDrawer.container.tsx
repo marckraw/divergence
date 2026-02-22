@@ -29,6 +29,7 @@ import { readDir, readTextFile } from "../../../shared/api/fs.api";
 import {
   FAST_EASE_OUT,
   SOFT_SPRING,
+  Button,
   getContentSwapVariants,
   getSlideUpVariants,
 } from "../../../shared";
@@ -675,13 +676,15 @@ function DiffViewer({
             Select range end line, then click <span className="text-text">Range End</span>.
             You can end on the same line for a one-line selection.
           </span>
-          <button
+          <Button
             type="button"
             className="text-subtext hover:text-text"
             onClick={() => setRangeStartIndex(null)}
+            variant="ghost"
+            size="xs"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       )}
       {lines.map((line) => {
@@ -711,46 +714,56 @@ function DiffViewer({
                     isComposerOpen || isRangeStart ? "opacity-100" : "opacity-0 group-hover/line:opacity-100"
                   }`}
                 >
-                  <button
+                  <Button
                     type="button"
                     className="text-[10px] text-subtext hover:text-text"
                     onClick={() => openSingleComposer(line)}
+                    variant="ghost"
+                    size="xs"
                   >
                     Single
-                  </button>
+                  </Button>
                   {rangeStartIndex === null ? (
-                    <button
+                    <Button
                       type="button"
                       className="text-[10px] text-subtext hover:text-text"
                       onClick={() => setRangeStartIndex(line.index)}
+                      variant="ghost"
+                      size="xs"
                     >
                       Range Start
-                    </button>
+                    </Button>
                   ) : isRangeStart ? (
                     <>
-                      <button
+                      <Button
                         type="button"
                         className="text-[10px] text-subtext hover:text-text"
                         onClick={() => openRangeComposer(rangeStartIndex, line.index)}
+                        variant="ghost"
+                        size="xs"
                       >
                         Range End
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
                         className="text-[10px] text-subtext hover:text-text"
                         onClick={() => setRangeStartIndex(null)}
+                        variant="ghost"
+                        size="xs"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </>
                   ) : (
-                    <button
+                    <Button
                       type="button"
                       className="text-[10px] text-subtext hover:text-text"
                       onClick={() => openRangeComposer(rangeStartIndex, line.index)}
+                      variant="ghost"
+                      size="xs"
                     >
                       Range End
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -780,7 +793,7 @@ function DiffViewer({
                     : "Add comment for this line..."}
                 />
                 <div className="mt-2 flex items-center justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
                     className="text-[10px] text-subtext hover:text-text"
                     onClick={() => {
@@ -788,10 +801,12 @@ function DiffViewer({
                       setComposerText("");
                       setComposerAnchor(null);
                     }}
+                    variant="ghost"
+                    size="xs"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     className="px-2 py-1 text-[10px] bg-accent text-main rounded disabled:opacity-50"
                     disabled={!composerText.trim()}
@@ -804,9 +819,11 @@ function DiffViewer({
                       setComposerText("");
                       setComposerAnchor(null);
                     }}
+                    variant="primary"
+                    size="xs"
                   >
                     Add
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

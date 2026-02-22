@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangesMode, GitChangeEntry, GitChangeStatus } from "../../../entities";
+import { Button } from "../../../shared";
 import { getRelativePathFromRoot, sortGitChangesByPath } from "../lib/changes.pure";
 import {
   listBranchChanges,
@@ -97,7 +98,7 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
         <div className="flex items-center justify-between px-3 py-2 border-b border-surface">
           <div className="flex items-center gap-2">
             <div className="flex items-center rounded bg-surface text-xs">
-              <button
+              <Button
                 type="button"
                 className={`px-2 py-1 rounded transition-colors ${
                   mode === "working"
@@ -105,10 +106,12 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
                     : "text-subtext hover:text-text"
                 }`}
                 onClick={() => onModeChange("working")}
+                variant={mode === "working" ? "primary" : "ghost"}
+                size="xs"
               >
                 Working
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 className={`px-2 py-1 rounded transition-colors ${
                   mode === "branch"
@@ -116,19 +119,23 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
                     : "text-subtext hover:text-text"
                 }`}
                 onClick={() => onModeChange("branch")}
+                variant={mode === "branch" ? "primary" : "ghost"}
+                size="xs"
               >
                 Branch
-              </button>
+              </Button>
             </div>
           </div>
-          <button
+          <Button
             type="button"
             className="text-xs text-subtext hover:text-text"
             onClick={loadChanges}
             disabled={loading}
+            variant="ghost"
+            size="xs"
           >
             {loading ? "Refreshing..." : "Refresh"}
-          </button>
+          </Button>
         </div>
         {mode === "branch" && (
           <div className="px-3 py-1.5 border-b border-surface">
@@ -158,13 +165,15 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
             const statusStyle = STATUS_STYLES[entry.status] ?? STATUS_STYLES["?"];
             const isActive = activeRelative === entry.path;
             return (
-              <button
+              <Button
                 key={`${entry.status}-${entry.path}`}
                 type="button"
                 onClick={() => onOpenChange(entry)}
                 className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded transition-colors ${
                   isActive ? "bg-surface" : "hover:bg-surface/50"
                 }`}
+                variant="ghost"
+                size="xs"
               >
                 <span
                   className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${statusStyle.className} ${statusStyle.textClassName}`}
@@ -187,7 +196,7 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
                     </div>
                   )}
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>

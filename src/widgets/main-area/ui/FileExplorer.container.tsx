@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants, getPopVariants } from "../../../shared";
+import { Button, FAST_EASE_OUT, SOFT_SPRING, getCollapseVariants, getPopVariants } from "../../../shared";
 import { MenuButton, ToolbarButton } from "../../../shared";
 import { readDir, remove } from "../../../shared/api/fs.api";
 import {
@@ -243,7 +243,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                   layout="position"
                   transition={layoutTransition}
                 >
-                  <button
+                  <Button
                     type="button"
                     className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
                       isActive
@@ -253,6 +253,8 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                     style={{ paddingLeft: `${depth * 12 + 8}px` }}
                     onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
                     onContextMenu={(event) => handleContextMenuOpen(event, entry, path)}
+                    variant="ghost"
+                    size="xs"
                   >
                     {entry.isDir ? (
                       <>
@@ -269,7 +271,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                       <FileBadge name={entry.name} />
                     )}
                     <span className="truncate">{entry.name}</span>
-                  </button>
+                  </Button>
                   {entry.isDir && (
                     <AnimatePresence initial={false}>
                       {isExpanded && (
@@ -296,7 +298,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
             const isActive = activeFilePath === entry.path;
             return (
               <div key={entry.path}>
-                <button
+                <Button
                   type="button"
                   className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
                     isActive
@@ -306,6 +308,8 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                   style={{ paddingLeft: `${depth * 12 + 8}px` }}
                   onClick={() => (entry.isDir ? toggleDir(entry) : onOpenFile(entry.path))}
                   onContextMenu={(event) => handleContextMenuOpen(event, entry, path)}
+                  variant="ghost"
+                  size="xs"
                 >
                   {entry.isDir ? (
                     <>
@@ -322,7 +326,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                     <FileBadge name={entry.name} />
                   )}
                   <span className="truncate">{entry.name}</span>
-                </button>
+                </Button>
                 {entry.isDir && isExpanded && renderEntries(entry.path, depth + 1)}
               </div>
             );

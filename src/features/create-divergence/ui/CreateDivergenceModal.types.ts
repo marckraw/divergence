@@ -1,4 +1,4 @@
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent } from "react";
 import type { Divergence, Project } from "../../../entities";
 
 export interface CreateDivergenceModalProps {
@@ -22,6 +22,4 @@ export interface CreateDivergenceModalPresentationalProps {
   onUseExistingBranchChange: (next: boolean) => void;
   onCreateClick: () => Promise<void>;
   onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  onOverlayClick: () => void;
-  onPanelClick: (event: MouseEvent<HTMLDivElement>) => void;
 }

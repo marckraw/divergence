@@ -1,6 +1,12 @@
 import { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { FAST_EASE_OUT, SOFT_SPRING, getSlideInRightVariants } from "../../../shared";
+import {
+  Button,
+  FAST_EASE_OUT,
+  IconButton,
+  SOFT_SPRING,
+  getSlideInRightVariants,
+} from "../../../shared";
 import type { MergeNotificationPresentationalProps } from "./MergeNotification.types";
 
 function MergeNotificationPresentational({
@@ -59,43 +65,51 @@ function MergeNotificationPresentational({
             )}
           </div>
 
-          <button
+          <IconButton
             onClick={onClose}
-            className="text-subtext hover:text-text p-1"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+            variant="subtle"
+            size="xs"
+            className="p-1"
+            label="Close"
+            icon={(
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            )}
+          />
         </div>
 
         <div className="flex gap-2 mt-4">
-          <button
+          <Button
             onClick={onClose}
+            variant="secondary"
+            size="sm"
             className="flex-1 px-3 py-2 text-sm text-subtext hover:text-text border border-surface rounded hover:bg-surface/50"
             disabled={isDeleting}
           >
             Keep
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               void onDelete();
             }}
             disabled={isDeleting}
+            variant="danger"
+            size="sm"
             className="flex-1 px-3 py-2 text-sm bg-red/20 text-red hover:bg-red/30 rounded disabled:opacity-50"
           >
             {isDeleting ? "Deleting..." : "Delete Divergence"}
-          </button>
+          </Button>
         </div>
       </div>
     </motion.div>

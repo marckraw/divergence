@@ -6,6 +6,7 @@ Updated: 2026-02-06
 
 This is the short, enforceable reference for day-to-day architecture decisions.
 For rollout history, see `docs/plans/repository-architecture-migration-plan.md`.
+For shared UI conventions, see `docs/architecture/design-system-quick-reference.md`.
 
 ## Layers
 
