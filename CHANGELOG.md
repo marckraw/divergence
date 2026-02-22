@@ -1,5 +1,11 @@
 # divergence
 
+## 0.21.1
+
+### Patch Changes
+
+- 69a9192: Migrate UI usage to shared design-system primitives, introduce shared modal/button/form abstractions, and enforce adoption with Chaperone rules.
+
 ## 0.21.0
 
 ### Minor Changes
