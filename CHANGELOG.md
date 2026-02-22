@@ -1,5 +1,11 @@
 # divergence
 
+## 0.21.0
+
+### Minor Changes
+
+- 38a4f41: Add workspace-level port settings, improve port allocation with real availability checks, and wire proxy route lifecycle for divergence cleanup.
+
 ## 0.20.0
 
 ### Minor Changes
