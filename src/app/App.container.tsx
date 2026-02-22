@@ -66,6 +66,8 @@ import { buildTerminalSession, buildWorkspaceKey, buildWorkspaceTerminalSession,
 import {
   buildNextSplitState,
   closeFocusedSplitPane,
+  focusNextSplitPane,
+  focusPreviousSplitPane,
   focusSplitPane,
   isDefaultSinglePaneState,
 } from "./lib/splitSession.pure";
@@ -1334,6 +1336,32 @@ function App() {
           const currentIndex = sessionIds.indexOf(activeSessionId);
           const nextIndex = currentIndex < sessionIds.length - 1 ? currentIndex + 1 : 0;
           setActiveSessionId(sessionIds[nextIndex]);
+        }
+        return;
+      case "focus_previous_pane":
+        if (activeSessionId) {
+          setSplitBySessionId((prev) => {
+            const current = prev.get(activeSessionId);
+            if (!current || current.paneIds.length <= 1) {
+              return prev;
+            }
+            const next = new Map(prev);
+            next.set(activeSessionId, focusPreviousSplitPane(current));
+            return next;
+          });
+        }
+        return;
+      case "focus_next_pane":
+        if (activeSessionId) {
+          setSplitBySessionId((prev) => {
+            const current = prev.get(activeSessionId);
+            if (!current || current.paneIds.length <= 1) {
+              return prev;
+            }
+            const next = new Map(prev);
+            next.set(activeSessionId, focusNextSplitPane(current));
+            return next;
+          });
         }
         return;
       default:
