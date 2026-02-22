@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import Button from "./Button.presentational";
 
 interface ToolbarButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
@@ -12,22 +13,18 @@ function ToolbarButton({
   type = "button",
   ...props
 }: ToolbarButtonProps) {
-  const sizeClass = iconOnly
-    ? "flex items-center justify-center w-8 h-8"
-    : "text-xs px-2 py-1";
-
-  const normalizedClassName = className.trim();
-
   return (
-    <button
+    <Button
       type={type}
-      className={`${sizeClass} rounded border border-surface text-subtext hover:text-text hover:bg-surface/50 transition-colors disabled:opacity-40 disabled:cursor-default ${normalizedClassName}`.trim()}
+      variant="subtle"
+      size={iconOnly ? "md" : "xs"}
+      iconOnly={iconOnly}
+      className={`text-subtext hover:text-text disabled:opacity-40 disabled:cursor-default ${className.trim()}`.trim()}
       {...props}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
 export default ToolbarButton;
-
