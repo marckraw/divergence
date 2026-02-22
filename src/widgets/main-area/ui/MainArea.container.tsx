@@ -1,7 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import Terminal from "./Terminal.container";
 import MainAreaPresentational from "./MainArea.presentational";
 import type { MainAreaOpenDiff, MainAreaProps, RightPanelTab } from "./MainArea.types";
+import {
+  buildEqualSplitPaneSizes,
+  normalizeSplitPaneSizes,
+  resizeSplitPaneSizes,
+} from "../../../entities";
 import type {
   ChangesMode,
   GitChangeEntry,
@@ -42,6 +55,7 @@ function MainAreaContainer({
   splitBySessionId,
   reconnectBySessionId,
   onFocusSplitPane,
+  onResizeSplitPanes,
   onReconnectSession,
   ...props
 }: MainAreaProps) {
@@ -72,6 +86,7 @@ function MainAreaContainer({
   const [changesMode, setChangesMode] = useState<ChangesMode>("working");
   const [reviewRunError, setReviewRunError] = useState<string | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
+  const [isDraggingSplitPane, setIsDraggingSplitPane] = useState(false);
   const {
     activeDraft,
     addComment,
@@ -336,13 +351,67 @@ function MainAreaContainer({
     [onStatusChange, splitBySessionId]
   );
 
+  const handleSplitPaneResizeDragStart = useCallback((
+    event: ReactMouseEvent<HTMLDivElement>,
+    sessionId: string,
+    orientation: SplitSessionState["orientation"],
+    dividerIndex: number,
+    paneSizes: number[],
+  ) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const container = event.currentTarget.parentElement;
+    if (!container) {
+      return;
+    }
+    const containerRect = container.getBoundingClientRect();
+    const containerSize = orientation === "vertical" ? containerRect.width : containerRect.height;
+    if (containerSize <= 0) {
+      return;
+    }
+
+    const startPointer = orientation === "vertical" ? event.clientX : event.clientY;
+    const startSizes = [...paneSizes];
+    setIsDraggingSplitPane(true);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = orientation === "vertical" ? "col-resize" : "row-resize";
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const pointer = orientation === "vertical" ? moveEvent.clientX : moveEvent.clientY;
+      const deltaRatio = (pointer - startPointer) / containerSize;
+      const nextSizes = resizeSplitPaneSizes(startSizes, dividerIndex, deltaRatio);
+      onResizeSplitPanes(sessionId, nextSizes);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingSplitPane(false);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  }, [onResizeSplitPanes]);
+
+  const handleSplitPaneResizeReset = useCallback((sessionId: string, paneCount: number) => {
+    onResizeSplitPanes(sessionId, buildEqualSplitPaneSizes(paneCount));
+  }, [onResizeSplitPanes]);
+
   const renderSession = useCallback((session: TerminalSession) => {
     const splitState = splitBySessionId.get(session.id) ?? null;
     const paneIds = splitState?.paneIds.length ? splitState.paneIds : (["pane-1"] as SplitPaneId[]);
     const isSplit = paneIds.length > 1;
     const orientation: SplitSessionState["orientation"] = splitState?.orientation ?? "vertical";
     const layoutClass = orientation === "vertical" ? "flex-row" : "flex-col";
-    const dividerClass = orientation === "vertical" ? "border-r border-surface" : "border-b border-surface";
+    const paneSizes = isSplit
+      ? normalizeSplitPaneSizes(paneIds.length, splitState?.paneSizes)
+      : [1];
     const reconnectToken = reconnectBySessionId.get(session.id) ?? 0;
 
     return (
@@ -355,38 +424,68 @@ function MainAreaContainer({
             : buildSplitTmuxSessionName(session.tmuxSessionName, paneId);
           const withDivider = index < paneIds.length - 1;
           const isFocusedPane = isSplit && paneId === (splitState?.focusedPaneId ?? "pane-1");
+          const paneSize = paneSizes[index] ?? 1 / paneIds.length;
 
           return (
-            <div
-              key={`${session.id}-${paneId}-wrapper`}
-              className={`flex-1 relative overflow-hidden min-w-0 min-h-0 ${
-                withDivider ? dividerClass : ""
-              }`}
-              onMouseDown={() => onFocusSplitPane(session.id, paneId)}
-            >
-              <Terminal
-                key={`${paneSessionId}-${paneTmuxName}-${reconnectToken}`}
-                cwd={session.path}
-                sessionId={paneSessionId}
-                useTmux={session.useTmux}
-                tmuxSessionName={paneTmuxName}
-                tmuxHistoryLimit={session.tmuxHistoryLimit}
-                portEnv={session.portEnv}
-                isFocused={isFocusedPane}
-                onStatusChange={isSplit ? handleSplitStatusChange(session.id, paneId) : handleStatusChange(session.id)}
-                onReconnect={() => onReconnectSession(session.id)}
-                onRegisterCommand={isPrimaryPane ? onRegisterTerminalCommand : undefined}
-                onUnregisterCommand={isPrimaryPane ? onUnregisterTerminalCommand : undefined}
-                onClose={() => onCloseSession(session.id)}
-              />
-            </div>
+            <Fragment key={`${session.id}-${paneId}-wrapper`}>
+              <div
+                className={`relative overflow-hidden min-w-0 min-h-0 ${
+                  isSplit ? "" : "flex-1"
+                } ${
+                  isSplit && !isDraggingSplitPane
+                    ? "transition-[flex-grow] duration-150 ease-out"
+                    : ""
+                }`}
+                style={isSplit ? {
+                  flexBasis: 0,
+                  flexGrow: paneSize,
+                  flexShrink: 1,
+                } : undefined}
+                onMouseDown={() => onFocusSplitPane(session.id, paneId)}
+              >
+                <Terminal
+                  key={`${paneSessionId}-${paneTmuxName}-${reconnectToken}`}
+                  cwd={session.path}
+                  sessionId={paneSessionId}
+                  useTmux={session.useTmux}
+                  tmuxSessionName={paneTmuxName}
+                  tmuxHistoryLimit={session.tmuxHistoryLimit}
+                  portEnv={session.portEnv}
+                  isFocused={isFocusedPane}
+                  onStatusChange={isSplit ? handleSplitStatusChange(session.id, paneId) : handleStatusChange(session.id)}
+                  onReconnect={() => onReconnectSession(session.id)}
+                  onRegisterCommand={isPrimaryPane ? onRegisterTerminalCommand : undefined}
+                  onUnregisterCommand={isPrimaryPane ? onUnregisterTerminalCommand : undefined}
+                  onClose={() => onCloseSession(session.id)}
+                />
+              </div>
+              {withDivider && (
+                <div
+                  className={orientation === "vertical"
+                    ? "h-full w-1 shrink-0 cursor-col-resize border-l border-surface bg-transparent hover:bg-accent/30 active:bg-accent/50 transition-colors"
+                    : "w-full h-1 shrink-0 cursor-row-resize border-t border-surface bg-transparent hover:bg-accent/30 active:bg-accent/50 transition-colors"
+                  }
+                  onMouseDown={(event) => handleSplitPaneResizeDragStart(
+                    event,
+                    session.id,
+                    orientation,
+                    index,
+                    paneSizes,
+                  )}
+                  onDoubleClick={() => handleSplitPaneResizeReset(session.id, paneIds.length)}
+                />
+              )}
+            </Fragment>
           );
         })}
       </div>
     );
   }, [
+    handleSplitPaneResizeDragStart,
+    handleSplitPaneResizeReset,
     handleSplitStatusChange,
     handleStatusChange,
+    isDraggingSplitPane,
     onCloseSession,
     onReconnectSession,
     onRegisterTerminalCommand,
@@ -410,6 +509,7 @@ function MainAreaContainer({
       onRunReviewAgentRequest={onRunReviewAgentRequest}
       splitBySessionId={splitBySessionId}
       onFocusSplitPane={onFocusSplitPane}
+      onResizeSplitPanes={onResizeSplitPanes}
       reconnectBySessionId={reconnectBySessionId}
       onReconnectSession={onReconnectSession}
       sessionList={sessionList}

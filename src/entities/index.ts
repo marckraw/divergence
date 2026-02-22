@@ -11,6 +11,12 @@ export type {
   SplitSessionState,
   TerminalSession,
 } from "./terminal-session";
+export {
+  areSplitPaneSizesEqual,
+  buildEqualSplitPaneSizes,
+  normalizeSplitPaneSizes,
+  resizeSplitPaneSizes,
+} from "./terminal-session";
 export type {
   BackgroundTask,
   BackgroundTaskControls,

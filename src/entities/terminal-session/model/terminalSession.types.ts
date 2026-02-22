@@ -21,6 +21,7 @@ export type SplitPaneId = "pane-1" | "pane-2" | "pane-3";
 export interface SplitSessionState {
   orientation: SplitOrientation;
   paneIds: SplitPaneId[];
+  paneSizes?: number[];
   focusedPaneId: SplitPaneId;
   primaryPaneId: SplitPaneId;
 }

@@ -35,6 +35,7 @@ export interface MainAreaProps {
   splitBySessionId: Map<string, SplitSessionState>;
   onSplitSession: (sessionId: string, orientation: SplitSessionState["orientation"]) => void;
   onFocusSplitPane: (sessionId: string, paneId: SplitPaneId) => void;
+  onResizeSplitPanes: (sessionId: string, paneSizes: number[]) => void;
   onResetSplitSession: (sessionId: string) => void;
   reconnectBySessionId: Map<string, number>;
   onReconnectSession: (sessionId: string) => void;
