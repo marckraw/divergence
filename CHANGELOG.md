@@ -1,5 +1,11 @@
 # divergence
 
+## 0.19.0
+
+### Minor Changes
+
+- 2c57eeb: Remap Cmd+[/] shortcuts to cycle focus between split terminal panes instead of switching session tabs
+
 ## 0.18.0
 
 ### Minor Changes
