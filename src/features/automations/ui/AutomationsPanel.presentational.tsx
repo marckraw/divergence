@@ -1,4 +1,13 @@
 import type { Automation } from "../../../entities/automation";
+import {
+  Button,
+  FormField,
+  IconButton,
+  ModalShell,
+  Select,
+  TextInput,
+  Textarea,
+} from "../../../shared";
 import type { AutomationsPanelPresentationalProps } from "./AutomationsPanel.types";
 
 function formatNextRun(value: number | null): string {
@@ -56,11 +65,11 @@ function AutomationCard({
         <div>
           <div className="text-sm text-text font-semibold">{automation.name}</div>
           <div className="text-xs text-subtext mt-1">
-            {automation.agent.toUpperCase()} • every {automation.intervalHours}h
+            {automation.agent.toUpperCase()} - every {automation.intervalHours}h
           </div>
           <div className="text-xs text-subtext mt-1">
             {automation.enabled ? "Enabled" : "Disabled"}
-            {" • "}
+            {" - "}
             {automation.keepSessionAlive ? "Interactive" : "Autonomous"}
           </div>
         </div>
@@ -75,31 +84,31 @@ function AutomationCard({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
           onClick={() => {
             void onRunNow();
           }}
-          className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
+          size="sm"
+          variant="secondary"
         >
           Run now
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           onClick={onEdit}
-          className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
+          size="sm"
+          variant="secondary"
         >
           Edit
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           onClick={() => {
             void onDelete();
           }}
-          className="px-2.5 py-1.5 text-xs rounded border border-red/30 text-red hover:bg-red/10"
+          size="sm"
+          variant="danger"
         >
           Delete
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -111,16 +120,19 @@ function AutomationTemplateCard({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Button
       onClick={onClick}
-      className="w-full text-left rounded-xl border border-surface bg-sidebar/50 p-4 hover:bg-surface/40 transition-colors"
+      variant="secondary"
+      size="md"
+      className="w-full justify-start rounded-xl text-left bg-sidebar/50 p-4 hover:bg-surface/40"
     >
-      <div className="text-sm font-semibold text-text">Run agent prompt on a schedule</div>
-      <div className="mt-2 text-xs text-subtext">
-        Configure prompt, agent, and interval. Runs while the app is open.
-      </div>
-    </button>
+      <span>
+        <span className="block text-sm font-semibold text-text">Run agent prompt on a schedule</span>
+        <span className="mt-2 block text-xs text-subtext">
+          Configure prompt, agent, and interval. Runs while the app is open.
+        </span>
+      </span>
+    </Button>
   );
 }
 
@@ -147,148 +159,146 @@ function AutomationEditorModal({
   | "onCloseEditor"
 >) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl rounded-md border border-surface bg-sidebar max-h-[90vh] overflow-y-auto">
-        <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm text-text font-semibold">
-              {form.id === null ? "New automation" : "Edit automation"}
-            </h3>
-            <p className="text-xs text-subtext mt-1">
-              Configure scheduled runs for this automation template.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onCloseEditor}
-            className="w-7 h-7 rounded border border-surface text-subtext hover:text-text hover:bg-surface"
-            disabled={isSubmitting}
-            aria-label="Close"
+    <ModalShell
+      onRequestClose={onCloseEditor}
+      size="lg"
+      surface="sidebar"
+      overlayClassName="z-50 p-4"
+      panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+    >
+      <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm text-text font-semibold">
+            {form.id === null ? "New automation" : "Edit automation"}
+          </h3>
+          <p className="text-xs text-subtext mt-1">
+            Configure scheduled runs for this automation template.
+          </p>
+        </div>
+        <IconButton
+          onClick={onCloseEditor}
+          variant="subtle"
+          size="sm"
+          disabled={isSubmitting}
+          label="Close"
+          icon="x"
+        />
+      </div>
+
+      <div className="p-4 space-y-3">
+        <FormField label="Name" htmlFor="automation-form-name">
+          <TextInput
+            id="automation-form-name"
+            value={form.name}
+            onChange={(event) => onFormChange("name", event.target.value)}
+            placeholder="Daily repo audit"
+          />
+        </FormField>
+
+        <FormField label="Project" htmlFor="automation-form-project">
+          <Select
+            id="automation-form-project"
+            value={form.projectId ?? ""}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              onFormChange("projectId", Number.isFinite(value) ? value : null);
+            }}
           >
-            ×
-          </button>
+            <option value="">Select project</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Agent" htmlFor="automation-form-agent" labelClassName="text-xs text-subtext">
+            <Select
+              id="automation-form-agent"
+              value={form.agent}
+              onChange={(event) => onFormChange("agent", event.target.value as typeof form.agent)}
+            >
+              <option value="claude">Claude</option>
+              <option value="codex">Codex</option>
+            </Select>
+          </FormField>
+          <FormField label="Every (hours)" htmlFor="automation-form-interval" labelClassName="text-xs text-subtext">
+            <TextInput
+              id="automation-form-interval"
+              type="number"
+              min={1}
+              value={form.intervalHours}
+              onChange={(event) => onFormChange("intervalHours", Number(event.target.value))}
+            />
+          </FormField>
         </div>
 
-        <div className="p-4 space-y-3">
-          <div>
-            <label className="block text-xs text-subtext mb-1">Name</label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(event) => onFormChange("name", event.target.value)}
-              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              placeholder="Daily repo audit"
-            />
-          </div>
+        <FormField label="Prompt" htmlFor="automation-form-prompt" labelClassName="text-xs text-subtext">
+          <Textarea
+            id="automation-form-prompt"
+            value={form.prompt}
+            onChange={(event) => onFormChange("prompt", event.target.value)}
+            className="min-h-[180px]"
+            placeholder="Audit this repository for important regressions and propose fixes."
+          />
+        </FormField>
 
-          <div>
-            <label className="block text-xs text-subtext mb-1">Project</label>
-            <select
-              value={form.projectId ?? ""}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                onFormChange("projectId", Number.isFinite(value) ? value : null);
-              }}
-              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-            >
-              <option value="">Select project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <label className="inline-flex items-center gap-2 text-xs text-subtext">
+          <input
+            type="checkbox"
+            checked={form.enabled}
+            onChange={(event) => onFormChange("enabled", event.target.checked)}
+            className="accent-accent"
+          />
+          Enabled
+        </label>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-subtext mb-1">Agent</label>
-              <select
-                value={form.agent}
-                onChange={(event) => onFormChange("agent", event.target.value as typeof form.agent)}
-                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              >
-                <option value="claude">Claude</option>
-                <option value="codex">Codex</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-subtext mb-1">Every (hours)</label>
-              <input
-                type="number"
-                min={1}
-                value={form.intervalHours}
-                onChange={(event) => onFormChange("intervalHours", Number(event.target.value))}
-                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-subtext mb-1">Prompt</label>
-            <textarea
-              value={form.prompt}
-              onChange={(event) => onFormChange("prompt", event.target.value)}
-              className="w-full min-h-[180px] px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
-              placeholder="Audit this repository for important regressions and propose fixes."
-            />
-          </div>
-
-          <label className="inline-flex items-center gap-2 text-xs text-subtext">
+        <div>
+          <label className="inline-flex items-center gap-2 text-xs text-text">
             <input
               type="checkbox"
-              checked={form.enabled}
-              onChange={(event) => onFormChange("enabled", event.target.checked)}
+              checked={form.keepSessionAlive}
+              onChange={(event) => onFormChange("keepSessionAlive", event.target.checked)}
               className="accent-accent"
             />
-            Enabled
+            Keep terminal session alive after completion
           </label>
-
-          <div>
-            <label className="inline-flex items-center gap-2 text-xs text-text">
-              <input
-                type="checkbox"
-                checked={form.keepSessionAlive}
-                onChange={(event) => onFormChange("keepSessionAlive", event.target.checked)}
-                className="accent-accent"
-              />
-              Keep terminal session alive after completion
-            </label>
-            <div className="text-[11px] text-subtext ml-5 mt-1">
-              When enabled, the tmux session won't be killed after the agent finishes,
-              allowing you to attach and inspect the results.
-            </div>
+          <div className="text-[11px] text-subtext ml-5 mt-1">
+            When enabled, the tmux session won&apos;t be killed after the agent finishes,
+            allowing you to attach and inspect the results.
           </div>
-
-          {formError && (
-            <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
-              {formError}
-            </div>
-          )}
         </div>
 
-        <div className="px-4 py-3 border-t border-surface flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={onCloseEditor}
-            className="px-3 py-2 text-xs rounded border border-surface text-text hover:bg-surface"
-            disabled={isSubmitting}
-          >
-            {cancelEditVisible ? "Cancel edit" : "Cancel"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              void onSubmitForm();
-            }}
-            className="px-3 py-2 text-xs rounded bg-accent text-main hover:bg-accent/80 disabled:opacity-60"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Saving..." : submitLabel}
-          </button>
-        </div>
+        {formError && (
+          <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
+            {formError}
+          </div>
+        )}
       </div>
-    </div>
+
+      <div className="px-4 py-3 border-t border-surface flex items-center justify-between gap-2">
+        <Button
+          onClick={onCloseEditor}
+          variant="secondary"
+          size="sm"
+          disabled={isSubmitting}
+        >
+          {cancelEditVisible ? "Cancel edit" : "Cancel"}
+        </Button>
+        <Button
+          onClick={() => {
+            void onSubmitForm();
+          }}
+          variant="primary"
+          size="sm"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? "Saving..." : submitLabel}
+        </Button>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -321,23 +331,23 @@ function AutomationsPanelPresentational({
           <p className="text-xs text-subtext">Run agent prompts on a schedule</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <Button
             onClick={onOpenCreateTemplate}
-            className="px-3 py-1.5 text-xs rounded bg-accent text-main hover:bg-accent/80"
+            variant="primary"
+            size="sm"
           >
             New automation
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             onClick={() => {
               void onRefresh();
             }}
-            className="px-3 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
+            variant="secondary"
+            size="sm"
             disabled={loading}
           >
             {loading ? "Refreshing..." : "Refresh"}
-          </button>
+          </Button>
         </div>
       </div>
 

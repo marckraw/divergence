@@ -50,6 +50,38 @@
       },
       {
         "type": "regex",
+        "id": "warn-no-raw-modal-overlay-shell",
+        "severity": "error",
+        "files": "src/{app,widgets,features,entities}/**/*.tsx",
+        "pattern": "fixed\\s+inset-0[^\\\"\\n]*bg-black/50",
+        "message": "Use shared ModalShell/ModalOverlay primitives instead of ad-hoc overlay shells."
+      },
+      {
+        "type": "regex",
+        "id": "warn-no-raw-button-outside-shared-ui",
+        "severity": "error",
+        "files": "src/{app,widgets,features,entities}/**/*.tsx",
+        "pattern": "<button\\b",
+        "message": "Prefer shared Button/IconButton primitives over raw <button> in layer UI."
+      },
+      {
+        "type": "regex",
+        "id": "warn-no-deep-shared-ui-imports",
+        "severity": "error",
+        "files": "src/{app,widgets,features,entities}/**/*.{ts,tsx}",
+        "pattern": "from\\s+[\\\"'][^\\\"']*shared/ui/",
+        "message": "Use shared public APIs (src/shared/index.ts) instead of deep shared/ui imports."
+      },
+      {
+        "type": "regex",
+        "id": "warn-duplicate-form-control-class-signature",
+        "severity": "error",
+        "files": "src/{app,widgets,features,entities}/**/*.tsx",
+        "pattern": "className=\\\"w-full\\s+px-3\\s+py-2[^\\\"]*border\\s+border-surface",
+        "message": "Prefer shared TextInput/Textarea/Select primitives for standard form controls."
+      },
+      {
+        "type": "regex",
         "id": "no-direct-tauri-imports-in-layer-implementation-files",
         "severity": "error",
         "files": "src/{app,widgets,features,entities,shared}/{lib,model,ui,hooks,config,service}/**/*.{ts,tsx}",

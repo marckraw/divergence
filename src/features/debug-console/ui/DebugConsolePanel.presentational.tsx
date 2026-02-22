@@ -1,4 +1,4 @@
-import type { DebugEvent } from "../../../shared";
+import { Button, TextInput, type DebugEvent } from "../../../shared";
 import type { DebugConsolePanelProps } from "./DebugConsolePanel.types";
 import type {
   DebugCategoryFilter,
@@ -89,32 +89,38 @@ function DebugConsolePanelPresentational({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
             type="button"
             onClick={() => {
               void onRefreshTmuxDiagnostics();
             }}
+            variant="secondary"
+            size="sm"
             className="px-3 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
           >
             Capture tmux diag
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => {
               void onCopyJson();
             }}
+            variant="secondary"
+            size="sm"
             className="px-3 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
           >
             {copyState === "copied" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy visible JSON"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onClear}
+            variant="subtle"
+            size="sm"
             className="px-3 py-1.5 text-xs rounded border border-surface text-subtext hover:text-text hover:bg-surface"
             disabled={totalCount === 0}
           >
             Clear
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -126,19 +132,21 @@ function DebugConsolePanelPresentational({
       </div>
 
       <div className="px-5 py-3 border-b border-surface space-y-2">
-        <input
+        <TextInput
           type="text"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder="Search message, details, metadata..."
-          className="w-full px-3 py-2 text-xs rounded border border-surface bg-main text-text placeholder:text-subtext/70 focus:outline-none focus:ring-1 focus:ring-accent"
+          className="text-xs placeholder:text-subtext/70 focus:ring-1"
         />
         <div className="flex flex-wrap items-center gap-2">
           {LEVEL_FILTER_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.id}
               type="button"
               onClick={() => onLevelFilterChange(option.id)}
+              variant={levelFilter === option.id ? "primary" : "subtle"}
+              size="xs"
               className={`px-2.5 py-1 text-xs rounded border ${
                 levelFilter === option.id
                   ? "border-accent bg-accent/15 text-accent"
@@ -146,15 +154,17 @@ function DebugConsolePanelPresentational({
               }`}
             >
               {option.label}
-            </button>
+            </Button>
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {CATEGORY_FILTER_OPTIONS.map((option) => (
-            <button
+            <Button
               key={option.id}
               type="button"
               onClick={() => onCategoryFilterChange(option.id)}
+              variant={categoryFilter === option.id ? "primary" : "subtle"}
+              size="xs"
               className={`px-2.5 py-1 text-xs rounded border ${
                 categoryFilter === option.id
                   ? "border-accent bg-accent/15 text-accent"
@@ -162,11 +172,13 @@ function DebugConsolePanelPresentational({
               }`}
             >
               {option.label}
-            </button>
+            </Button>
           ))}
-          <button
+          <Button
             type="button"
             onClick={onToggleOnlyFailureOrStuck}
+            variant={onlyFailureOrStuck ? "danger" : "subtle"}
+            size="xs"
             className={`px-2.5 py-1 text-xs rounded border ${
               onlyFailureOrStuck
                 ? "border-red/50 bg-red/10 text-red"
@@ -174,14 +186,16 @@ function DebugConsolePanelPresentational({
             }`}
           >
             Only failures/stuck
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={onResetFilters}
+            variant="subtle"
+            size="xs"
             className="px-2.5 py-1 text-xs rounded border border-surface text-subtext hover:text-text hover:bg-surface"
           >
             Reset filters
-          </button>
+          </Button>
         </div>
       </div>
 

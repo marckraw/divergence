@@ -42,7 +42,7 @@ import {
   getGithubPollState,
   upsertGithubPollState,
 } from "../entities/inbox-event";
-import { recordDebugEvent, useAppSettings, useUpdater } from "../shared";
+import { Button, IconButton, recordDebugEvent, useAppSettings, useUpdater } from "../shared";
 import {
   areSplitPaneSizesEqual,
   normalizeSplitPaneSizes,
@@ -1676,12 +1676,14 @@ function App() {
             {updater.status === "available" && (
               <>
                 <span>Update {updater.version} available</span>
-                <button
+                <Button
                   onClick={updater.downloadAndInstall}
+                  variant="secondary"
+                  size="xs"
                   className="rounded bg-white px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
                 >
                   Install & Restart
-                </button>
+                </Button>
               </>
             )}
             {updater.status === "downloading" && (
@@ -1698,15 +1700,18 @@ function App() {
             {updater.status === "error" && (
               <span>{updater.error ?? "Update check failed"}</span>
             )}
-            <button
+            <IconButton
               onClick={() => setBannerDismissed(true)}
+              variant="ghost"
+              size="xs"
               className="ml-1 rounded p-0.5 hover:bg-white/20"
-              aria-label="Dismiss"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+              label="Dismiss"
+              icon={(
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            />
           </div>
         </div>
       )}

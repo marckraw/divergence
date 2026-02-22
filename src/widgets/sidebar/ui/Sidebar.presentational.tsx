@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
-import { MenuButton, StatusIndicator } from "../../../shared";
+import { Button, IconButton, MenuButton, StatusIndicator } from "../../../shared";
 import CreateDivergenceModal from "../../../features/create-divergence";
 import {
   FAST_EASE_OUT,
@@ -111,33 +111,39 @@ function SidebarPresentational({
             Divergence
           </h1>
           <div className="inline-flex rounded-md bg-main p-1">
-            <button
+            <Button
               type="button"
               onClick={() => onModeChange("projects")}
+              variant={mode === "projects" ? "primary" : "ghost"}
+              size="xs"
               className={`px-2 py-1 text-xs rounded ${
                 mode === "projects" ? "bg-accent text-main" : "text-subtext hover:text-text"
               }`}
             >
               Projects
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => onModeChange("work")}
+              variant={mode === "work" ? "primary" : "ghost"}
+              size="xs"
               className={`px-2 py-1 text-xs rounded ${
                 mode === "work" ? "bg-accent text-main" : "text-subtext hover:text-text"
               }`}
             >
               Work
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => onModeChange("workspaces")}
+              variant={mode === "workspaces" ? "primary" : "ghost"}
+              size="xs"
               className={`px-2 py-1 text-xs rounded ${
                 mode === "workspaces" ? "bg-accent text-main" : "text-subtext hover:text-text"
               }`}
             >
               Workspaces
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -174,10 +180,12 @@ function SidebarPresentational({
                     : 0;
 
                 return (
-                  <button
+                  <Button
                     key={item.id}
                     type="button"
                     onClick={() => onWorkTabChange(item.id)}
+                    variant={isActive ? "secondary" : "ghost"}
+                    size="sm"
                     className={`w-full text-left flex items-center justify-between gap-2 px-2 py-2 rounded transition-colors ${
                       isActive ? "bg-surface text-text" : "text-subtext hover:text-text hover:bg-surface/50"
                     }`}
@@ -188,7 +196,7 @@ function SidebarPresentational({
                         {badgeCount}
                       </span>
                     )}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -225,27 +233,31 @@ function SidebarPresentational({
                           }}
                         >
                           {hasWsDivergences ? (
-                            <button
+                            <IconButton
                               onClick={(event) => {
                                 event.stopPropagation();
                                 onToggleWorkspaceExpand(workspace.id);
                               }}
                               className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
-                            >
-                              <svg
-                                className={`w-3 h-3 transition-transform ${isWsExpanded ? "rotate-90" : ""}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M9 5l7 7-7 7"
-                                />
-                              </svg>
-                            </button>
+                              variant="ghost"
+                              size="xs"
+                              label={isWsExpanded ? "Collapse workspace" : "Expand workspace"}
+                              icon={(
+                                <svg
+                                  className={`w-3 h-3 transition-transform ${isWsExpanded ? "rotate-90" : ""}`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5l7 7-7 7"
+                                  />
+                                </svg>
+                              )}
+                            />
                           ) : (
                             <div className="w-4" />
                           )}
@@ -325,14 +337,16 @@ function SidebarPresentational({
                 <div className="text-xs uppercase text-subtext font-medium">
                   Projects
                 </div>
-                <button
+                <Button
                   className="text-xs text-subtext hover:text-text disabled:opacity-50 disabled:cursor-default"
                   onClick={onToggleAllProjects}
                   disabled={!hasExpandableProjects}
                   title={isAllExpanded ? "Collapse all projects" : "Expand all projects"}
+                  variant="ghost"
+                  size="xs"
                 >
                   {isAllExpanded ? "Collapse all" : "Expand all"}
-                </button>
+                </Button>
               </div>
 
               {projects.length === 0 ? (
@@ -361,27 +375,31 @@ function SidebarPresentational({
                       transition={layoutTransition}
                     >
                       {divergences.length > 0 && (
-                        <button
+                        <IconButton
                           onClick={(event) => {
                             event.stopPropagation();
                             onToggleProjectExpand(project.id);
                           }}
                           className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
-                        >
-                          <svg
-                            className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                        </button>
+                          variant="ghost"
+                          size="xs"
+                          label={isExpanded ? "Collapse project" : "Expand project"}
+                          icon={(
+                            <svg
+                              className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 5l7 7-7 7"
+                              />
+                            </svg>
+                          )}
+                        />
                       )}
                       {divergences.length === 0 && <div className="w-4" />}
 
@@ -391,28 +409,32 @@ function SidebarPresentational({
                         {project.name}
                       </span>
 
-                      <button
+                      <IconButton
                         onClick={(event) => {
                           event.stopPropagation();
                           onCreateDivergenceForChange(project);
                         }}
                         className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-subtext hover:text-accent transition-opacity"
                         title="Create Divergence"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"
-                          />
-                        </svg>
-                      </button>
+                        variant="ghost"
+                        size="xs"
+                        label={`Create divergence for ${project.name}`}
+                        icon={(
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"
+                            />
+                          </svg>
+                        )}
+                      />
                     </motion.div>
 
                     <AnimatePresence initial={false}>
@@ -472,7 +494,7 @@ function SidebarPresentational({
                                   {divergenceSessions.length > 0 && (
                                     <div className="ml-8 mt-1 space-y-0.5">
                                       {divergenceSessions.map((session) => (
-                                        <button
+                                        <Button
                                           key={session.id}
                                           type="button"
                                           className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
@@ -482,12 +504,14 @@ function SidebarPresentational({
                                           }`}
                                           onClick={() => onSelectSession(session.id)}
                                           onContextMenu={(event) => onContextMenuOpen(event, "session", session)}
+                                          variant="ghost"
+                                          size="xs"
                                         >
                                           <StatusIndicator status={session.status} />
                                           <span className="truncate">
                                             {session.sessionRole === "default" ? "default" : session.name}
                                           </span>
-                                        </button>
+                                        </Button>
                                       ))}
                                     </div>
                                   )}
@@ -501,7 +525,7 @@ function SidebarPresentational({
                     {projectSessions.length > 0 && (
                       <div className="ml-8 mt-1 space-y-0.5">
                         {projectSessions.map((session) => (
-                          <button
+                          <Button
                             key={session.id}
                             type="button"
                             className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
@@ -511,12 +535,14 @@ function SidebarPresentational({
                             }`}
                             onClick={() => onSelectSession(session.id)}
                             onContextMenu={(event) => onContextMenuOpen(event, "session", session)}
+                            variant="ghost"
+                            size="xs"
                           >
                             <StatusIndicator status={session.status} />
                             <span className="truncate">
                               {session.sessionRole === "default" ? "default" : session.name}
                             </span>
-                          </button>
+                          </Button>
                         ))}
                       </div>
                     )}
@@ -531,9 +557,11 @@ function SidebarPresentational({
 
         {mode === "projects" && (
           <div className="p-2 border-t border-surface">
-            <button
+            <Button
               className="w-full px-3 py-2 bg-surface hover:bg-surface/80 text-text text-sm rounded-md flex items-center justify-center gap-2 transition-colors"
               onClick={onAddProjectClick}
+              variant="secondary"
+              size="md"
             >
               <svg
                 className="w-4 h-4"
@@ -549,14 +577,16 @@ function SidebarPresentational({
                 />
               </svg>
               Add Project
-            </button>
+            </Button>
           </div>
         )}
         {mode === "workspaces" && (
           <div className="p-2 border-t border-surface">
-            <button
+            <Button
               className="w-full px-3 py-2 bg-surface hover:bg-surface/80 text-text text-sm rounded-md flex items-center justify-center gap-2 transition-colors"
               onClick={onCreateWorkspace}
+              variant="secondary"
+              size="md"
             >
               <svg
                 className="w-4 h-4"
@@ -572,7 +602,7 @@ function SidebarPresentational({
                 />
               </svg>
               Create Workspace
-            </button>
+            </Button>
           </div>
         )}
       </aside>

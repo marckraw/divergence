@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent } from "react";
 import {
   buildQuickSwitcherSearchResults,
   filterQuickSwitcherSearchResults,
@@ -72,10 +72,6 @@ function QuickSwitcherContainer({
     }
   }, [filteredItems, onClose, onSelect, selectedIndex]);
 
-  const handlePanelClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-  }, []);
-
   const handleSelectResult = useCallback((result: QuickSwitcherSearchResult) => {
     onSelect(result.type, result.item);
   }, [onSelect]);
@@ -92,7 +88,6 @@ function QuickSwitcherContainer({
       inputRef={inputRef}
       listRef={listRef}
       onClose={onClose}
-      onPanelClick={handlePanelClick}
       onQueryChange={setQuery}
       onInputKeyDown={handleInputKeyDown}
       onSelectResult={handleSelectResult}

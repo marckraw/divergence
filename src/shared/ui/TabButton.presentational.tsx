@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import Button from "./Button.presentational";
 
 interface TabButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
@@ -13,20 +14,20 @@ function TabButton({
   ...props
 }: TabButtonProps) {
   const stateClass = active
-    ? "text-text border-b-2 border-accent"
-    : "text-subtext hover:text-text";
-  const normalizedClassName = className.trim();
+    ? "text-text border-accent hover:bg-transparent"
+    : "text-subtext border-transparent hover:text-text hover:border-surface/70 hover:bg-transparent";
 
   return (
-    <button
+    <Button
       type={type}
-      className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${stateClass} ${normalizedClassName}`.trim()}
+      variant="ghost"
+      size="sm"
+      className={`flex-1 rounded-none border-b-2 px-3 py-2 text-xs font-medium ${stateClass} ${className.trim()}`.trim()}
       {...props}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
 export default TabButton;
-

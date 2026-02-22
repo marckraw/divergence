@@ -1,4 +1,5 @@
 import type { BackgroundTaskToast } from "../../../entities/task";
+import { Button, IconButton } from "../../../shared";
 
 interface TaskToastsProps {
   toasts: BackgroundTaskToast[];
@@ -24,23 +25,28 @@ function TaskToasts({ toasts, onDismiss, onViewTask }: TaskToastsProps) {
           >
             <div className="flex items-start justify-between gap-3">
               <p className={`text-sm ${isError ? "text-red" : "text-text"}`}>{toast.message}</p>
-              <button
+              <IconButton
                 onClick={() => onDismiss(toast.id)}
                 className="text-subtext hover:text-text"
-                aria-label="Dismiss notification"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+                variant="subtle"
+                size="xs"
+                label="Dismiss notification"
+                icon={(
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+              />
             </div>
             <div className="mt-2 flex justify-end">
-              <button
+              <Button
                 onClick={() => onViewTask(toast.taskId)}
+                variant="secondary"
+                size="xs"
                 className="text-xs px-2 py-1 rounded border border-surface text-text hover:bg-surface"
               >
                 View task
-              </button>
+              </Button>
             </div>
           </div>
         );

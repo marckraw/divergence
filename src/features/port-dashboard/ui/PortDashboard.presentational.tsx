@@ -1,4 +1,5 @@
 import type { PortAllocation } from "../../../entities/port-management";
+import { Button } from "../../../shared";
 
 interface PortDashboardRow {
   allocation: PortAllocation;
@@ -96,20 +97,24 @@ function PortDashboardPresentational({
                     <div className="flex items-center gap-1">
                       {row.allocation.proxyHostname && (
                         <>
-                          <button
+                          <Button
                             type="button"
                             onClick={() => onCopyUrl(`http://${row.allocation.proxyHostname}`)}
+                            variant="secondary"
+                            size="xs"
                             className="px-1.5 py-0.5 text-[10px] rounded border border-surface text-subtext hover:text-text hover:bg-surface"
                           >
                             Copy
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
                             onClick={() => onOpenInBrowser(`http://${row.allocation.proxyHostname}`)}
+                            variant="secondary"
+                            size="xs"
                             className="px-1.5 py-0.5 text-[10px] rounded border border-surface text-subtext hover:text-text hover:bg-surface"
                           >
                             Open
-                          </button>
+                          </Button>
                         </>
                       )}
                     </div>

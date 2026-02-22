@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import {
+  Button,
   DEFAULT_TMUX_HISTORY_LIMIT,
   recordDebugEvent,
   useAppSettings,
@@ -687,12 +688,14 @@ function Terminal({
           <div className="text-center">
             <p className="text-lg mb-2">Terminal Error</p>
             <p className="text-sm text-subtext">{error}</p>
-            <button
+            <Button
               onClick={onClose}
+              variant="secondary"
+              size="md"
               className="mt-4 px-4 py-2 bg-surface rounded hover:bg-surface/80 text-text"
             >
               Close
-            </button>
+            </Button>
           </div>
         </div>
       </TerminalPresentational>
@@ -713,24 +716,28 @@ function Terminal({
             Reconnect this terminal first. If all terminals are stuck, restart the app.
           </p>
           <div className="mt-2 flex items-center gap-2">
-            <button
+            <Button
               type="button"
               onClick={handleReconnectNow}
               disabled={!onReconnect}
+              variant="secondary"
+              size="sm"
               className="px-2 py-1 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-40"
             >
               Reconnect terminal
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => {
                 void handleRestartApp();
               }}
               disabled={isRestartingApp}
+              variant="secondary"
+              size="sm"
               className="px-2 py-1 text-xs rounded bg-yellow/20 text-yellow hover:bg-yellow/30 disabled:opacity-40"
             >
               {isRestartingApp ? "Restarting..." : "Restart app"}
-            </button>
+            </Button>
           </div>
         </div>
       )}

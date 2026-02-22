@@ -1,12 +1,16 @@
-import { useMemo } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import type { Automation } from "../../../entities/automation";
 import {
+  Button,
   EDITOR_THEME_OPTIONS_DARK,
   EDITOR_THEME_OPTIONS_LIGHT,
+  FormField,
+  IconButton,
+  ModalShell,
+  Select,
+  TextInput,
+  Textarea,
   type EditorThemeId,
 } from "../../../shared";
-import { FAST_EASE_OUT, OVERLAY_FADE, SOFT_SPRING, getPopVariants } from "../../../shared";
 import type { SettingsPresentationalProps } from "./Settings.types";
 
 function formatDateTime(value: number | null | undefined): string {
@@ -71,34 +75,34 @@ function AutomationCard({
         <div className="text-xs text-subtext">{formatRunStatus(latestStatus)}</div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
           onClick={() => {
             void onRunNow();
           }}
           disabled={isBusy}
-          className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-60"
+          size="sm"
+          variant="secondary"
         >
           {isBusy ? "Running..." : "Run now"}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           onClick={onEdit}
           disabled={isBusy}
-          className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface disabled:opacity-60"
+          size="sm"
+          variant="secondary"
         >
           Edit
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           onClick={() => {
             void onDelete();
           }}
           disabled={isBusy}
-          className="px-2.5 py-1.5 text-xs rounded border border-red/30 text-red hover:bg-red/10 disabled:opacity-60"
+          size="sm"
+          variant="danger"
         >
           Delete
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -125,8 +129,13 @@ function AutomationEditorModal({
   | "onCloseAutomationEditor"
 >) {
   return (
-    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl rounded-md border border-surface bg-sidebar max-h-[90vh] overflow-y-auto">
+    <ModalShell
+      onRequestClose={onCloseAutomationEditor}
+      size="lg"
+      surface="sidebar"
+      overlayClassName="z-[60] p-4"
+      panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+    >
         <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
           <div>
             <h3 className="text-sm text-text font-semibold">
@@ -136,38 +145,37 @@ function AutomationEditorModal({
               Manual-only mode. Scheduled execution is disabled while we rebuild this feature.
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
             onClick={onCloseAutomationEditor}
-            className="w-7 h-7 rounded border border-surface text-subtext hover:text-text hover:bg-surface"
+            variant="subtle"
+            size="sm"
             disabled={isSubmittingAutomation}
-            aria-label="Close"
-          >
-            x
-          </button>
+            label="Close"
+            icon="x"
+          />
         </div>
 
         <div className="p-4 space-y-3">
-          <div>
-            <label className="block text-xs text-subtext mb-1">Name</label>
-            <input
+          <FormField label="Name" htmlFor="settings-automation-name" labelClassName="block text-xs text-subtext mb-1">
+            <TextInput
+              id="settings-automation-name"
               type="text"
               value={automationForm.name}
               onChange={(event) => onAutomationFormChange("name", event.target.value)}
-              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="text-sm focus:ring-0"
               placeholder="Manual repo audit"
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="block text-xs text-subtext mb-1">Project</label>
-            <select
+          <FormField label="Project" htmlFor="settings-automation-project" labelClassName="block text-xs text-subtext mb-1">
+            <Select
+              id="settings-automation-project"
               value={automationForm.projectId ?? ""}
               onChange={(event) => {
                 const value = Number(event.target.value);
                 onAutomationFormChange("projectId", Number.isFinite(value) ? value : null);
               }}
-              className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="text-sm focus:ring-0"
             >
               <option value="">Select project</option>
               {projects.map((project) => (
@@ -175,44 +183,44 @@ function AutomationEditorModal({
                   {project.name}
                 </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FormField>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-subtext mb-1">Agent</label>
-              <select
+            <FormField label="Agent" htmlFor="settings-automation-agent" labelClassName="block text-xs text-subtext mb-1">
+              <Select
+                id="settings-automation-agent"
                 value={automationForm.agent}
                 onChange={(event) => {
                   onAutomationFormChange("agent", event.target.value as typeof automationForm.agent);
                 }}
-                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+                className="text-sm focus:ring-0"
               >
                 <option value="claude">Claude</option>
                 <option value="codex">Codex</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-subtext mb-1">Every (hours)</label>
-              <input
+              </Select>
+            </FormField>
+            <FormField label="Every (hours)" htmlFor="settings-automation-interval" labelClassName="block text-xs text-subtext mb-1">
+              <TextInput
+                id="settings-automation-interval"
                 type="number"
                 min={1}
                 value={automationForm.intervalHours}
                 onChange={(event) => onAutomationFormChange("intervalHours", Number(event.target.value))}
-                className="w-full px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+                className="text-sm focus:ring-0"
               />
-            </div>
+            </FormField>
           </div>
 
-          <div>
-            <label className="block text-xs text-subtext mb-1">Prompt</label>
-            <textarea
+          <FormField label="Prompt" htmlFor="settings-automation-prompt" labelClassName="block text-xs text-subtext mb-1">
+            <Textarea
+              id="settings-automation-prompt"
               value={automationForm.prompt}
               onChange={(event) => onAutomationFormChange("prompt", event.target.value)}
-              className="w-full min-h-[160px] px-3 py-2 text-sm bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="min-h-[160px] text-sm focus:ring-0"
               placeholder="Audit this repository and summarize high-impact regressions."
             />
-          </div>
+          </FormField>
 
           <label className="inline-flex items-center gap-2 text-xs text-subtext">
             <input
@@ -248,27 +256,26 @@ function AutomationEditorModal({
         </div>
 
         <div className="px-4 py-3 border-t border-surface flex items-center justify-between gap-2">
-          <button
-            type="button"
+          <Button
             onClick={onCloseAutomationEditor}
-            className="px-3 py-2 text-xs rounded border border-surface text-text hover:bg-surface"
+            variant="secondary"
+            size="sm"
             disabled={isSubmittingAutomation}
           >
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             onClick={() => {
               void onSubmitAutomationForm();
             }}
-            className="px-3 py-2 text-xs rounded bg-accent text-main hover:bg-accent/80 disabled:opacity-60"
+            variant="primary"
+            size="sm"
             disabled={isSubmittingAutomation}
           >
             {isSubmittingAutomation ? "Saving..." : automationSubmitLabel}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -304,76 +311,49 @@ function SettingsPresentational({
   oauthTokenVisible,
   onToggleOAuthTokenVisible,
 }: SettingsPresentationalProps) {
-  const shouldReduceMotion = useReducedMotion();
-  const panelVariants = useMemo(
-    () => getPopVariants(shouldReduceMotion),
-    [shouldReduceMotion]
-  );
-  const panelTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
-
   if (loading) {
     return (
-      <motion.div
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-        variants={OVERLAY_FADE}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        transition={FAST_EASE_OUT}
+      <ModalShell
+        closeOnOverlayClick={false}
+        size="sm"
+        surface="sidebar"
+        panelClassName="p-8"
       >
-        <motion.div
-          className="bg-sidebar border border-surface rounded-lg p-8"
-          variants={panelVariants}
-          initial="hidden"
-          animate="visible"
-          exit="exit"
-          transition={panelTransition}
-        >
-          <p className="text-subtext">Loading settings...</p>
-        </motion.div>
-      </motion.div>
+        <p className="text-subtext">Loading settings...</p>
+      </ModalShell>
     );
   }
 
   return (
-    <motion.div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={onClose}
-      variants={OVERLAY_FADE}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      transition={FAST_EASE_OUT}
+    <ModalShell
+      onRequestClose={onClose}
+      size="xl"
+      surface="sidebar"
+      panelClassName="w-[640px] max-h-[85vh] overflow-y-auto"
     >
-      <motion.div
-        className="bg-sidebar border border-surface rounded-lg shadow-xl w-[640px] max-h-[85vh] overflow-y-auto"
-        onClick={(event) => event.stopPropagation()}
-        variants={panelVariants}
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        transition={panelTransition}
-      >
         <div className="p-4 border-b border-surface flex items-center justify-between">
           <h2 className="text-lg font-semibold text-text">Settings</h2>
-          <button
+          <IconButton
             onClick={onClose}
-            className="text-subtext hover:text-text p-1"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+            variant="subtle"
+            size="sm"
+            label="Close"
+            icon={(
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            )}
+          />
         </div>
 
         <div className="p-4 space-y-6">
@@ -381,15 +361,15 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Default Shell
             </label>
-            <select
+            <Select
               value={settings.defaultShell}
               onChange={(event) => onUpdateSetting("defaultShell", event.target.value)}
-              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="focus:ring-0"
             >
               <option value="/bin/zsh">zsh</option>
               <option value="/bin/bash">bash</option>
               <option value="/bin/sh">sh</option>
-            </select>
+            </Select>
             <p className="text-xs text-subtext mt-1">
               Shell used for new terminal sessions
             </p>
@@ -400,8 +380,10 @@ function SettingsPresentational({
               Theme
             </label>
             <div className="flex gap-2">
-              <button
+              <Button
                 onClick={() => onUpdateSetting("theme", "dark")}
+                variant={settings.theme === "dark" ? "primary" : "subtle"}
+                size="md"
                 className={`flex-1 px-4 py-2 rounded border ${
                   settings.theme === "dark"
                     ? "border-accent bg-accent/10 text-accent"
@@ -409,9 +391,11 @@ function SettingsPresentational({
                 }`}
               >
                 Dark
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => onUpdateSetting("theme", "light")}
+                variant={settings.theme === "light" ? "primary" : "subtle"}
+                size="md"
                 className={`flex-1 px-4 py-2 rounded border ${
                   settings.theme === "light"
                     ? "border-accent bg-accent/10 text-accent"
@@ -419,7 +403,7 @@ function SettingsPresentational({
                 }`}
               >
                 Light
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -427,17 +411,17 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Editor Theme (When App is Light)
             </label>
-            <select
+            <Select
               value={settings.editorThemeForLightMode}
               onChange={(event) => onUpdateSetting("editorThemeForLightMode", event.target.value as EditorThemeId)}
-              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="focus:ring-0"
             >
               {EDITOR_THEME_OPTIONS_LIGHT.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <p className="text-xs text-subtext mt-1">
               Editor theme used when the app is in light mode.
             </p>
@@ -447,17 +431,17 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Editor Theme (When App is Dark)
             </label>
-            <select
+            <Select
               value={settings.editorThemeForDarkMode}
               onChange={(event) => onUpdateSetting("editorThemeForDarkMode", event.target.value as EditorThemeId)}
-              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="focus:ring-0"
             >
               {EDITOR_THEME_OPTIONS_DARK.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
             <p className="text-xs text-subtext mt-1">
               Editor theme used when the app is in dark mode.
             </p>
@@ -479,13 +463,13 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               tmux History Limit
             </label>
-            <input
+            <TextInput
               type="number"
               min={1000}
               max={500000}
               value={settings.tmuxHistoryLimit}
               onChange={(event) => onUpdateSetting("tmuxHistoryLimit", Number(event.target.value))}
-              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="focus:ring-0"
             />
             <p className="text-xs text-subtext mt-1">
               Lines kept in tmux scrollback. Recommended: 50,000.
@@ -496,11 +480,11 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Claude Command Template
             </label>
-            <input
+            <TextInput
               type="text"
               value={settings.agentCommandClaude}
               onChange={(event) => onUpdateSetting("agentCommandClaude", event.target.value)}
-              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="focus:ring-0"
             />
             <p className="text-xs text-subtext mt-1">
               Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.
@@ -511,11 +495,11 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Codex Command Template
             </label>
-            <input
+            <TextInput
               type="text"
               value={settings.agentCommandCodex}
               onChange={(event) => onUpdateSetting("agentCommandCodex", event.target.value)}
-              className="w-full px-3 py-2 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+              className="focus:ring-0"
             />
             <p className="text-xs text-subtext mt-1">
               Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.
@@ -527,20 +511,21 @@ function SettingsPresentational({
               Claude OAuth Token (Automations)
             </label>
             <div className="relative">
-              <input
+              <TextInput
                 type={oauthTokenVisible ? "text" : "password"}
                 value={settings.claudeOAuthToken}
                 onChange={(event) => onUpdateSetting("claudeOAuthToken", event.target.value)}
-                className="w-full px-3 py-2 pr-10 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent"
+                className="pr-10 focus:ring-0"
                 placeholder="Paste token from claude setup-token"
               />
-              <button
+              <IconButton
                 type="button"
                 onClick={onToggleOAuthTokenVisible}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-subtext hover:text-text"
-                aria-label={oauthTokenVisible ? "Hide token" : "Show token"}
-              >
-                {oauthTokenVisible ? (
+                variant="ghost"
+                size="xs"
+                label={oauthTokenVisible ? "Hide token" : "Show token"}
+                icon={oauthTokenVisible ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7.5a11.72 11.72 0 013.168-4.477M6.343 6.343A9.97 9.97 0 0112 5c5 0 9.27 3.11 11 7.5a11.72 11.72 0 01-4.168 4.477M6.343 6.343L3 3m3.343 3.343l2.829 2.829m4.486 4.486l2.829 2.829M3 3l18 18m-9-5.5a2.5 2.5 0 01-2.45-3" />
                   </svg>
@@ -550,7 +535,7 @@ function SettingsPresentational({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                 )}
-              </button>
+              />
             </div>
             <p className="text-xs text-subtext mt-1">
               Optional. Run <code>claude setup-token</code> to generate a long-lived OAuth token.
@@ -567,23 +552,27 @@ function SettingsPresentational({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={onOpenCreateAutomation}
+                  variant="primary"
+                  size="sm"
                   className="px-2.5 py-1.5 text-xs rounded bg-accent text-main hover:bg-accent/80"
                 >
                   New automation
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => {
                     void onRefreshAutomations();
                   }}
+                  variant="secondary"
+                  size="sm"
                   className="px-2.5 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
                   disabled={automationsLoading}
                 >
                   {automationsLoading ? "Refreshing..." : "Refresh"}
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -682,20 +671,24 @@ function SettingsPresentational({
 
               <div className="flex gap-2">
                 {updaterPresentation.showCheckButton && (
-                  <button
+                  <Button
                     onClick={updater.checkForUpdate}
+                    variant="secondary"
+                    size="sm"
                     className="px-3 py-1.5 text-sm border border-surface rounded hover:bg-surface text-text"
                   >
                     Check for Updates
-                  </button>
+                  </Button>
                 )}
                 {updaterPresentation.showInstallButton && (
-                  <button
+                  <Button
                     onClick={updater.downloadAndInstall}
+                    variant="primary"
+                    size="sm"
                     className="px-3 py-1.5 text-sm bg-accent text-main rounded hover:bg-accent/80"
                   >
                     Install and Restart
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -703,20 +696,21 @@ function SettingsPresentational({
         </div>
 
         <div className="p-4 border-t border-surface flex justify-end gap-2">
-          <button
+          <Button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-subtext hover:text-text"
+            variant="ghost"
+            size="md"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onSave}
-            className="px-4 py-2 text-sm bg-accent text-main rounded hover:bg-accent/80"
+            variant="primary"
+            size="md"
           >
             Save
-          </button>
+          </Button>
         </div>
-      </motion.div>
 
       {isEditorOpen && (
         <AutomationEditorModal
@@ -730,7 +724,7 @@ function SettingsPresentational({
           onCloseAutomationEditor={onCloseAutomationEditor}
         />
       )}
-    </motion.div>
+    </ModalShell>
   );
 }
 

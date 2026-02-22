@@ -1,5 +1,6 @@
 import UsageBar from "./UsageBar.presentational";
 import { formatTimeSince } from "../model/usageLimits.pure";
+import { Button } from "../../../shared";
 import type { UsageLimitsPopoverProps } from "./UsageLimitsPopover.types";
 
 function UsageLimitsPopover({
@@ -17,14 +18,16 @@ function UsageLimitsPopover({
     <div className="w-80 bg-sidebar border border-surface rounded-lg shadow-lg p-3 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-text">Usage Limits</h3>
-        <button
+        <Button
           type="button"
           onClick={onRefresh}
           disabled={loading}
+          variant="ghost"
+          size="xs"
           className="text-xs text-subtext hover:text-text transition-colors disabled:opacity-40"
         >
           {loading ? "Refreshing..." : "Refresh"}
-        </button>
+        </Button>
       </div>
 
       {!hasAnyCreds && (

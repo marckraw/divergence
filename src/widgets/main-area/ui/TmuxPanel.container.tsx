@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTmuxSessions } from "../../../entities/terminal-session";
 import type { Project, Divergence } from "../../../entities";
+import { Button, IconButton } from "../../../shared";
 import {
   filterTmuxSessions,
   getTmuxOwnershipBadge,
@@ -59,14 +60,16 @@ function TmuxPanel({
           <div className="text-xs uppercase text-subtext font-medium">
             Tmux Sessions
           </div>
-          <button
+          <Button
             type="button"
             className="text-xs text-subtext hover:text-text"
             onClick={refresh}
             disabled={loading}
+            variant="ghost"
+            size="xs"
           >
             {loading ? "Refreshing..." : "Refresh"}
-          </button>
+          </Button>
         </div>
         <div className="px-3 pb-2">
           <div className="flex items-center gap-2 bg-main px-3 py-2 rounded">
@@ -98,27 +101,30 @@ function TmuxPanel({
               aria-label="Search tmux sessions"
             />
             {searchQuery && (
-              <button
+              <IconButton
                 type="button"
                 className="text-subtext hover:text-text"
                 onClick={() => setSearchQuery("")}
                 title="Clear search"
-                aria-label="Clear search"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                variant="ghost"
+                size="xs"
+                label="Clear search"
+                icon={(
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                )}
+              />
             )}
           </div>
         </div>
@@ -145,23 +151,27 @@ function TmuxPanel({
           </span>
           <div className="flex items-center gap-2">
             {ownershipReady && orphanCount > 0 && (
-              <button
+              <Button
                 type="button"
                 className="text-yellow hover:text-text transition-colors"
                 onClick={handleKillOrphans}
                 disabled={loading}
+                variant="ghost"
+                size="xs"
               >
                 Kill Orphans
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               className="text-subtext hover:text-red transition-colors"
               onClick={handleKillAll}
               disabled={loading || !ownershipReady}
+              variant="ghost"
+              size="xs"
             >
               Kill All
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -185,13 +195,15 @@ function TmuxPanel({
             <div className="py-2 text-center">No tmux sessions running.</div>
             {diagnostics && (
               <div className="text-left">
-                <button
+                <Button
                   type="button"
                   className="text-[10px] text-subtext/70 hover:text-text underline"
                   onClick={() => setShowDiagnostics((v) => !v)}
+                  variant="ghost"
+                  size="xs"
                 >
                   {showDiagnostics ? "Hide diagnostics" : "Show diagnostics"}
-                </button>
+                </Button>
                 {showDiagnostics && (
                   <div className="mt-2 p-2 bg-surface/50 rounded text-[10px] font-mono space-y-1 overflow-x-auto">
                     <div className="text-text font-semibold mb-1">Tmux Environment</div>
@@ -284,27 +296,31 @@ function TmuxPanel({
               </div>
 
               {/* Kill button */}
-              <button
+              <IconButton
                 type="button"
                 className="w-5 h-5 flex items-center justify-center text-subtext hover:text-red opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                 onClick={() => killSession(session.name)}
                 title="Kill session"
                 disabled={loading}
-              >
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                variant="ghost"
+                size="xs"
+                label={`Kill session ${session.name}`}
+                icon={(
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                )}
+              />
             </div>
           );
         })}

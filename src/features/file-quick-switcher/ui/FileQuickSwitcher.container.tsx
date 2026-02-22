@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent } from "react";
 import {
   filterFilesByQuery,
   joinRootWithRelativePath,
@@ -101,10 +101,6 @@ function FileQuickSwitcherContainer({ rootPath, onSelect, onClose }: FileQuickSw
     }
   }, [displayFiles, onClose, selectFile, selectedIndex]);
 
-  const handlePanelClick = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    event.stopPropagation();
-  }, []);
-
   return (
     <FileQuickSwitcherPresentational
       query={query}
@@ -118,7 +114,6 @@ function FileQuickSwitcherContainer({ rootPath, onSelect, onClose }: FileQuickSw
       inputRef={inputRef}
       listRef={listRef}
       onClose={onClose}
-      onPanelClick={handlePanelClick}
       onQueryChange={setQuery}
       onInputKeyDown={handleInputKeyDown}
       onSelectFile={selectFile}

@@ -1,4 +1,5 @@
 import type { InboxFilter } from "../../../entities/inbox-event";
+import { Button } from "../../../shared";
 import type { InboxPanelProps } from "./InboxPanel.types";
 
 const FILTERS: Array<{ id: InboxFilter; label: string }> = [
@@ -31,41 +32,47 @@ function InboxPanelPresentational({
           <p className="text-xs text-subtext">Automation runs and GitHub updates</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
             type="button"
             onClick={() => {
               void onRefresh();
             }}
+            variant="secondary"
+            size="sm"
             className="px-3 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
             disabled={loading}
           >
             {loading ? "Refreshing..." : "Refresh"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={() => {
               void onMarkAllRead();
             }}
+            variant="secondary"
+            size="sm"
             className="px-3 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
             disabled={loading || events.length === 0}
           >
             Mark all read
-          </button>
+          </Button>
         </div>
       </div>
 
       <div className="px-5 py-3 border-b border-surface flex items-center gap-2">
         {FILTERS.map((item) => (
-          <button
+          <Button
             key={item.id}
             type="button"
             onClick={() => onFilterChange(item.id)}
+            variant={filter === item.id ? "primary" : "subtle"}
+            size="xs"
             className={`px-2.5 py-1 text-xs rounded ${
               filter === item.id ? "bg-accent text-main" : "bg-surface text-subtext hover:text-text"
             }`}
           >
             {item.label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -98,15 +105,17 @@ function InboxPanelPresentational({
                   )}
                 </div>
                 {!event.read && (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => {
                       void onMarkRead(event.id);
                     }}
+                    variant="secondary"
+                    size="xs"
                     className="text-[11px] px-2 py-1 rounded border border-surface text-text hover:bg-surface"
                   >
                     Mark read
-                  </button>
+                  </Button>
                 )}
               </div>
               <div className="mt-2 text-[11px] text-subtext flex items-center gap-2">
