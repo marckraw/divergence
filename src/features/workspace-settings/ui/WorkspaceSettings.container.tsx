@@ -1,8 +1,13 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import type { Workspace, WorkspaceMember } from "../../../entities";
-import { getWorkspace, listWorkspaceMembers } from "../../../entities/workspace";
+import {
+  getWorkspace,
+  listWorkspaceMembers,
+  loadWorkspaceSettings,
+} from "../../../entities/workspace";
+import { getAdapterLabels } from "../../../entities/port-management";
 import { updateWorkspaceFolder } from "../../workspace-management/api/workspaceFolder.api";
-import { saveWorkspaceMetadata, updateWorkspaceMembers } from "../service/workspaceSettings.service";
+import { saveWorkspaceConfiguration, updateWorkspaceMembers } from "../service/workspaceSettings.service";
 import WorkspaceSettingsPresentational from "./WorkspaceSettings.presentational";
 import type { WorkspaceSettingsContainerProps } from "./WorkspaceSettings.types";
 
@@ -18,27 +23,67 @@ function WorkspaceSettingsContainer({
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [defaultPort, setDefaultPort] = useState("");
+  const [framework, setFramework] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const frameworkOptions = useMemo(() => getAdapterLabels(), []);
 
   useEffect(() => {
+    let isDisposed = false;
     void (async () => {
-      const ws = await getWorkspace(workspaceId);
-      if (ws) {
-        setWorkspace(ws);
-        setName(ws.name);
-        setDescription(ws.description ?? "");
+      try {
+        const [ws, m, settings] = await Promise.all([
+          getWorkspace(workspaceId),
+          listWorkspaceMembers(workspaceId),
+          loadWorkspaceSettings(workspaceId),
+        ]);
+        if (isDisposed) {
+          return;
+        }
+
+        if (ws) {
+          setWorkspace(ws);
+          setName(ws.name);
+          setDescription(ws.description ?? "");
+        } else {
+          setWorkspace(null);
+          setName("");
+          setDescription("");
+        }
+
+        setMembers(m);
+        setDefaultPort(settings.defaultPort ? String(settings.defaultPort) : "");
+        setFramework(settings.framework ?? "");
+      } catch (err) {
+        if (isDisposed) {
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Failed to load workspace settings");
       }
-      const m = await listWorkspaceMembers(workspaceId);
-      setMembers(m);
     })();
+
+    return () => {
+      isDisposed = true;
+    };
   }, [workspaceId]);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     setError(null);
     try {
-      await saveWorkspaceMetadata(workspaceId, name, description || null);
+      const parsedPort = Number.parseInt(defaultPort, 10);
+      const validPort = Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535
+        ? parsedPort
+        : null;
+
+      await saveWorkspaceConfiguration({
+        workspaceId,
+        name,
+        description: description || null,
+        defaultPort: validPort,
+        framework: framework || null,
+      });
       await refreshWorkspaces();
       const ws = await getWorkspace(workspaceId);
       if (ws) setWorkspace(ws);
@@ -47,7 +92,7 @@ function WorkspaceSettingsContainer({
     } finally {
       setIsSaving(false);
     }
-  }, [workspaceId, name, description, refreshWorkspaces]);
+  }, [workspaceId, name, description, defaultPort, framework, refreshWorkspaces]);
 
   const handleAddMember = useCallback(async (projectId: number) => {
     setError(null);
@@ -106,10 +151,15 @@ function WorkspaceSettingsContainer({
       projects={projects}
       name={name}
       description={description}
+      defaultPort={defaultPort}
+      framework={framework}
+      frameworkOptions={frameworkOptions}
       isSaving={isSaving}
       error={error}
       onNameChange={setName}
       onDescriptionChange={setDescription}
+      onDefaultPortChange={setDefaultPort}
+      onFrameworkChange={setFramework}
       onSave={handleSave}
       onAddMember={handleAddMember}
       onRemoveMember={handleRemoveMember}

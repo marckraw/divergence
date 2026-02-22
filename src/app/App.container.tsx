@@ -920,8 +920,15 @@ function App() {
       },
       closeSessionsForWorkspaceDivergence,
       refreshWorkspaces,
+      refreshPortAllocations,
     });
-  }, [closeSessionsForWorkspaceDivergence, handleCloseSession, refreshWorkspaces, runTask]);
+  }, [
+    closeSessionsForWorkspaceDivergence,
+    handleCloseSession,
+    refreshPortAllocations,
+    refreshWorkspaces,
+    runTask,
+  ]);
 
   const handleSelectWorkspaceDivergence = useCallback((wd: import("../entities").WorkspaceDivergence) => {
     const id = `workspace_divergence-${wd.id}`;

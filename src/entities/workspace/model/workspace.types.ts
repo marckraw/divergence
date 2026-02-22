@@ -19,6 +19,12 @@ export interface WorkspaceWithMembers extends Workspace {
   members: WorkspaceMember[];
 }
 
+export interface WorkspaceSettings {
+  workspaceId: number;
+  defaultPort: number | null;
+  framework: string | null;
+}
+
 export interface CreateWorkspaceInput {
   name: string;
   slug: string;

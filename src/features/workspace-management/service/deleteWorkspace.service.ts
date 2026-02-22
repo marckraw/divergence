@@ -1,6 +1,10 @@
 import type { RunBackgroundTask, Workspace } from "../../../entities";
 import { deleteWorkspaceWithRelations } from "../../../entities/workspace";
 import { listWorkspaceDivergencesForWorkspace } from "../../../entities/workspace-divergence";
+import {
+  cleanupProxyForEntity,
+  deletePortAllocation,
+} from "../../../entities/port-management";
 import { deleteWorkspaceFolder } from "../api/workspaceFolder.api";
 
 export interface ExecuteDeleteWorkspaceParams {
@@ -9,6 +13,7 @@ export interface ExecuteDeleteWorkspaceParams {
   closeSessionsForWorkspace: (workspaceId: number) => void;
   closeSessionsForWorkspaceDivergence: (wdId: number) => void;
   refreshWorkspaces: () => Promise<void>;
+  refreshPortAllocations?: () => void;
 }
 
 export async function executeDeleteWorkspace({
@@ -17,6 +22,7 @@ export async function executeDeleteWorkspace({
   closeSessionsForWorkspace,
   closeSessionsForWorkspaceDivergence,
   refreshWorkspaces,
+  refreshPortAllocations,
 }: ExecuteDeleteWorkspaceParams): Promise<void> {
   return runTask<void>({
     kind: "delete_workspace",
@@ -39,6 +45,14 @@ export async function executeDeleteWorkspace({
       const wsDivergences = await listWorkspaceDivergencesForWorkspace(workspace.id);
       for (const wd of wsDivergences) {
         closeSessionsForWorkspaceDivergence(wd.id);
+        setPhase(`Deallocating workspace divergence port: ${wd.name}`);
+        try {
+          await cleanupProxyForEntity("workspace_divergence", wd.id);
+          await deletePortAllocation("workspace_divergence", wd.id);
+        } catch (err) {
+          console.warn(`Failed to deallocate port for workspace divergence ${wd.id}:`, err);
+        }
+
         setPhase(`Deleting workspace divergence folder: ${wd.name}`);
         try {
           await deleteWorkspaceFolder(wd.folderPath);
@@ -55,6 +69,7 @@ export async function executeDeleteWorkspace({
 
       setPhase("Refreshing");
       await refreshWorkspaces();
+      refreshPortAllocations?.();
     },
   });
 }

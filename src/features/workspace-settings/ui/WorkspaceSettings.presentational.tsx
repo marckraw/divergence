@@ -6,10 +6,15 @@ function WorkspaceSettingsPresentational({
   projects,
   name,
   description,
+  defaultPort,
+  framework,
+  frameworkOptions,
   isSaving,
   error,
   onNameChange,
   onDescriptionChange,
+  onDefaultPortChange,
+  onFrameworkChange,
   onSave,
   onAddMember,
   onRemoveMember,
@@ -80,6 +85,40 @@ function WorkspaceSettingsPresentational({
           >
             {isSaving ? "Saving..." : "Save Changes"}
           </button>
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium text-subtext uppercase">Port Management</h2>
+          <p className="text-xs text-subtext">
+            These defaults are used first when creating workspace divergences and their member divergences.
+          </p>
+          <div>
+            <label className="block text-sm text-text mb-1">Framework</label>
+            <select
+              value={framework}
+              onChange={(event) => onFrameworkChange(event.target.value)}
+              className="w-full px-3 py-2 bg-surface border border-surface rounded text-sm text-text focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <option value="">Auto-detect</option>
+              {frameworkOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-text mb-1">Default Port</label>
+            <input
+              type="number"
+              min={1}
+              max={65535}
+              placeholder="Auto"
+              value={defaultPort}
+              onChange={(event) => onDefaultPortChange(event.target.value)}
+              className="w-full px-3 py-2 bg-surface border border-surface rounded text-sm text-text focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
         </section>
 
         {/* Member Projects Section */}
