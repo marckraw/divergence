@@ -998,17 +998,56 @@ fn fetch_origin(repo_path: &Path) {
 }
 
 fn fetch_origin_impl(repo_path: &Path) -> Result<(), String> {
-    let output = Command::new("git")
+    let primary = Command::new("git")
         .args(["fetch", "origin"])
         .current_dir(repo_path)
         .output()
         .map_err(|error| format!("Failed to execute git fetch origin: {}", error))?;
 
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    if primary.status.success() {
+        return Ok(());
     }
 
-    Ok(())
+    let primary_error = String::from_utf8_lossy(&primary.stderr).trim().to_string();
+    let remote_url = get_remote_url(repo_path)?.unwrap_or_default();
+    if is_github_ssh_remote(&remote_url) && should_retry_via_github_443(&primary_error) {
+        let fallback = Command::new("git")
+            .arg("-c")
+            .arg("core.sshCommand=ssh -o Hostname=ssh.github.com -o Port=443 -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new")
+            .args(["fetch", "origin"])
+            .current_dir(repo_path)
+            .output()
+            .map_err(|error| format!("Failed to execute git fetch origin fallback: {}", error))?;
+
+        if fallback.status.success() {
+            return Ok(());
+        }
+
+        let fallback_error = String::from_utf8_lossy(&fallback.stderr).trim().to_string();
+        return Err(format!(
+            "{} (retry via ssh.github.com:443 failed: {})",
+            primary_error, fallback_error
+        ));
+    }
+
+    Err(primary_error)
+}
+
+fn is_github_ssh_remote(remote_url: &str) -> bool {
+    (remote_url.starts_with("git@github.com:")
+        || remote_url.starts_with("ssh://git@github.com/")
+        || remote_url.starts_with("ssh://github.com/"))
+        && remote_url.contains("github.com")
+}
+
+fn should_retry_via_github_443(error: &str) -> bool {
+    let normalized = error.to_ascii_lowercase();
+    normalized.contains("github.com port 22")
+        || normalized.contains("connection timed out")
+        || normalized.contains("connection refused")
+        || normalized.contains("no route to host")
+        || normalized.contains("network is unreachable")
+        || normalized.contains("undefined error: 0")
 }
 
 fn ref_exists(repo_path: &Path, reference: &str) -> Result<bool, String> {
