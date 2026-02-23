@@ -435,6 +435,12 @@ function MainAreaContainer({
                   isSplit && !isDraggingSplitPane
                     ? "transition-[flex-grow] duration-150 ease-out"
                     : ""
+                } ${
+                  isSplit
+                    ? isFocusedPane
+                      ? "border border-accent/70 ring-1 ring-inset ring-accent/30 shadow-lg shadow-accent/10 transition-[border-color,box-shadow,opacity] duration-150"
+                      : "border border-surface/80 opacity-85 transition-[border-color,box-shadow,opacity] duration-150"
+                    : ""
                 }`}
                 style={isSplit ? {
                   flexBasis: 0,

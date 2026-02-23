@@ -245,7 +245,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                 >
                   <Button
                     type="button"
-                    className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                    className={`w-full text-left flex items-center !justify-start gap-2 px-2 py-1 rounded text-xs transition-colors ${
                       isActive
                         ? "bg-accent/20 text-text"
                         : "text-subtext hover:text-text hover:bg-surface/60"
@@ -300,7 +300,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
               <div key={entry.path}>
                 <Button
                   type="button"
-                  className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                  className={`w-full text-left flex items-center !justify-start gap-2 px-2 py-1 rounded text-xs transition-colors ${
                     isActive
                       ? "bg-accent/20 text-text"
                       : "text-subtext hover:text-text hover:bg-surface/60"
