@@ -19,6 +19,7 @@ import type {
 export interface MainAreaProps {
   projects: Project[];
   sessions: Map<string, TerminalSession>;
+  idleAttentionSessionIds: Set<string>;
   activeSession: TerminalSession | null;
   onCloseSession: (sessionId: string) => void;
   onSelectSession: (sessionId: string) => void;

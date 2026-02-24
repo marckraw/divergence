@@ -141,6 +141,7 @@ function App() {
   const [sidebarMode, setSidebarMode] = useState<WorkSidebarMode>("projects");
   const [workTab, setWorkTab] = useState<WorkSidebarTab>("inbox");
   const [restoredTabsToastMessage, setRestoredTabsToastMessage] = useState<string | null>(null);
+  const [idleAttentionSessionIds, setIdleAttentionSessionIds] = useState<Set<string>>(new Set());
   const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>([]);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
@@ -289,6 +290,21 @@ function App() {
   }, [sessions]);
 
   useEffect(() => {
+    setIdleAttentionSessionIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const sessionId of prev) {
+        if (sessions.has(sessionId)) {
+          next.add(sessionId);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [sessions]);
+
+  useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
@@ -423,12 +439,42 @@ function App() {
     }
   }, []);
 
+  const clearIdleAttention = useCallback((sessionId: string) => {
+    setIdleAttentionSessionIds((prev) => {
+      if (!prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.delete(sessionId);
+      return next;
+    });
+  }, []);
+
+  const markIdleAttention = useCallback((sessionId: string) => {
+    setIdleAttentionSessionIds((prev) => {
+      if (prev.has(sessionId)) {
+        return prev;
+      }
+      const next = new Set(prev);
+      next.add(sessionId);
+      return next;
+    });
+  }, []);
+
   const clearNotificationTracking = useCallback((sessionId: string) => {
     clearIdleNotifyTimer(sessionId);
+    clearIdleAttention(sessionId);
     busySinceRef.current.delete(sessionId);
     statusBySessionRef.current.delete(sessionId);
     lastNotifiedAtRef.current.delete(sessionId);
-  }, [clearIdleNotifyTimer]);
+  }, [clearIdleNotifyTimer, clearIdleAttention]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+    clearIdleAttention(activeSessionId);
+  }, [activeSessionId, clearIdleAttention]);
 
   const scheduleIdleNotification = useCallback((sessionId: string, startedAt: number) => {
     clearIdleNotifyTimer(sessionId);
@@ -860,12 +906,17 @@ function App() {
     statusBySessionRef.current.set(sessionId, status);
 
     if (status === "busy") {
+      clearIdleAttention(sessionId);
       busySinceRef.current.set(sessionId, Date.now());
       clearIdleNotifyTimer(sessionId);
     } else if (status === "active") {
+      clearIdleAttention(sessionId);
       clearIdleNotifyTimer(sessionId);
     } else if (status === "idle" && previousStatus !== "idle") {
       const startedAt = busySinceRef.current.get(sessionId);
+      if (previousStatus === "busy" && activeSessionIdRef.current !== sessionId) {
+        markIdleAttention(sessionId);
+      }
       if (startedAt) {
         scheduleIdleNotification(sessionId, startedAt);
       }
@@ -882,7 +933,7 @@ function App() {
       }
       return newSessions;
     });
-  }, [clearIdleNotifyTimer, scheduleIdleNotification]);
+  }, [clearIdleAttention, clearIdleNotifyTimer, markIdleAttention, scheduleIdleNotification]);
 
   useEffect(() => {
     setSessions(prev => {
@@ -1605,6 +1656,7 @@ function App() {
         <MainArea
           projects={projects}
           sessions={sessions}
+          idleAttentionSessionIds={idleAttentionSessionIds}
           activeSession={activeSession}
           onCloseSession={handleCloseSession}
           onSelectSession={setActiveSessionId}
