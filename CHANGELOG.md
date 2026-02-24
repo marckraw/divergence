@@ -1,5 +1,11 @@
 # divergence
 
+## 0.22.2
+
+### Patch Changes
+
+- a51368b: Highlight terminal tabs when a background command becomes idle so it is easier to find tabs waiting for user input.
+
 ## 0.22.1
 
 ### Patch Changes
