@@ -1,4 +1,10 @@
-import { Button, TextInput, type DebugEvent } from "../../../shared";
+import {
+  Button,
+  ModalHeader,
+  ModalShell,
+  TextInput,
+  type DebugEvent,
+} from "../../../shared";
 import type { DebugConsolePanelProps } from "./DebugConsolePanel.types";
 import type {
   DebugCategoryFilter,
@@ -58,8 +64,13 @@ function renderMetadata(metadata: DebugEvent["metadata"]): string {
   return entries.map(([key, value]) => `${key}=${String(value)}`).join(" • ");
 }
 
+function renderEventJson(event: DebugEvent): string {
+  return JSON.stringify(event, null, 2);
+}
+
 function DebugConsolePanelPresentational({
   events,
+  selectedEvent,
   totalCount,
   visibleCount,
   infoCount,
@@ -75,6 +86,8 @@ function DebugConsolePanelPresentational({
   onCategoryFilterChange,
   onToggleOnlyFailureOrStuck,
   onResetFilters,
+  onInspectEvent,
+  onCloseInspectModal,
   onRefreshTmuxDiagnostics,
   onCopyJson,
   onClear,
@@ -220,6 +233,15 @@ function DebugConsolePanelPresentational({
                       )}
                     </div>
                     <div className="shrink-0 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => onInspectEvent(event)}
+                        variant="subtle"
+                        size="xs"
+                        className="px-2 py-1 text-[11px] rounded border border-surface text-subtext hover:text-text hover:bg-surface"
+                      >
+                        Inspect
+                      </Button>
                       <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${getCategoryClass(event.category)}`}>
                         {event.category}
                       </span>
@@ -243,6 +265,56 @@ function DebugConsolePanelPresentational({
           </div>
         )}
       </div>
+
+      {selectedEvent && (
+        <ModalShell
+          onRequestClose={onCloseInspectModal}
+          size="xl"
+          surface="sidebar"
+          overlayClassName="z-50"
+          panelClassName="w-[760px] max-w-[95vw] max-h-[85vh] flex flex-col"
+        >
+          <ModalHeader
+            title="Debug Event Details"
+            description={`${selectedEvent.category} • ${selectedEvent.level} • ${formatTimestamp(selectedEvent.atMs)}`}
+            onClose={onCloseInspectModal}
+          />
+          <div className="px-4 py-3 space-y-3 overflow-y-auto min-h-0">
+            <section className="space-y-1">
+              <h4 className="text-xs font-semibold text-subtext uppercase tracking-wide">Message</h4>
+              <div className="text-sm text-text break-words">{selectedEvent.message}</div>
+            </section>
+            <section className="space-y-1">
+              <h4 className="text-xs font-semibold text-subtext uppercase tracking-wide">Details</h4>
+              <pre className="text-xs text-subtext whitespace-pre-wrap break-words bg-main border border-surface rounded p-2">
+                {selectedEvent.details?.trim() ? selectedEvent.details : "No details"}
+              </pre>
+            </section>
+            <section className="space-y-1">
+              <h4 className="text-xs font-semibold text-subtext uppercase tracking-wide">Metadata</h4>
+              <pre className="text-xs text-subtext whitespace-pre-wrap break-words bg-main border border-surface rounded p-2">
+                {selectedEvent.metadata ? JSON.stringify(selectedEvent.metadata, null, 2) : "No metadata"}
+              </pre>
+            </section>
+            <section className="space-y-1">
+              <h4 className="text-xs font-semibold text-subtext uppercase tracking-wide">Raw Event JSON</h4>
+              <pre className="text-xs text-subtext whitespace-pre-wrap break-words bg-main border border-surface rounded p-2">
+                {renderEventJson(selectedEvent)}
+              </pre>
+            </section>
+          </div>
+          <div className="px-4 py-3 border-t border-surface flex justify-end">
+            <Button
+              type="button"
+              onClick={onCloseInspectModal}
+              variant="secondary"
+              size="sm"
+            >
+              Close
+            </Button>
+          </div>
+        </ModalShell>
+      )}
     </div>
   );
 }

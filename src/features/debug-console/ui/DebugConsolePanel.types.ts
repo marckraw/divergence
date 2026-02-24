@@ -6,6 +6,7 @@ import type {
 
 export interface DebugConsolePanelProps {
   events: DebugEvent[];
+  selectedEvent: DebugEvent | null;
   totalCount: number;
   visibleCount: number;
   infoCount: number;
@@ -21,6 +22,8 @@ export interface DebugConsolePanelProps {
   onCategoryFilterChange: (value: DebugCategoryFilter) => void;
   onToggleOnlyFailureOrStuck: () => void;
   onResetFilters: () => void;
+  onInspectEvent: (event: DebugEvent) => void;
+  onCloseInspectModal: () => void;
   onRefreshTmuxDiagnostics: () => Promise<void>;
   onCopyJson: () => Promise<void>;
   onClear: () => void;

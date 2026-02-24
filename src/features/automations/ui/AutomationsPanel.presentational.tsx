@@ -309,6 +309,7 @@ function AutomationsPanelPresentational({
   projects,
   automations,
   latestRunByAutomationId,
+  queuedCloudCountByAutomationId,
   loading,
   error,
   onRefresh,
@@ -377,8 +378,10 @@ function AutomationsPanelPresentational({
           )}
 
           <div className="space-y-3">
-            {automations.map((automation) => (
-              <AutomationCard
+            {automations.map((automation) => {
+              const queuedCloudCount = queuedCloudCountByAutomationId.get(automation.id) ?? 0;
+              return (
+                <AutomationCard
                 key={automation.id}
                 className="bg-sidebar/50"
                 name={
@@ -400,6 +403,9 @@ function AutomationsPanelPresentational({
                       <div>
                         {`Source #${automation.sourceProjectId ?? "?"} -> Target #${automation.targetProjectId ?? "?"}`}
                       </div>
+                    )}
+                    {automation.runMode === "event" && (
+                      <div>Queued cloud events: {queuedCloudCount}</div>
                     )}
                     <div>Last run: {formatLastRun(automation.lastRunAtMs)}</div>
                     <div>Next run: {formatNextRun(automation.nextRunAtMs)}</div>
@@ -436,7 +442,8 @@ function AutomationsPanelPresentational({
                   </>
                 }
               />
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>
