@@ -1,5 +1,6 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { buildButtonClassName, type ButtonSize, type ButtonVariant } from "./button.styles";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { cn } from "../lib/cn.pure";
+import { buttonVariants, type ButtonSize, type ButtonVariant } from "./button.styles";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
@@ -8,29 +9,32 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   iconOnly?: boolean;
 }
 
-function Button({
-  children,
-  variant = "secondary",
-  size = "sm",
-  iconOnly = false,
-  className,
-  type = "button",
-  ...props
-}: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={buildButtonClassName({
-        variant,
-        size,
-        iconOnly,
-        className,
-      })}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
+      children,
+      variant = "secondary",
+      size = "sm",
+      iconOnly = false,
+      className,
+      type = "button",
+      ...props
+    },
+    ref,
+  ) => {
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={cn(buttonVariants({ variant, size, iconOnly }), className)}
+        {...props}
+      >
+        {children}
+      </button>
+    );
+  },
+);
+
+Button.displayName = "Button";
 
 export default Button;
