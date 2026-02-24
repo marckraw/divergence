@@ -330,7 +330,7 @@ function Terminal({
       window.addEventListener("resize", handleResize);
 
       // Phase 2 (debounced): Spawn PTY after short delay to survive StrictMode unmount
-      spawnTimerRef.current = setTimeout(() => {
+      spawnTimerRef.current = setTimeout(async () => {
         spawnTimerRef.current = null;
         if (isDisposedRef.current) {
           return;
@@ -357,7 +357,7 @@ function Terminal({
           spawnStartedAtRef.current = Date.now();
           hasLoggedFirstOutputRef.current = false;
           const pty = useTmux
-            ? spawnTmuxPty({
+            ? await spawnTmuxPty({
                 cols: terminal.cols,
                 rows: terminal.rows,
                 cwd,
@@ -369,7 +369,7 @@ function Terminal({
                   ...portEnv,
                 },
               })
-            : spawnShell();
+            : await spawnShell();
 
           ptyRef.current = pty;
           hasReceivedDataRef.current = false;

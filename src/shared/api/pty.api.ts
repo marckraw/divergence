@@ -1,6 +1,19 @@
 import { spawn, type IPty } from "tauri-pty";
+import { invoke } from "@tauri-apps/api/core";
 
 export type PtyProcess = IPty;
+
+let cachedShell: string | null = null;
+
+async function getDefaultShell(): Promise<string> {
+  if (cachedShell) return cachedShell;
+  try {
+    cachedShell = await invoke<string>("get_default_shell");
+  } catch {
+    cachedShell = "/bin/bash";
+  }
+  return cachedShell;
+}
 
 interface SpawnPtyBaseOptions {
   cols: number;
@@ -31,8 +44,9 @@ export interface RunLoginShellCommandResult {
   output: string;
 }
 
-export function spawnLoginPty(options: SpawnPtyBaseOptions): IPty {
-  return spawn("/bin/zsh", ["-l"], {
+export async function spawnLoginPty(options: SpawnPtyBaseOptions): Promise<IPty> {
+  const shell = await getDefaultShell();
+  return spawn(shell, ["-l"], {
     cols: options.cols,
     rows: options.rows,
     cwd: options.cwd,
@@ -40,8 +54,9 @@ export function spawnLoginPty(options: SpawnPtyBaseOptions): IPty {
   });
 }
 
-export function spawnInteractiveShellPty(options: SpawnPtyBaseOptions): IPty {
-  return spawn("/bin/zsh", ["-l", "-i"], {
+export async function spawnInteractiveShellPty(options: SpawnPtyBaseOptions): Promise<IPty> {
+  const shell = await getDefaultShell();
+  return spawn(shell, ["-l", "-i"], {
     cols: options.cols,
     rows: options.rows,
     cwd: options.cwd,
@@ -49,15 +64,16 @@ export function spawnInteractiveShellPty(options: SpawnPtyBaseOptions): IPty {
   });
 }
 
-export function spawnTmuxPty(options: SpawnTmuxPtyOptions): IPty {
-  return spawn("/bin/zsh", ["-l", "-i", "-c", options.tmuxCommand], {
+export async function spawnTmuxPty(options: SpawnTmuxPtyOptions): Promise<IPty> {
+  const shell = await getDefaultShell();
+  return spawn(shell, ["-l", "-i", "-c", options.tmuxCommand], {
     cols: options.cols,
     rows: options.rows,
     cwd: options.cwd,
     env: {
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
-      SHELL: "/bin/zsh",
+      SHELL: shell,
       DIVERGENCE_APP: "1",
       DIVERGENCE_TMUX_SESSION: options.sessionName,
       DIVERGENCE_TMUX_CWD: options.cwd,
@@ -75,16 +91,17 @@ export async function runLoginShellCommand(
   const outputTailChars = options.outputTailChars ?? 4000;
   const outputUpdateIntervalMs = options.outputUpdateIntervalMs ?? 600;
   const decoder = new TextDecoder();
+  const shell = await getDefaultShell();
 
   return new Promise((resolve, reject) => {
-    const pty = spawn("/bin/zsh", ["-l", "-c", options.command], {
+    const pty = spawn(shell, ["-l", "-c", options.command], {
       cols: 120,
       rows: 24,
       cwd: options.cwd,
       env: {
         TERM: "xterm-256color",
         COLORTERM: "truecolor",
-        SHELL: "/bin/zsh",
+        SHELL: shell,
         DIVERGENCE_APP: "1",
         ...options.env,
       },
