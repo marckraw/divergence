@@ -12,7 +12,13 @@ fn debug_log(msg: &str) {
     eprintln!("{}", msg);
     let mutex = DEBUG_LOG.get_or_init(|| {
         let log_dir = dirs::home_dir()
-            .map(|h| h.join("Library/Logs/Divergence"))
+            .map(|h| {
+                if cfg!(target_os = "macos") {
+                    h.join("Library/Logs/Divergence")
+                } else {
+                    h.join(".local/share/divergence/logs")
+                }
+            })
             .unwrap_or_else(|| PathBuf::from("/tmp"));
         let _ = fs::create_dir_all(&log_dir);
         let log_path = log_dir.join("tmux-debug.log");
