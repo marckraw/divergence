@@ -1,4 +1,4 @@
-import { Button, ModalShell, TextInput } from "../../../shared";
+import { Button, ErrorBanner, ModalShell, TextInput } from "../../../shared";
 import type { CreateDivergenceModalPresentationalProps } from "./CreateDivergenceModal.types";
 
 function CreateDivergenceModalPresentational({
@@ -57,7 +57,7 @@ function CreateDivergenceModalPresentational({
           type="checkbox"
           checked={useExistingBranch}
           onChange={(event) => onUseExistingBranchChange(event.target.checked)}
-          className="mt-1 accent-accent"
+          className="mt-1 accent-primary"
           disabled={isCreating}
         />
         <div>
@@ -81,9 +81,7 @@ function CreateDivergenceModalPresentational({
       )}
 
       {error && (
-        <div className="mb-4 px-3 py-2 bg-red/10 border border-red/30 rounded text-red text-sm">
-          {error}
-        </div>
+        <ErrorBanner className="mb-4 text-sm">{error}</ErrorBanner>
       )}
 
       <div className="flex justify-end gap-2">

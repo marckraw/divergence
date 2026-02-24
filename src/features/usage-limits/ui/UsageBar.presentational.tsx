@@ -1,3 +1,4 @@
+import { ProgressBar } from "../../../shared";
 import {
   formatUtilization,
   formatResetTime,
@@ -24,12 +25,7 @@ function UsageBar({ label, utilization, resetsAt }: UsageBarProps) {
           {formatUtilization(utilization)}
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-surface overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-300 ${barColor}`}
-          style={{ width: `${widthPercent}%` }}
-        />
-      </div>
+      <ProgressBar value={widthPercent} barClassName={barColor} />
       {resetsAt && (
         <p className="text-[10px] text-subtext">
           resets in {formatResetTime(resetsAt)}

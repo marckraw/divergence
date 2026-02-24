@@ -1,13 +1,23 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
-import { Button, IconButton, MenuButton, StatusIndicator } from "../../../shared";
+import {
+  Button,
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+  EmptyState,
+  ErrorBanner,
+  IconButton,
+  SegmentedControl,
+  StatusIndicator,
+} from "../../../shared";
 import CreateDivergenceModal from "../../../features/create-divergence";
 import {
   FAST_EASE_OUT,
   SOFT_SPRING,
   getCollapseVariants,
-  getPopVariants,
 } from "../../../shared";
 import {
   getSessionsForWorkspace,
@@ -42,24 +52,21 @@ function SidebarPresentational({
   onSelectProject,
   onSelectDivergence,
   onSelectSession,
+  onCloseSession,
+  onCloseSessionAndKillTmux,
+  onCreateAdditionalSession,
+  onRemoveProject,
   onCreateDivergence,
   isCollapsed,
   expandedProjects,
   deletingDivergences,
   deleteError,
-  contextMenu,
   hasExpandableProjects,
   isAllExpanded,
   onAddProjectClick,
   onToggleProjectExpand,
   onToggleAllProjects,
-  onContextMenuOpen,
-  onContextMenuClose,
-  onContextMenuRemoveProject,
-  onContextMenuCreateAdditionalSession,
-  onContextMenuDeleteDivergence,
-  onContextMenuCloseSession,
-  onContextMenuCloseSessionAndKillTmux,
+  onDeleteDivergenceFromMenu,
   workspaces,
   membersByWorkspaceId,
   onSelectWorkspace,
@@ -74,21 +81,12 @@ function SidebarPresentational({
   onToggleWorkspaceExpand,
 }: SidebarPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
-  const contextMenuVariants = useMemo(
-    () => getPopVariants(shouldReduceMotion, 8, 0.98),
-    [shouldReduceMotion]
-  );
   const collapseVariants = useMemo(
     () => getCollapseVariants(shouldReduceMotion),
     [shouldReduceMotion]
   );
   const layoutTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
-  const contextSession = contextMenu?.type === "session"
-    ? contextMenu.item as TerminalSession
-    : null;
   const deletingDivergenceIds = new Set(deletingDivergences.map((item) => item.id));
-  const isContextMenuDivergenceDeleting = contextMenu?.type === "divergence"
-    && deletingDivergenceIds.has(contextMenu.id as number);
 
   return (
     <>
@@ -110,44 +108,18 @@ function SidebarPresentational({
             </svg>
             Divergence
           </h1>
-          <div className="inline-flex rounded-md bg-main p-1">
-            <Button
-              type="button"
-              onClick={() => onModeChange("projects")}
-              variant={mode === "projects" ? "primary" : "ghost"}
-              size="xs"
-              className={`px-2 py-1 text-xs rounded ${
-                mode === "projects" ? "bg-accent text-main" : "text-subtext hover:text-text"
-              }`}
-            >
-              Projects
-            </Button>
-            <Button
-              type="button"
-              onClick={() => onModeChange("work")}
-              variant={mode === "work" ? "primary" : "ghost"}
-              size="xs"
-              className={`px-2 py-1 text-xs rounded ${
-                mode === "work" ? "bg-accent text-main" : "text-subtext hover:text-text"
-              }`}
-            >
-              Work
-            </Button>
-            <Button
-              type="button"
-              onClick={() => onModeChange("workspaces")}
-              variant={mode === "workspaces" ? "primary" : "ghost"}
-              size="xs"
-              className={`px-2 py-1 text-xs rounded ${
-                mode === "workspaces" ? "bg-accent text-main" : "text-subtext hover:text-text"
-              }`}
-            >
-              Workspaces
-            </Button>
-          </div>
+          <SegmentedControl
+            items={[
+              { id: "projects" as const, label: "Projects" },
+              { id: "work" as const, label: "Work" },
+              { id: "workspaces" as const, label: "Workspaces" },
+            ]}
+            value={mode}
+            onChange={onModeChange}
+          />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2" onClick={onContextMenuClose}>
+        <div className="flex-1 overflow-y-auto p-2">
           {mode === "projects" && deletingDivergences.length > 0 && (
             <div className="px-2 py-2 mb-2 text-xs text-subtext border border-surface rounded-md bg-surface/30 flex items-center gap-2">
               <svg className="w-3 h-3 animate-spin text-accent" viewBox="0 0 24 24" fill="none">
@@ -162,9 +134,9 @@ function SidebarPresentational({
             </div>
           )}
           {mode === "projects" && deleteError && (
-            <div className="px-2 py-2 mb-2 text-xs text-red border border-red/30 rounded-md bg-red/10">
+            <ErrorBanner className="px-2 mb-2 rounded-md">
               Failed to delete divergence: {deleteError}
-            </div>
+            </ErrorBanner>
           )}
           {mode === "work" ? (
             <div className="space-y-1">
@@ -209,10 +181,10 @@ function SidebarPresentational({
               </div>
 
               {workspaces.length === 0 ? (
-                <div className="px-2 py-8 text-center text-subtext text-sm">
+                <EmptyState className="px-2">
                   <p>No workspaces yet</p>
                   <p className="text-xs mt-1">Click "Create Workspace" to group projects</p>
-                </div>
+                </EmptyState>
               ) : (
                 <div className="space-y-1">
                   {workspaces.map((workspace) => {
@@ -224,63 +196,78 @@ function SidebarPresentational({
 
                     return (
                       <div key={workspace.id}>
-                        <div
-                          className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group hover:bg-surface/50 transition-colors"
-                          onClick={() => onSelectWorkspace(workspace)}
-                          onContextMenu={(event) => {
-                            event.preventDefault();
-                            onContextMenuOpen(event, "workspace", workspace);
-                          }}
-                        >
-                          {hasWsDivergences ? (
-                            <IconButton
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                onToggleWorkspaceExpand(workspace.id);
-                              }}
-                              className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
-                              variant="ghost"
-                              size="xs"
-                              label={isWsExpanded ? "Collapse workspace" : "Expand workspace"}
-                              icon={(
-                                <svg
-                                  className={`w-3 h-3 transition-transform ${isWsExpanded ? "rotate-90" : ""}`}
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M9 5l7 7-7 7"
-                                  />
-                                </svg>
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <div
+                              className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group hover:bg-surface/50 transition-colors"
+                              onClick={() => onSelectWorkspace(workspace)}
+                            >
+                              {hasWsDivergences ? (
+                                <IconButton
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onToggleWorkspaceExpand(workspace.id);
+                                  }}
+                                  className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
+                                  variant="ghost"
+                                  size="xs"
+                                  label={isWsExpanded ? "Collapse workspace" : "Expand workspace"}
+                                  icon={(
+                                    <svg
+                                      className={`w-3 h-3 transition-transform ${isWsExpanded ? "rotate-90" : ""}`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M9 5l7 7-7 7"
+                                      />
+                                    </svg>
+                                  )}
+                                />
+                              ) : (
+                                <div className="w-4" />
                               )}
-                            />
-                          ) : (
-                            <div className="w-4" />
-                          )}
-                          <svg
-                            className="w-4 h-4 text-accent shrink-0"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-                            />
-                          </svg>
-                          <span className="flex-1 truncate text-sm text-text">
-                            {workspace.name}
-                          </span>
-                          <span className="text-[11px] text-subtext bg-surface px-1.5 py-0.5 rounded-full">
-                            {memberCount}
-                          </span>
-                        </div>
+                              <svg
+                                className="w-4 h-4 text-accent shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                                />
+                              </svg>
+                              <span className="flex-1 truncate text-sm text-text">
+                                {workspace.name}
+                              </span>
+                              <span className="text-[11px] text-subtext bg-surface px-1.5 py-0.5 rounded-full">
+                                {memberCount}
+                              </span>
+                            </div>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent>
+                            <ContextMenuItem onSelect={() => onSelectWorkspace(workspace)}>
+                              Open Terminal
+                            </ContextMenuItem>
+                            <ContextMenuItem onSelect={() => onOpenWorkspaceSettings(workspace)}>
+                              Settings
+                            </ContextMenuItem>
+                            <ContextMenuItem onSelect={() => onCreateWorkspaceDivergence(workspace)}>
+                              Create Divergence
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onDeleteWorkspace(workspace); }}>
+                              Delete Workspace
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
                         <AnimatePresence initial={false}>
                           {isWsExpanded && hasWsDivergences && (
                             <motion.div
@@ -293,33 +280,41 @@ function SidebarPresentational({
                             >
                               <div className="ml-4 mt-1 space-y-1">
                                 {wsDivergences.map((wd) => (
-                                  <div
-                                    key={wd.id}
-                                    className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-surface/50 transition-colors"
-                                    onClick={() => onSelectWorkspaceDivergence(wd)}
-                                    onContextMenu={(event) => {
-                                      event.preventDefault();
-                                      onContextMenuOpen(event, "workspace_divergence", wd);
-                                    }}
-                                  >
-                                    <div className="w-4" />
-                                    <svg
-                                      className="w-4 h-4 text-accent shrink-0"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                                      />
-                                    </svg>
-                                    <span className="flex-1 truncate text-sm text-text">
-                                      {wd.branch}
-                                    </span>
-                                  </div>
+                                  <ContextMenu key={wd.id}>
+                                    <ContextMenuTrigger asChild>
+                                      <div
+                                        className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-surface/50 transition-colors"
+                                        onClick={() => onSelectWorkspaceDivergence(wd)}
+                                      >
+                                        <div className="w-4" />
+                                        <svg
+                                          className="w-4 h-4 text-accent shrink-0"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                                          />
+                                        </svg>
+                                        <span className="flex-1 truncate text-sm text-text">
+                                          {wd.branch}
+                                        </span>
+                                      </div>
+                                    </ContextMenuTrigger>
+                                    <ContextMenuContent>
+                                      <ContextMenuItem onSelect={() => onSelectWorkspaceDivergence(wd)}>
+                                        Open Terminal
+                                      </ContextMenuItem>
+                                      <ContextMenuSeparator />
+                                      <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onDeleteWorkspaceDivergence(wd); }}>
+                                        Delete
+                                      </ContextMenuItem>
+                                    </ContextMenuContent>
+                                  </ContextMenu>
                                 ))}
                               </div>
                             </motion.div>
@@ -350,10 +345,10 @@ function SidebarPresentational({
               </div>
 
               {projects.length === 0 ? (
-                <div className="px-2 py-8 text-center text-subtext text-sm">
+                <EmptyState className="px-2">
                   <p>No projects yet</p>
                   <p className="text-xs mt-1">Click "Add Project" to get started</p>
-                </div>
+                </EmptyState>
               ) : (
                 <div className="space-y-1">
                   {projects.map((project) => {
@@ -365,77 +360,92 @@ function SidebarPresentational({
 
                 return (
                   <div key={project.id}>
-                    <motion.div
-                      className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group ${
-                        projectActive ? "bg-surface" : "hover:bg-surface/50"
-                      } transition-colors`}
-                      onClick={() => onSelectProject(project)}
-                      onContextMenu={(event) => onContextMenuOpen(event, "project", project)}
-                      layout={shouldReduceMotion ? undefined : "position"}
-                      transition={layoutTransition}
-                    >
-                      {divergences.length > 0 && (
-                        <IconButton
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onToggleProjectExpand(project.id);
-                          }}
-                          className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
-                          variant="ghost"
-                          size="xs"
-                          label={isExpanded ? "Collapse project" : "Expand project"}
-                          icon={(
-                            <svg
-                              className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          )}
-                        />
-                      )}
-                      {divergences.length === 0 && <div className="w-4" />}
-
-                      <StatusIndicator status={projectStatus} />
-
-                      <span className="flex-1 truncate text-sm text-text">
-                        {project.name}
-                      </span>
-
-                      <IconButton
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onCreateDivergenceForChange(project);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-subtext hover:text-accent transition-opacity"
-                        title="Create Divergence"
-                        variant="ghost"
-                        size="xs"
-                        label={`Create divergence for ${project.name}`}
-                        icon={(
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"
+                    <ContextMenu>
+                      <ContextMenuTrigger asChild>
+                        <motion.div
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group ${
+                            projectActive ? "bg-surface" : "hover:bg-surface/50"
+                          } transition-colors`}
+                          onClick={() => onSelectProject(project)}
+                          layout={shouldReduceMotion ? undefined : "position"}
+                          transition={layoutTransition}
+                        >
+                          {divergences.length > 0 && (
+                            <IconButton
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onToggleProjectExpand(project.id);
+                              }}
+                              className="w-4 h-4 flex items-center justify-center text-subtext hover:text-text"
+                              variant="ghost"
+                              size="xs"
+                              label={isExpanded ? "Collapse project" : "Expand project"}
+                              icon={(
+                                <svg
+                                  className={`w-3 h-3 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 5l7 7-7 7"
+                                  />
+                                </svg>
+                              )}
                             />
-                          </svg>
-                        )}
-                      />
-                    </motion.div>
+                          )}
+                          {divergences.length === 0 && <div className="w-4" />}
+
+                          <StatusIndicator status={projectStatus} />
+
+                          <span className="flex-1 truncate text-sm text-text">
+                            {project.name}
+                          </span>
+
+                          <IconButton
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onCreateDivergenceForChange(project);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center text-subtext hover:text-accent transition-opacity"
+                            title="Create Divergence"
+                            variant="ghost"
+                            size="xs"
+                            label={`Create divergence for ${project.name}`}
+                            icon={(
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2"
+                                />
+                              </svg>
+                            )}
+                          />
+                        </motion.div>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onSelect={() => onCreateAdditionalSession("project", project)}>
+                          New Session
+                        </ContextMenuItem>
+                        <ContextMenuItem onSelect={() => onCreateDivergenceForChange(project)}>
+                          Create Divergence
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onRemoveProject(project.id); }}>
+                          Remove Project
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
 
                     <AnimatePresence initial={false}>
                       {isExpanded && divergences.length > 0 && (
@@ -463,55 +473,83 @@ function SidebarPresentational({
 
                               return (
                                 <div key={divergence.id}>
-                                  <motion.div
-                                    className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
-                                      divActive ? "bg-surface" : "hover:bg-surface/50"
-                                    }`}
-                                    onClick={() => onSelectDivergence(divergence)}
-                                    onContextMenu={(event) => onContextMenuOpen(event, "divergence", divergence)}
-                                    layout={shouldReduceMotion ? undefined : "position"}
-                                    transition={layoutTransition}
-                                  >
-                                    <div className="w-4" />
-                                    <StatusIndicator status={divStatus} />
-                                    <svg
-                                      className="w-4 h-4 text-accent"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                                      />
-                                    </svg>
-                                    <span className="flex-1 truncate text-sm text-text">
-                                      {divergence.branch}
-                                    </span>
-                                  </motion.div>
+                                  <ContextMenu>
+                                    <ContextMenuTrigger asChild>
+                                      <motion.div
+                                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                                          divActive ? "bg-surface" : "hover:bg-surface/50"
+                                        }`}
+                                        onClick={() => onSelectDivergence(divergence)}
+                                        layout={shouldReduceMotion ? undefined : "position"}
+                                        transition={layoutTransition}
+                                      >
+                                        <div className="w-4" />
+                                        <StatusIndicator status={divStatus} />
+                                        <svg
+                                          className="w-4 h-4 text-accent"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                                          />
+                                        </svg>
+                                        <span className="flex-1 truncate text-sm text-text">
+                                          {divergence.branch}
+                                        </span>
+                                      </motion.div>
+                                    </ContextMenuTrigger>
+                                    <ContextMenuContent>
+                                      <ContextMenuItem onSelect={() => onCreateAdditionalSession("divergence", divergence)}>
+                                        New Session
+                                      </ContextMenuItem>
+                                      <ContextMenuSeparator />
+                                      <ContextMenuItem
+                                        className="text-red focus:text-red"
+                                        disabled={deletingDivergenceIds.has(divergence.id)}
+                                        onSelect={() => onDeleteDivergenceFromMenu(divergence)}
+                                      >
+                                        {deletingDivergenceIds.has(divergence.id) ? "Deleting..." : "Delete Divergence"}
+                                      </ContextMenuItem>
+                                    </ContextMenuContent>
+                                  </ContextMenu>
                                   {divergenceSessions.length > 0 && (
                                     <div className="ml-8 mt-1 space-y-0.5">
                                       {divergenceSessions.map((session) => (
-                                        <Button
-                                          key={session.id}
-                                          type="button"
-                                          className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
-                                            isSessionItemActive(activeSessionId, session.id)
-                                              ? "bg-surface text-text"
-                                              : "text-subtext hover:text-text hover:bg-surface/50"
-                                          }`}
-                                          onClick={() => onSelectSession(session.id)}
-                                          onContextMenu={(event) => onContextMenuOpen(event, "session", session)}
-                                          variant="ghost"
-                                          size="xs"
-                                        >
-                                          <StatusIndicator status={session.status} />
-                                          <span className="truncate">
-                                            {session.sessionRole === "default" ? "default" : session.name}
-                                          </span>
-                                        </Button>
+                                        <ContextMenu key={session.id}>
+                                          <ContextMenuTrigger asChild>
+                                            <Button
+                                              type="button"
+                                              className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                                                isSessionItemActive(activeSessionId, session.id)
+                                                  ? "bg-surface text-text"
+                                                  : "text-subtext hover:text-text hover:bg-surface/50"
+                                              }`}
+                                              onClick={() => onSelectSession(session.id)}
+                                              variant="ghost"
+                                              size="xs"
+                                            >
+                                              <StatusIndicator status={session.status} />
+                                              <span className="truncate">
+                                                {session.sessionRole === "default" ? "default" : session.name}
+                                              </span>
+                                            </Button>
+                                          </ContextMenuTrigger>
+                                          <ContextMenuContent>
+                                            <ContextMenuItem className="text-red focus:text-red" onSelect={() => onCloseSession(session.id)}>
+                                              Close Session
+                                            </ContextMenuItem>
+                                            {session.useTmux && (
+                                              <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onCloseSessionAndKillTmux(session.id); }}>
+                                                Close Session + Kill Tmux
+                                              </ContextMenuItem>
+                                            )}
+                                          </ContextMenuContent>
+                                        </ContextMenu>
                                       ))}
                                     </div>
                                   )}
@@ -525,24 +563,36 @@ function SidebarPresentational({
                     {projectSessions.length > 0 && (
                       <div className="ml-8 mt-1 space-y-0.5">
                         {projectSessions.map((session) => (
-                          <Button
-                            key={session.id}
-                            type="button"
-                            className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
-                              isSessionItemActive(activeSessionId, session.id)
-                                ? "bg-surface text-text"
-                                : "text-subtext hover:text-text hover:bg-surface/50"
-                            }`}
-                            onClick={() => onSelectSession(session.id)}
-                            onContextMenu={(event) => onContextMenuOpen(event, "session", session)}
-                            variant="ghost"
-                            size="xs"
-                          >
-                            <StatusIndicator status={session.status} />
-                            <span className="truncate">
-                              {session.sessionRole === "default" ? "default" : session.name}
-                            </span>
-                          </Button>
+                          <ContextMenu key={session.id}>
+                            <ContextMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                                  isSessionItemActive(activeSessionId, session.id)
+                                    ? "bg-surface text-text"
+                                    : "text-subtext hover:text-text hover:bg-surface/50"
+                                }`}
+                                onClick={() => onSelectSession(session.id)}
+                                variant="ghost"
+                                size="xs"
+                              >
+                                <StatusIndicator status={session.status} />
+                                <span className="truncate">
+                                  {session.sessionRole === "default" ? "default" : session.name}
+                                </span>
+                              </Button>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuItem className="text-red focus:text-red" onSelect={() => onCloseSession(session.id)}>
+                                Close Session
+                              </ContextMenuItem>
+                              {session.useTmux && (
+                                <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onCloseSessionAndKillTmux(session.id); }}>
+                                  Close Session + Kill Tmux
+                                </ContextMenuItem>
+                              )}
+                            </ContextMenuContent>
+                          </ContextMenu>
                         ))}
                       </div>
                     )}
@@ -606,138 +656,6 @@ function SidebarPresentational({
           </div>
         )}
       </aside>
-
-      <AnimatePresence>
-        {contextMenu && (
-          <motion.div
-            className="fixed bg-surface border border-surface rounded-md shadow-lg py-1 z-50"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-            variants={contextMenuVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            transition={layoutTransition}
-          >
-            {contextMenu.type === "project" && (
-              <>
-                <MenuButton
-                  onClick={onContextMenuCreateAdditionalSession}
-                >
-                  New Session
-                </MenuButton>
-                <MenuButton
-                  onClick={() => {
-                    onCreateDivergenceForChange(contextMenu.item as Project);
-                    onContextMenuClose();
-                  }}
-                >
-                  Create Divergence
-                </MenuButton>
-                <MenuButton
-                  tone="danger"
-                  onClick={onContextMenuRemoveProject}
-                >
-                  Remove Project
-                </MenuButton>
-              </>
-            )}
-            {contextMenu.type === "divergence" && (
-              <>
-                <MenuButton
-                  onClick={onContextMenuCreateAdditionalSession}
-                >
-                  New Session
-                </MenuButton>
-                <MenuButton
-                  tone="danger"
-                  onClick={onContextMenuDeleteDivergence}
-                  disabled={isContextMenuDivergenceDeleting}
-                >
-                  {isContextMenuDivergenceDeleting ? "Deleting..." : "Delete Divergence"}
-                </MenuButton>
-              </>
-            )}
-            {contextMenu.type === "workspace" && (
-              <>
-                <MenuButton
-                  onClick={() => {
-                    onSelectWorkspace(contextMenu.item as Workspace);
-                    onContextMenuClose();
-                  }}
-                >
-                  Open Terminal
-                </MenuButton>
-                <MenuButton
-                  onClick={() => {
-                    onOpenWorkspaceSettings(contextMenu.item as Workspace);
-                    onContextMenuClose();
-                  }}
-                >
-                  Settings
-                </MenuButton>
-                <MenuButton
-                  onClick={() => {
-                    onCreateWorkspaceDivergence(contextMenu.item as Workspace);
-                    onContextMenuClose();
-                  }}
-                >
-                  Create Divergence
-                </MenuButton>
-                <MenuButton
-                  tone="danger"
-                  onClick={() => {
-                    void onDeleteWorkspace(contextMenu.item as Workspace);
-                    onContextMenuClose();
-                  }}
-                >
-                  Delete Workspace
-                </MenuButton>
-              </>
-            )}
-            {contextMenu.type === "workspace_divergence" && (
-              <>
-                <MenuButton
-                  onClick={() => {
-                    onSelectWorkspaceDivergence(contextMenu.item as WorkspaceDivergence);
-                    onContextMenuClose();
-                  }}
-                >
-                  Open Terminal
-                </MenuButton>
-                <MenuButton
-                  tone="danger"
-                  onClick={() => {
-                    void onDeleteWorkspaceDivergence(contextMenu.item as WorkspaceDivergence);
-                    onContextMenuClose();
-                  }}
-                >
-                  Delete
-                </MenuButton>
-              </>
-            )}
-            {contextMenu.type === "session" && (
-              <>
-                <MenuButton
-                  tone="danger"
-                  onClick={onContextMenuCloseSession}
-                >
-                  Close Session
-                </MenuButton>
-                {contextSession?.useTmux && (
-                  <MenuButton
-                    tone="danger"
-                    onClick={() => {
-                      void onContextMenuCloseSessionAndKillTmux();
-                    }}
-                  >
-                    Close Session + Kill Tmux
-                  </MenuButton>
-                )}
-              </>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {mode === "projects" && createDivergenceFor && (

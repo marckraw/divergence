@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangesMode, GitChangeEntry, GitChangeStatus } from "../../../entities";
-import { Button } from "../../../shared";
+import { Button, EmptyState, ErrorBanner, SegmentedControl } from "../../../shared";
 import { getRelativePathFromRoot, sortGitChangesByPath } from "../lib/changes.pure";
 import {
   listBranchChanges,
@@ -96,36 +96,14 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
     <ChangesPanelPresentational>
       <div className="h-full flex flex-col">
         <div className="flex items-center justify-between px-3 py-2 border-b border-surface">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center rounded bg-surface text-xs">
-              <Button
-                type="button"
-                className={`px-2 py-1 rounded transition-colors ${
-                  mode === "working"
-                    ? "bg-accent text-white"
-                    : "text-subtext hover:text-text"
-                }`}
-                onClick={() => onModeChange("working")}
-                variant={mode === "working" ? "primary" : "ghost"}
-                size="xs"
-              >
-                Working
-              </Button>
-              <Button
-                type="button"
-                className={`px-2 py-1 rounded transition-colors ${
-                  mode === "branch"
-                    ? "bg-accent text-white"
-                    : "text-subtext hover:text-text"
-                }`}
-                onClick={() => onModeChange("branch")}
-                variant={mode === "branch" ? "primary" : "ghost"}
-                size="xs"
-              >
-                Branch
-              </Button>
-            </div>
-          </div>
+          <SegmentedControl
+            items={[
+              { id: "working" as const, label: "Working" },
+              { id: "branch" as const, label: "Branch" },
+            ]}
+            value={mode}
+            onChange={onModeChange}
+          />
           <Button
             type="button"
             className="text-xs text-subtext hover:text-text"
@@ -150,16 +128,14 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
         )}
         <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
           {error && (
-            <div className="px-2 py-2 text-xs text-red bg-red/10 border border-red/30 rounded">
-              {error}
-            </div>
+            <ErrorBanner className="px-2">{error}</ErrorBanner>
           )}
           {!error && !loading && changes.length === 0 && (
-            <div className="px-2 py-8 text-center text-xs text-subtext">
+            <EmptyState className="px-2 text-xs">
               {mode === "branch" && !baseRef
                 ? "No base branch detected."
                 : "No changes yet."}
-            </div>
+            </EmptyState>
           )}
           {changes.map((entry) => {
             const statusStyle = STATUS_STYLES[entry.status] ?? STATUS_STYLES["?"];

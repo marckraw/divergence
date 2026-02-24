@@ -1,5 +1,5 @@
 import { buildAnchorLabel } from "../lib/diffReview.pure";
-import { Button } from "../../../shared";
+import { Button, EmptyState, ErrorBanner, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "../../../shared";
 import type { ReviewDraftPanelPresentationalProps } from "./ReviewDraftPanel.types";
 
 function ReviewDraftPanelPresentational({
@@ -33,16 +33,12 @@ function ReviewDraftPanelPresentational({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
-        {error && (
-          <div className="px-2 py-2 text-xs text-red bg-red/10 border border-red/30 rounded">
-            {error}
-          </div>
-        )}
+        {error && <ErrorBanner className="px-2">{error}</ErrorBanner>}
 
         {comments.length === 0 ? (
-          <div className="text-xs text-subtext text-center py-6 border border-dashed border-surface rounded">
+          <EmptyState className="py-6 text-xs border border-dashed border-surface rounded">
             No inline comments yet.
-          </div>
+          </EmptyState>
         ) : (
           groupedComments.map((group) => (
             <div key={group.filePath} className="border border-surface rounded">
@@ -76,25 +72,26 @@ function ReviewDraftPanelPresentational({
       <div className="border-t border-surface p-3 space-y-3">
         <div>
           <label className="block text-xs text-subtext mb-1">Final Comment</label>
-          <textarea
+          <Textarea
             value={finalComment}
             onChange={(event) => onFinalCommentChange(event.target.value)}
             rows={4}
-            className="w-full px-2 py-2 bg-main border border-surface rounded text-xs text-text focus:outline-none focus:border-accent"
+            className="text-xs"
             placeholder="Overall guidance for the agent..."
           />
         </div>
 
         <div className="flex items-center gap-2">
           <label className="text-xs text-subtext">Agent</label>
-          <select
-            value={selectedAgent}
-            onChange={(event) => onAgentChange(event.target.value as typeof selectedAgent)}
-            className="flex-1 px-2 py-1.5 bg-main border border-surface rounded text-xs text-text"
-          >
-            <option value="claude">Claude</option>
-            <option value="codex">Codex</option>
-          </select>
+          <Select value={selectedAgent} onValueChange={(val) => onAgentChange(val as typeof selectedAgent)}>
+            <SelectTrigger className="flex-1 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="claude">Claude</SelectItem>
+              <SelectItem value="codex">Codex</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex items-center gap-2">
@@ -114,7 +111,7 @@ function ReviewDraftPanelPresentational({
             disabled={isRunning || !canRun}
             variant="primary"
             size="sm"
-            className="flex-1 px-3 py-2 text-xs bg-accent text-main rounded hover:bg-accent/80 disabled:opacity-50"
+            className="flex-1 px-3 py-2 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/80 disabled:opacity-50"
           >
             {isRunning ? "Running..." : "Run Agent"}
           </Button>

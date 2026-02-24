@@ -1,4 +1,4 @@
-import { Button, FormField, IconButton, Select, TextInput, Textarea } from "../../../shared";
+import { Button, ErrorBanner, FormField, IconButton, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, TextInput, Textarea } from "../../../shared";
 import type { WorkspaceSettingsPresentationalProps } from "./WorkspaceSettings.types";
 
 function WorkspaceSettingsPresentational({
@@ -55,11 +55,7 @@ function WorkspaceSettingsPresentational({
           />
         </div>
 
-        {error && (
-          <div className="text-xs text-red bg-red/10 border border-red/30 rounded px-3 py-2">
-            {error}
-          </div>
-        )}
+        {error && <ErrorBanner>{error}</ErrorBanner>}
 
         {/* General Section */}
         <section className="space-y-4">
@@ -90,7 +86,7 @@ function WorkspaceSettingsPresentational({
             disabled={isSaving}
             variant="primary"
             size="md"
-            className="px-4 py-2 bg-accent text-main text-sm rounded hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {isSaving ? "Saving..." : "Save Changes"}
           </Button>
@@ -102,19 +98,18 @@ function WorkspaceSettingsPresentational({
             These defaults are used first when creating workspace divergences and their member divergences.
           </p>
           <FormField label="Framework" htmlFor="workspace-settings-framework">
-            <Select
-              id="workspace-settings-framework"
-              value={framework}
-              onChange={(event) => onFrameworkChange(event.target.value)}
-              tone="surface"
-              className="text-sm focus:ring-1"
-            >
-              <option value="">Auto-detect</option>
-              {frameworkOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
+            <Select value={framework || "__none__"} onValueChange={(val) => onFrameworkChange(val === "__none__" ? "" : val)}>
+              <SelectTrigger id="workspace-settings-framework" tone="surface" className="text-sm">
+                <SelectValue placeholder="Auto-detect" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Auto-detect</SelectItem>
+                {frameworkOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </FormField>
           <FormField label="Default Port" htmlFor="workspace-settings-default-port">

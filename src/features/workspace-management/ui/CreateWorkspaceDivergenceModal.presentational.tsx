@@ -1,4 +1,4 @@
-import { Button, FormField, ModalShell, TextInput } from "../../../shared";
+import { Button, ErrorBanner, FormField, ModalFooter, ModalShell, TextInput } from "../../../shared";
 import type { CreateWorkspaceDivergenceModalPresentationalProps } from "./CreateWorkspaceDivergenceModal.types";
 
 function CreateWorkspaceDivergenceModalPresentational({
@@ -67,14 +67,10 @@ function CreateWorkspaceDivergenceModalPresentational({
           </div>
         </div>
 
-        {error && (
-          <div className="text-xs text-red bg-red/10 border border-red/30 rounded px-3 py-2">
-            {error}
-          </div>
-        )}
+        {error && <ErrorBanner>{error}</ErrorBanner>}
       </div>
 
-      <div className="p-4 border-t border-surface flex justify-end gap-2">
+      <ModalFooter className="p-4">
         <Button
           onClick={onClose}
           variant="ghost"
@@ -90,7 +86,7 @@ function CreateWorkspaceDivergenceModalPresentational({
         >
           {isSubmitting ? "Creating..." : `Create ${memberProjects.length} Divergences`}
         </Button>
-      </div>
+      </ModalFooter>
     </ModalShell>
   );
 }

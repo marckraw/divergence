@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  EmptyState,
   FAST_EASE_OUT,
+  Kbd,
   ModalShell,
   getContentSwapVariants,
 } from "../../../shared";
@@ -66,9 +68,7 @@ function FileQuickSwitcherPresentational({
             placeholder="Search files..."
             className="flex-1 bg-transparent text-text placeholder-subtext focus:outline-none"
           />
-          <kbd className="text-xs text-subtext bg-surface px-1.5 py-0.5 rounded">
-            esc
-          </kbd>
+          <Kbd className="text-subtext">esc</Kbd>
         </div>
       </div>
 
@@ -99,9 +99,7 @@ function FileQuickSwitcherPresentational({
         ) : error ? (
           <div className="text-center py-8 text-red">{error}</div>
         ) : displayFiles.length === 0 ? (
-          <div className="text-center py-8 text-subtext">
-            No files found
-          </div>
+          <EmptyState>No files found</EmptyState>
         ) : (
           <AnimatePresence initial={false}>
             {displayFiles.map((filePath, index) => {
@@ -172,13 +170,13 @@ function FileQuickSwitcherPresentational({
         </span>
         <div className="flex items-center gap-4">
           <span>
-            <kbd className="px-1 py-0.5 bg-surface rounded">up/down</kbd> navigate
+            <Kbd className="px-1">up/down</Kbd> navigate
           </span>
           <span>
-            <kbd className="px-1 py-0.5 bg-surface rounded">enter</kbd> open
+            <Kbd className="px-1">enter</Kbd> open
           </span>
           <span>
-            <kbd className="px-1 py-0.5 bg-surface rounded">esc</kbd> close
+            <Kbd className="px-1">esc</Kbd> close
           </span>
         </div>
       </div>

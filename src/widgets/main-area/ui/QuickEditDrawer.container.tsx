@@ -30,10 +30,11 @@ import {
   FAST_EASE_OUT,
   SOFT_SPRING,
   Button,
+  LoadingSpinner,
   getContentSwapVariants,
   getSlideUpVariants,
 } from "../../../shared";
-import { TabButton, ToolbarButton } from "../../../shared";
+import { TabButton, Textarea, ToolbarButton } from "../../../shared";
 import type { ChangesMode } from "../../../entities";
 import {
   buildAnchorLabel,
@@ -82,25 +83,25 @@ interface QuickEditDrawerProps {
 }
 
 const syntaxTheme = HighlightStyle.define([
-  { tag: t.keyword, color: "#cba6f7", fontWeight: "600" },
-  { tag: [t.name, t.deleted, t.character, t.macroName, t.variableName], color: "#e6e9ef" },
-  { tag: t.propertyName, color: "#f8bd96" },
-  { tag: [t.function(t.variableName), t.labelName], color: "#8aadf4" },
-  { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: "#f5c2e7" },
-  { tag: [t.definition(t.name), t.separator, t.punctuation], color: "#cad3f5" },
-  { tag: [t.typeName, t.className], color: "#fab387" },
-  { tag: [t.number, t.bool, t.null, t.atom, t.literal, t.unit], color: "#f9e2af" },
-  { tag: [t.operator], color: "#94e2d5" },
-  { tag: [t.string, t.special(t.string)], color: "#a6e3a1" },
-  { tag: [t.regexp, t.escape, t.link], color: "#74c7ec" },
-  { tag: [t.meta, t.comment], color: "#9aa2b2", fontStyle: "italic" },
-  { tag: t.tagName, color: "#f38ba8" },
-  { tag: t.attributeName, color: "#f9e2af" },
-  { tag: t.heading, color: "#89b4fa", fontWeight: "600" },
+  { tag: t.keyword, color: "#c084fc", fontWeight: "600" },
+  { tag: [t.name, t.deleted, t.character, t.macroName, t.variableName], color: "#d4d4d8" },
+  { tag: t.propertyName, color: "#fb923c" },
+  { tag: [t.function(t.variableName), t.labelName], color: "#60a5fa" },
+  { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: "#c084fc" },
+  { tag: [t.definition(t.name), t.separator, t.punctuation], color: "#a1a1aa" },
+  { tag: [t.typeName, t.className], color: "#fb923c" },
+  { tag: [t.number, t.bool, t.null, t.atom, t.literal, t.unit], color: "#facc15" },
+  { tag: [t.operator], color: "#22d3ee" },
+  { tag: [t.string, t.special(t.string)], color: "#4ade80" },
+  { tag: [t.regexp, t.escape, t.link], color: "#22d3ee" },
+  { tag: [t.meta, t.comment], color: "#71717a", fontStyle: "italic" },
+  { tag: t.tagName, color: "#f87171" },
+  { tag: t.attributeName, color: "#facc15" },
+  { tag: t.heading, color: "#60a5fa", fontWeight: "600" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strong, fontWeight: "700" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: t.invalid, color: "#f38ba8", backgroundColor: "#f38ba81a" },
+  { tag: t.invalid, color: "#f87171", backgroundColor: "#f871711a" },
 ]);
 
 const baseTheme = EditorView.theme({
@@ -117,34 +118,34 @@ const divergenceTheme = EditorView.theme(
   {
     "&": {
       height: "100%",
-      backgroundColor: "#181825",
-      color: "#cdd6f4",
+      backgroundColor: "#09090b",
+      color: "#fafafa",
       fontSize: "13px",
       fontFamily:
         '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
     },
     ".cm-scroller": { overflow: "auto" },
-    ".cm-content": { caretColor: "#f5e0dc" },
-    ".cm-cursor, .cm-dropCursor": { borderLeft: "2px solid #f5e0dc" },
-    "&.cm-focused .cm-cursor": { borderLeftColor: "#f5e0dc" },
-    ".cm-selectionBackground": { backgroundColor: "#45475a" },
-    "&.cm-focused .cm-selectionBackground": { backgroundColor: "#45475a" },
-    ".cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#45475a" },
+    ".cm-content": { caretColor: "#fafafa" },
+    ".cm-cursor, .cm-dropCursor": { borderLeft: "2px solid #fafafa" },
+    "&.cm-focused .cm-cursor": { borderLeftColor: "#fafafa" },
+    ".cm-selectionBackground": { backgroundColor: "#3f3f46" },
+    "&.cm-focused .cm-selectionBackground": { backgroundColor: "#3f3f46" },
+    ".cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#3f3f46" },
     ".cm-gutters": {
-      backgroundColor: "#1e1e2e",
-      color: "#6c7086",
+      backgroundColor: "#18181b",
+      color: "#52525b",
       border: "none",
     },
-    ".cm-lineNumbers": { color: "#6c7086" },
-    ".cm-activeLine": { backgroundColor: "#1e1e2e" },
-    ".cm-activeLineGutter": { backgroundColor: "#1e1e2e" },
+    ".cm-lineNumbers": { color: "#52525b" },
+    ".cm-activeLine": { backgroundColor: "#18181b" },
+    ".cm-activeLineGutter": { backgroundColor: "#18181b" },
     ".cm-matchingBracket": {
-      backgroundColor: "#313244",
-      color: "#f5e0dc",
+      backgroundColor: "#27272a",
+      color: "#fafafa",
     },
     ".cm-nonmatchingBracket": {
-      backgroundColor: "#f38ba81a",
-      color: "#f38ba8",
+      backgroundColor: "#f871711a",
+      color: "#f87171",
     },
   },
   { dark: true }
@@ -178,30 +179,30 @@ const divergenceLightTheme = EditorView.theme(
   {
     "&": {
       height: "100%",
-      backgroundColor: "#f8f9fc",
-      color: "#1f2937",
+      backgroundColor: "#ffffff",
+      color: "#09090b",
       fontSize: "13px",
       fontFamily:
         '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
     },
     ".cm-scroller": { overflow: "auto" },
-    ".cm-content": { caretColor: "#2d6cdf" },
-    ".cm-cursor, .cm-dropCursor": { borderLeft: "2px solid #2d6cdf" },
-    "&.cm-focused .cm-cursor": { borderLeftColor: "#2d6cdf" },
-    ".cm-selectionBackground": { backgroundColor: "#d7deef" },
-    "&.cm-focused .cm-selectionBackground": { backgroundColor: "#d7deef" },
-    ".cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#d7deef" },
+    ".cm-content": { caretColor: "#18181b" },
+    ".cm-cursor, .cm-dropCursor": { borderLeft: "2px solid #18181b" },
+    "&.cm-focused .cm-cursor": { borderLeftColor: "#18181b" },
+    ".cm-selectionBackground": { backgroundColor: "#e4e4e7" },
+    "&.cm-focused .cm-selectionBackground": { backgroundColor: "#e4e4e7" },
+    ".cm-selectionLayer .cm-selectionBackground": { backgroundColor: "#e4e4e7" },
     ".cm-gutters": {
-      backgroundColor: "#eef0f6",
-      color: "#8a94b3",
+      backgroundColor: "#f4f4f5",
+      color: "#a1a1aa",
       border: "none",
     },
-    ".cm-lineNumbers": { color: "#8a94b3" },
-    ".cm-activeLine": { backgroundColor: "#eef0f6" },
-    ".cm-activeLineGutter": { backgroundColor: "#eef0f6" },
+    ".cm-lineNumbers": { color: "#a1a1aa" },
+    ".cm-activeLine": { backgroundColor: "#f4f4f5" },
+    ".cm-activeLineGutter": { backgroundColor: "#f4f4f5" },
     ".cm-matchingBracket": {
-      backgroundColor: "#d7deef",
-      color: "#1f2937",
+      backgroundColor: "#e4e4e7",
+      color: "#09090b",
     },
     ".cm-nonmatchingBracket": {
       backgroundColor: "#fee2e2",
@@ -636,10 +637,7 @@ function DiffViewer({
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-subtext">
-        <div className="flex items-center gap-2">
-          <span className="spinner" />
-          Loading diff...
-        </div>
+        <LoadingSpinner>Loading diff...</LoadingSpinner>
       </div>
     );
   }
@@ -783,11 +781,11 @@ function DiffViewer({
             )}
             {isComposerOpen && canComment && filePath && composerAnchor && (
               <div className="ml-6 mb-2 mr-3 border border-surface rounded p-2 bg-main/60">
-                <textarea
+                <Textarea
                   rows={3}
                   value={composerText}
                   onChange={(event) => setComposerText(event.target.value)}
-                  className="w-full px-2 py-1 bg-main border border-surface rounded text-[11px] text-text focus:outline-none focus:border-accent"
+                  className="px-2 py-1 text-[11px]"
                   placeholder={composerAnchor.lineKind === "range"
                     ? "Add comment for selected range..."
                     : "Add comment for this line..."}
@@ -808,7 +806,7 @@ function DiffViewer({
                   </Button>
                   <Button
                     type="button"
-                    className="px-2 py-1 text-[10px] bg-accent text-main rounded disabled:opacity-50"
+                    className="px-2 py-1 text-[10px] bg-primary text-primary-foreground rounded disabled:opacity-50"
                     disabled={!composerText.trim()}
                     onClick={() => {
                       if (!onAddComment || !composerText.trim() || !composerAnchor) {
@@ -996,10 +994,7 @@ function QuickEditDrawer({
                     exit="exit"
                     transition={contentTransition}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="spinner" />
-                      Loading file...
-                    </div>
+                    <LoadingSpinner>Loading file...</LoadingSpinner>
                   </motion.div>
                 ) : (
                   <motion.div
