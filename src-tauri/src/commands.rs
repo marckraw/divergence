@@ -1086,3 +1086,17 @@ pub async fn check_port_available(port: u16) -> Result<bool, String> {
         Err(_) => Ok(false),
     }
 }
+
+#[tauri::command]
+pub fn get_default_shell() -> String {
+    if let Ok(shell) = std::env::var("SHELL") {
+        if !shell.is_empty() {
+            return shell;
+        }
+    }
+    if cfg!(target_os = "macos") {
+        "/bin/zsh".to_string()
+    } else {
+        "/bin/bash".to_string()
+    }
+}

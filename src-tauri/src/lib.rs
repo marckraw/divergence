@@ -127,6 +127,7 @@ pub fn run() {
             usage_limits::get_usage_limits_status,
             usage_limits::fetch_claude_usage,
             usage_limits::fetch_codex_usage,
+            commands::get_default_shell,
         ])
         .run(tauri::generate_context!());
 
