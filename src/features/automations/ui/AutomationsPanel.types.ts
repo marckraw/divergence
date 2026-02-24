@@ -2,6 +2,7 @@ import type { Project } from "../../../entities";
 import type {
   Automation,
   AutomationAgent,
+  AutomationRunMode,
   AutomationRun,
   CreateAutomationInput,
   UpdateAutomationInput,
@@ -11,6 +12,10 @@ export interface AutomationFormState {
   id: number | null;
   name: string;
   projectId: number | null;
+  runMode: AutomationRunMode;
+  sourceProjectId: number | null;
+  targetProjectId: number | null;
+  baseBranches: string;
   agent: AutomationAgent;
   prompt: string;
   intervalHours: number;

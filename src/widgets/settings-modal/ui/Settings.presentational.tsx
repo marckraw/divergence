@@ -63,7 +63,7 @@ function AutomationEditorModal({
     >
         <ModalHeader
           title={automationForm.id === null ? "New automation" : "Edit automation"}
-          description="Manual-only mode. Scheduled execution is disabled while we rebuild this feature."
+          description="Configure scheduled or event-triggered automation runs."
           onClose={onCloseAutomationEditor}
           closeDisabled={isSubmittingAutomation}
         />
@@ -80,31 +80,115 @@ function AutomationEditorModal({
             />
           </FormField>
 
-          <FormField label="Project" htmlFor="settings-automation-project" labelClassName="block text-xs text-subtext mb-1">
-            <Select
-              value={automationForm.projectId != null ? String(automationForm.projectId) : "__none__"}
-              onValueChange={(val) => {
-                if (val === "__none__") {
-                  onAutomationFormChange("projectId", null);
-                } else {
-                  const value = Number(val);
-                  onAutomationFormChange("projectId", Number.isFinite(value) ? value : null);
-                }
-              }}
-            >
-              <SelectTrigger id="settings-automation-project" className="text-sm">
-                <SelectValue placeholder="Select project" />
+          <FormField label="Automation Type" htmlFor="settings-automation-run-mode" labelClassName="block text-xs text-subtext mb-1">
+            <Select value={automationForm.runMode} onValueChange={(val) => onAutomationFormChange("runMode", val as typeof automationForm.runMode)}>
+              <SelectTrigger id="settings-automation-run-mode" className="text-sm">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__none__">Select project</SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={String(project.id)}>
-                    {project.name}
-                  </SelectItem>
-                ))}
+                <SelectItem value="schedule">Scheduled</SelectItem>
+                <SelectItem value="event">GitHub PR merged</SelectItem>
               </SelectContent>
             </Select>
           </FormField>
+
+          {automationForm.runMode === "schedule" && (
+            <FormField label="Project" htmlFor="settings-automation-project" labelClassName="block text-xs text-subtext mb-1">
+              <Select
+                value={automationForm.projectId != null ? String(automationForm.projectId) : "__none__"}
+                onValueChange={(val) => {
+                  if (val === "__none__") {
+                    onAutomationFormChange("projectId", null);
+                  } else {
+                    const value = Number(val);
+                    onAutomationFormChange("projectId", Number.isFinite(value) ? value : null);
+                  }
+                }}
+              >
+                <SelectTrigger id="settings-automation-project" className="text-sm">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select project</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={String(project.id)}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+          )}
+
+          {automationForm.runMode === "event" && (
+            <>
+              <FormField label="Source Project" htmlFor="settings-automation-source-project" labelClassName="block text-xs text-subtext mb-1">
+                <Select
+                  value={automationForm.sourceProjectId != null ? String(automationForm.sourceProjectId) : "__none__"}
+                  onValueChange={(val) => {
+                    if (val === "__none__") {
+                      onAutomationFormChange("sourceProjectId", null);
+                    } else {
+                      const value = Number(val);
+                      onAutomationFormChange("sourceProjectId", Number.isFinite(value) ? value : null);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="settings-automation-source-project" className="text-sm">
+                    <SelectValue placeholder="Select source project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select source project</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={String(project.id)}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+
+              <FormField label="Target Project" htmlFor="settings-automation-target-project" labelClassName="block text-xs text-subtext mb-1">
+                <Select
+                  value={automationForm.targetProjectId != null ? String(automationForm.targetProjectId) : "__none__"}
+                  onValueChange={(val) => {
+                    if (val === "__none__") {
+                      onAutomationFormChange("targetProjectId", null);
+                    } else {
+                      const value = Number(val);
+                      onAutomationFormChange("targetProjectId", Number.isFinite(value) ? value : null);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="settings-automation-target-project" className="text-sm">
+                    <SelectValue placeholder="Select target project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select target project</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={String(project.id)}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
+
+              <FormField
+                label="Base Branches (comma-separated)"
+                htmlFor="settings-automation-base-branches"
+                labelClassName="block text-xs text-subtext mb-1"
+              >
+                <TextInput
+                  id="settings-automation-base-branches"
+                  value={automationForm.baseBranches}
+                  onChange={(event) => onAutomationFormChange("baseBranches", event.target.value)}
+                  className="text-sm focus:ring-0"
+                  placeholder="stable, staging"
+                />
+              </FormField>
+            </>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Agent" htmlFor="settings-automation-agent" labelClassName="block text-xs text-subtext mb-1">
@@ -118,16 +202,22 @@ function AutomationEditorModal({
                 </SelectContent>
               </Select>
             </FormField>
-            <FormField label="Every (hours)" htmlFor="settings-automation-interval" labelClassName="block text-xs text-subtext mb-1">
-              <TextInput
-                id="settings-automation-interval"
-                type="number"
-                min={1}
-                value={automationForm.intervalHours}
-                onChange={(event) => onAutomationFormChange("intervalHours", Number(event.target.value))}
-                className="text-sm focus:ring-0"
-              />
-            </FormField>
+            {automationForm.runMode === "schedule" ? (
+              <FormField label="Every (hours)" htmlFor="settings-automation-interval" labelClassName="block text-xs text-subtext mb-1">
+                <TextInput
+                  id="settings-automation-interval"
+                  type="number"
+                  min={1}
+                  value={automationForm.intervalHours}
+                  onChange={(event) => onAutomationFormChange("intervalHours", Number(event.target.value))}
+                  className="text-sm focus:ring-0"
+                />
+              </FormField>
+            ) : (
+              <div className="text-xs text-subtext border border-surface rounded px-3 py-2">
+                Triggered by GitHub pull request merges.
+              </div>
+            )}
           </div>
 
           <FormField label="Prompt" htmlFor="settings-automation-prompt" labelClassName="block text-xs text-subtext mb-1">
@@ -147,7 +237,7 @@ function AutomationEditorModal({
               onChange={(event) => onAutomationFormChange("enabled", event.target.checked)}
               className="accent-primary"
             />
-            Enabled (stored only for future scheduler phases)
+            Enabled
           </label>
 
           <div>
@@ -223,7 +313,11 @@ function SettingsPresentational({
   onSubmitAutomationForm,
   onCloseAutomationEditor,
   oauthTokenVisible,
+  githubTokenVisible,
+  cloudTokenVisible,
   onToggleOAuthTokenVisible,
+  onToggleGithubTokenVisible,
+  onToggleCloudTokenVisible,
 }: SettingsPresentationalProps) {
   if (loading) {
     return (
@@ -478,12 +572,110 @@ function SettingsPresentational({
             </p>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              GitHub Token
+            </label>
+            <div className="relative">
+              <TextInput
+                type={githubTokenVisible ? "text" : "password"}
+                value={settings.githubToken}
+                onChange={(event) => onUpdateSetting("githubToken", event.target.value)}
+                className="pr-10 focus:ring-0"
+                placeholder="ghp_..."
+              />
+              <IconButton
+                type="button"
+                onClick={onToggleGithubTokenVisible}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-subtext hover:text-text"
+                variant="ghost"
+                size="xs"
+                label={githubTokenVisible ? "Hide token" : "Show token"}
+                icon={githubTokenVisible ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7.5a11.72 11.72 0 013.168-4.477M6.343 6.343A9.97 9.97 0 0112 5c5 0 9.27 3.11 11 7.5a11.72 11.72 0 01-4.168 4.477M6.343 6.343L3 3m3.343 3.343l2.829 2.829m4.486 4.486l2.829 2.829M3 3l18 18m-9-5.5a2.5 2.5 0 01-2.45-3" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              />
+            </div>
+            <p className="text-xs text-subtext mt-1">
+              Used for GitHub API integrations.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Cloud API Base URL
+            </label>
+            <TextInput
+              type="text"
+              value={settings.cloudApiBaseUrl}
+              onChange={(event) => onUpdateSetting("cloudApiBaseUrl", event.target.value)}
+              className="focus:ring-0"
+              placeholder="https://cloud.divergence.app"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              GitHub Webhook Secret
+            </label>
+            <TextInput
+              type="password"
+              value={settings.githubWebhookSecret}
+              onChange={(event) => onUpdateSetting("githubWebhookSecret", event.target.value)}
+              className="focus:ring-0"
+              placeholder="Webhook signing secret"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
+              Cloud API Token
+            </label>
+            <div className="relative">
+              <TextInput
+                type={cloudTokenVisible ? "text" : "password"}
+                value={settings.cloudApiToken}
+                onChange={(event) => onUpdateSetting("cloudApiToken", event.target.value)}
+                className="pr-10 focus:ring-0"
+                placeholder="Cloud auth token"
+              />
+              <IconButton
+                type="button"
+                onClick={onToggleCloudTokenVisible}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-subtext hover:text-text"
+                variant="ghost"
+                size="xs"
+                label={cloudTokenVisible ? "Hide token" : "Show token"}
+                icon={cloudTokenVisible ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-5 0-9.27-3.11-11-7.5a11.72 11.72 0 013.168-4.477M6.343 6.343A9.97 9.97 0 0112 5c5 0 9.27 3.11 11 7.5a11.72 11.72 0 01-4.168 4.477M6.343 6.343L3 3m3.343 3.343l2.829 2.829m4.486 4.486l2.829 2.829M3 3l18 18m-9-5.5a2.5 2.5 0 01-2.45-3" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                )}
+              />
+            </div>
+            <p className="text-xs text-subtext mt-1">
+              Used by event-trigger polling from Divergence Cloud relay.
+            </p>
+          </div>
+
           <section className="rounded-md border border-surface p-3 bg-main/40 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-text">Automations (Beta)</h3>
                 <p className="text-xs text-subtext mt-1">
-                  Manual-only mode. Scheduler and Work tab integration are intentionally disabled.
+                  Supports scheduled automations and GitHub PR merged triggers.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -534,9 +726,16 @@ function SettingsPresentational({
                     metadata={
                       <div className="text-xs text-subtext mt-1 space-y-1">
                         <div>
-                          {automation.agent.toUpperCase()} - every {automation.intervalHours}h -{" "}
-                          {automation.enabled ? "Enabled" : "Disabled"}
+                          {automation.runMode === "event"
+                            ? "Triggered: GitHub PR merged"
+                            : `${automation.agent.toUpperCase()} - every ${automation.intervalHours}h`}{" "}
+                          - {automation.enabled ? "Enabled" : "Disabled"}
                         </div>
+                        {automation.runMode === "event" && (
+                          <div>
+                            {`Source #${automation.sourceProjectId ?? "?"} -> Target #${automation.targetProjectId ?? "?"}`}
+                          </div>
+                        )}
                         <div>
                           Last run: {formatDateTime(latestRun?.endedAtMs ?? automation.lastRunAtMs)}
                         </div>

@@ -30,12 +30,18 @@ function createAutomation(overrides: Partial<Automation> = {}): Automation {
     agent: "claude",
     prompt: "Check regressions.",
     intervalHours: 5,
+    runMode: "schedule",
+    sourceProjectId: null,
+    targetProjectId: null,
+    triggerType: null,
+    triggerConfigJson: null,
     enabled: true,
     keepSessionAlive: false,
     lastRunAtMs: null,
     nextRunAtMs: 9000,
     createdAtMs: 1000,
     updatedAtMs: 1000,
+    workspaceId: null,
     ...overrides,
   };
 }

@@ -54,6 +54,17 @@ export interface RunAutomationNowInput {
   agentCommandCodex: string;
   claudeOAuthToken?: string;
   triggerSource?: AutomationRunTriggerSource;
+  triggerContext?: {
+    sourceRepoKey: string;
+    targetProjectName: string;
+    targetProjectPath: string;
+    pullRequestNumber: number;
+    pullRequestUrl: string;
+    baseRef: string;
+    headRef: string;
+    mergeCommitSha: string;
+    mergedAtMs: number;
+  };
 }
 
 export interface RunAutomationNowResult {
@@ -222,6 +233,7 @@ export async function runAutomationNow(
           triggerSource,
           prompt: input.automation.prompt,
           generatedAtMs: deps.now(),
+          triggerContext: input.triggerContext,
         });
         const { path: briefPath } = await deps.writeAutomationBriefFile(divergencePath, markdown);
 

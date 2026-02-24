@@ -20,12 +20,20 @@ const defaultSettings: SettingsState = {
   ...DEFAULT_APP_SETTINGS,
   divergenceBasePath: "",
   claudeOAuthToken: "",
+  githubToken: "",
+  githubWebhookSecret: "",
+  cloudApiBaseUrl: DEFAULT_APP_SETTINGS.cloudApiBaseUrl ?? "https://cloud.divergence.app",
+  cloudApiToken: "",
 };
 
 const EMPTY_AUTOMATION_FORM: SettingsAutomationFormState = {
   id: null,
   name: "",
   projectId: null,
+  runMode: "schedule",
+  sourceProjectId: null,
+  targetProjectId: null,
+  baseBranches: "",
   agent: "claude",
   prompt: "",
   intervalHours: 5,
@@ -57,6 +65,8 @@ function SettingsContainer({
   const [isSubmittingAutomation, setIsSubmittingAutomation] = useState(false);
   const [automationActionInFlightId, setAutomationActionInFlightId] = useState<number | null>(null);
   const [oauthTokenVisible, setOauthTokenVisible] = useState(false);
+  const [githubTokenVisible, setGithubTokenVisible] = useState(false);
+  const [cloudTokenVisible, setCloudTokenVisible] = useState(false);
   const updaterPresentation = useMemo(
     () => getUpdaterPresentation(updater.status, updater.version, updater.progress, updater.error),
     [updater.status, updater.version, updater.progress, updater.error]
@@ -142,6 +152,19 @@ function SettingsContainer({
       id: automation.id,
       name: automation.name,
       projectId: automation.projectId,
+      runMode: automation.runMode,
+      sourceProjectId: automation.sourceProjectId ?? null,
+      targetProjectId: automation.targetProjectId ?? null,
+      baseBranches: (() => {
+        if (!automation.triggerConfigJson) return "";
+        try {
+          const parsed = JSON.parse(automation.triggerConfigJson) as { baseBranches?: unknown };
+          if (!Array.isArray(parsed.baseBranches)) return "";
+          return parsed.baseBranches.filter((item): item is string => typeof item === "string").join(", ");
+        } catch {
+          return "";
+        }
+      })(),
       agent: automation.agent,
       prompt: automation.prompt,
       intervalHours: automation.intervalHours,
@@ -157,14 +180,29 @@ function SettingsContainer({
     if (!automationForm.name.trim()) {
       return "Name is required.";
     }
-    if (!automationForm.projectId) {
+    if (automationForm.runMode === "schedule" && !automationForm.projectId) {
       return "Project is required.";
     }
     if (!automationForm.prompt.trim()) {
       return "Prompt is required.";
     }
-    if (!Number.isFinite(automationForm.intervalHours) || automationForm.intervalHours < 1) {
+    if (automationForm.runMode === "schedule" && (!Number.isFinite(automationForm.intervalHours) || automationForm.intervalHours < 1)) {
       return "Interval must be at least 1 hour.";
+    }
+    if (automationForm.runMode === "event") {
+      if (!automationForm.sourceProjectId) {
+        return "Source project is required.";
+      }
+      if (!automationForm.targetProjectId) {
+        return "Target project is required.";
+      }
+      const baseBranches = automationForm.baseBranches
+        .split(",")
+        .map((branch) => branch.trim())
+        .filter((branch) => branch.length > 0);
+      if (baseBranches.length === 0) {
+        return "At least one base branch is required.";
+      }
     }
     return null;
   }, [automationForm]);
@@ -179,13 +217,25 @@ function SettingsContainer({
     setAutomationActionError(null);
     setIsSubmittingAutomation(true);
     try {
+      const baseBranches = automationForm.baseBranches
+        .split(",")
+        .map((branch) => branch.trim())
+        .filter((branch) => branch.length > 0);
+      const triggerConfigJson = automationForm.runMode === "event"
+        ? JSON.stringify({ baseBranches })
+        : null;
       if (automationForm.id === null) {
         await onCreateAutomation({
           name: automationForm.name.trim(),
-          projectId: automationForm.projectId!,
+          projectId: automationForm.runMode === "event" ? automationForm.targetProjectId! : automationForm.projectId!,
           agent: automationForm.agent,
           prompt: automationForm.prompt.trim(),
           intervalHours: Math.floor(automationForm.intervalHours),
+          runMode: automationForm.runMode,
+          sourceProjectId: automationForm.runMode === "event" ? automationForm.sourceProjectId : null,
+          targetProjectId: automationForm.runMode === "event" ? automationForm.targetProjectId : null,
+          triggerType: automationForm.runMode === "event" ? "github_pr_merged" : null,
+          triggerConfigJson,
           enabled: automationForm.enabled,
           keepSessionAlive: automationForm.keepSessionAlive,
         });
@@ -193,10 +243,15 @@ function SettingsContainer({
         await onUpdateAutomation({
           id: automationForm.id,
           name: automationForm.name.trim(),
-          projectId: automationForm.projectId!,
+          projectId: automationForm.runMode === "event" ? automationForm.targetProjectId! : automationForm.projectId!,
           agent: automationForm.agent,
           prompt: automationForm.prompt.trim(),
           intervalHours: Math.floor(automationForm.intervalHours),
+          runMode: automationForm.runMode,
+          sourceProjectId: automationForm.runMode === "event" ? automationForm.sourceProjectId : null,
+          targetProjectId: automationForm.runMode === "event" ? automationForm.targetProjectId : null,
+          triggerType: automationForm.runMode === "event" ? "github_pr_merged" : null,
+          triggerConfigJson,
           enabled: automationForm.enabled,
           keepSessionAlive: automationForm.keepSessionAlive,
         });
@@ -251,6 +306,12 @@ function SettingsContainer({
   const handleToggleOAuthTokenVisible = useCallback(() => {
     setOauthTokenVisible((prev) => !prev);
   }, []);
+  const handleToggleGithubTokenVisible = useCallback(() => {
+    setGithubTokenVisible((prev) => !prev);
+  }, []);
+  const handleToggleCloudTokenVisible = useCallback(() => {
+    setCloudTokenVisible((prev) => !prev);
+  }, []);
 
   return (
     <SettingsPresentational
@@ -283,7 +344,11 @@ function SettingsContainer({
       onSubmitAutomationForm={handleSubmitAutomationForm}
       onCloseAutomationEditor={handleCloseAutomationEditor}
       oauthTokenVisible={oauthTokenVisible}
+      githubTokenVisible={githubTokenVisible}
+      cloudTokenVisible={cloudTokenVisible}
       onToggleOAuthTokenVisible={handleToggleOAuthTokenVisible}
+      onToggleGithubTokenVisible={handleToggleGithubTokenVisible}
+      onToggleCloudTokenVisible={handleToggleCloudTokenVisible}
     />
   );
 }

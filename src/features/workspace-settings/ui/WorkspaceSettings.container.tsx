@@ -6,7 +6,7 @@ import {
   loadWorkspaceSettings,
 } from "../../../entities/workspace";
 import { getAdapterLabels } from "../../../entities/port-management";
-import { updateWorkspaceFolder } from "../../workspace-management/api/workspaceFolder.api";
+import { updateWorkspaceFolder } from "../../../shared/api/workspaceFolders.api";
 import { saveWorkspaceConfiguration, updateWorkspaceMembers } from "../service/workspaceSettings.service";
 import WorkspaceSettingsPresentational from "./WorkspaceSettings.presentational";
 import type { WorkspaceSettingsContainerProps } from "./WorkspaceSettings.types";

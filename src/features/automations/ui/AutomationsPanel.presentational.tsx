@@ -89,7 +89,7 @@ function AutomationEditorModal({
     >
       <ModalHeader
         title={form.id === null ? "New automation" : "Edit automation"}
-        description="Configure scheduled runs for this automation template."
+        description="Configure scheduled or event-triggered automation runs."
         onClose={onCloseEditor}
         closeDisabled={isSubmitting}
       />
@@ -104,31 +104,114 @@ function AutomationEditorModal({
           />
         </FormField>
 
-        <FormField label="Project" htmlFor="automation-form-project">
-          <Select
-            value={form.projectId != null ? String(form.projectId) : "__none__"}
-            onValueChange={(val) => {
-              if (val === "__none__") {
-                onFormChange("projectId", null);
-              } else {
-                const value = Number(val);
-                onFormChange("projectId", Number.isFinite(value) ? value : null);
-              }
-            }}
-          >
-            <SelectTrigger id="automation-form-project">
-              <SelectValue placeholder="Select project" />
+        <FormField label="Automation Type" htmlFor="automation-form-run-mode">
+          <Select value={form.runMode} onValueChange={(val) => onFormChange("runMode", val as typeof form.runMode)}>
+            <SelectTrigger id="automation-form-run-mode">
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">Select project</SelectItem>
-              {projects.map((project) => (
-                <SelectItem key={project.id} value={String(project.id)}>
-                  {project.name}
-                </SelectItem>
-              ))}
+              <SelectItem value="schedule">Scheduled</SelectItem>
+              <SelectItem value="event">GitHub PR merged</SelectItem>
             </SelectContent>
           </Select>
         </FormField>
+
+        {form.runMode === "schedule" && (
+          <FormField label="Project" htmlFor="automation-form-project">
+            <Select
+              value={form.projectId != null ? String(form.projectId) : "__none__"}
+              onValueChange={(val) => {
+                if (val === "__none__") {
+                  onFormChange("projectId", null);
+                } else {
+                  const value = Number(val);
+                  onFormChange("projectId", Number.isFinite(value) ? value : null);
+                }
+              }}
+            >
+              <SelectTrigger id="automation-form-project">
+                <SelectValue placeholder="Select project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select project</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={String(project.id)}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FormField>
+        )}
+
+        {form.runMode === "event" && (
+          <>
+            <FormField label="Source Project" htmlFor="automation-form-source-project">
+              <Select
+                value={form.sourceProjectId != null ? String(form.sourceProjectId) : "__none__"}
+                onValueChange={(val) => {
+                  if (val === "__none__") {
+                    onFormChange("sourceProjectId", null);
+                  } else {
+                    const value = Number(val);
+                    onFormChange("sourceProjectId", Number.isFinite(value) ? value : null);
+                  }
+                }}
+              >
+                <SelectTrigger id="automation-form-source-project">
+                  <SelectValue placeholder="Select source project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select source project</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={String(project.id)}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+
+            <FormField label="Target Project" htmlFor="automation-form-target-project">
+              <Select
+                value={form.targetProjectId != null ? String(form.targetProjectId) : "__none__"}
+                onValueChange={(val) => {
+                  if (val === "__none__") {
+                    onFormChange("targetProjectId", null);
+                  } else {
+                    const value = Number(val);
+                    onFormChange("targetProjectId", Number.isFinite(value) ? value : null);
+                  }
+                }}
+              >
+                <SelectTrigger id="automation-form-target-project">
+                  <SelectValue placeholder="Select target project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select target project</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={String(project.id)}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+
+            <FormField
+              label="Base Branches (comma-separated)"
+              htmlFor="automation-form-base-branches"
+              labelClassName="text-xs text-subtext"
+            >
+              <TextInput
+                id="automation-form-base-branches"
+                value={form.baseBranches}
+                onChange={(event) => onFormChange("baseBranches", event.target.value)}
+                placeholder="stable, staging"
+              />
+            </FormField>
+          </>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Agent" htmlFor="automation-form-agent" labelClassName="text-xs text-subtext">
@@ -142,15 +225,21 @@ function AutomationEditorModal({
               </SelectContent>
             </Select>
           </FormField>
-          <FormField label="Every (hours)" htmlFor="automation-form-interval" labelClassName="text-xs text-subtext">
-            <TextInput
-              id="automation-form-interval"
-              type="number"
-              min={1}
-              value={form.intervalHours}
-              onChange={(event) => onFormChange("intervalHours", Number(event.target.value))}
-            />
-          </FormField>
+          {form.runMode === "schedule" ? (
+            <FormField label="Every (hours)" htmlFor="automation-form-interval" labelClassName="text-xs text-subtext">
+              <TextInput
+                id="automation-form-interval"
+                type="number"
+                min={1}
+                value={form.intervalHours}
+                onChange={(event) => onFormChange("intervalHours", Number(event.target.value))}
+              />
+            </FormField>
+          ) : (
+            <div className="text-xs text-subtext border border-surface rounded-md px-3 py-2">
+              Triggered by merged pull requests.
+            </div>
+          )}
         </div>
 
         <FormField label="Prompt" htmlFor="automation-form-prompt" labelClassName="text-xs text-subtext">
@@ -298,13 +387,20 @@ function AutomationsPanelPresentational({
                 metadata={
                   <div className="text-xs text-subtext mt-1 space-y-1">
                     <div>
-                      {automation.agent.toUpperCase()} - every {automation.intervalHours}h
+                      {automation.runMode === "event"
+                        ? "Triggered: GitHub PR merged"
+                        : `${automation.agent.toUpperCase()} - every ${automation.intervalHours}h`}
                     </div>
                     <div>
                       {automation.enabled ? "Enabled" : "Disabled"}
                       {" - "}
                       {automation.keepSessionAlive ? "Interactive" : "Autonomous"}
                     </div>
+                    {automation.runMode === "event" && (
+                      <div>
+                        {`Source #${automation.sourceProjectId ?? "?"} -> Target #${automation.targetProjectId ?? "?"}`}
+                      </div>
+                    )}
                     <div>Last run: {formatLastRun(automation.lastRunAtMs)}</div>
                     <div>Next run: {formatNextRun(automation.nextRunAtMs)}</div>
                   </div>

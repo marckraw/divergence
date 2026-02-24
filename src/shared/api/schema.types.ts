@@ -66,6 +66,11 @@ export const automations = sqliteTable(
     agent: text("agent", { enum: ["claude", "codex"] }).notNull(),
     prompt: text("prompt").notNull(),
     intervalHours: integer("interval_hours").notNull(),
+    runMode: text("run_mode", { enum: ["schedule", "event"] }).notNull().default("schedule"),
+    sourceProjectId: integer("source_project_id").references(() => projects.id, { onDelete: "set null" }),
+    targetProjectId: integer("target_project_id").references(() => projects.id, { onDelete: "set null" }),
+    triggerType: text("trigger_type", { enum: ["github_pr_merged"] }),
+    triggerConfigJson: text("trigger_config_json"),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     keepSessionAlive: integer("keep_session_alive", { mode: "boolean" }).notNull().default(false),
     lastRunAtMs: integer("last_run_at_ms"),
@@ -76,6 +81,7 @@ export const automations = sqliteTable(
   },
   (table) => [
     index("idx_automations_project_id").on(table.projectId),
+    index("idx_automations_run_mode").on(table.runMode),
   ],
 );
 
@@ -118,7 +124,7 @@ export const inboxEvents = sqliteTable(
   "inbox_events",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    kind: text("kind", { enum: ["automation_run", "github_pr_opened", "github_pr_updated", "system"] }).notNull(),
+    kind: text("kind", { enum: ["automation_run", "github_pr_opened", "github_pr_updated", "github_pr_merged", "system"] }).notNull(),
     source: text("source", { enum: ["automation", "github", "app"] }).notNull(),
     projectId: integer("project_id"),
     automationId: integer("automation_id"),
@@ -148,6 +154,31 @@ export const githubPollState = sqliteTable("github_poll_state", {
 });
 
 export type GithubPollState = typeof githubPollState.$inferSelect;
+
+// ── Automation Trigger Dispatches ────────────────────────────────────────────
+
+export const automationTriggerDispatches = sqliteTable(
+  "automation_trigger_dispatches",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    automationId: integer("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    externalEventId: text("external_event_id").notNull(),
+    status: text("status", { enum: ["pending", "launched", "skipped", "error"] }).notNull(),
+    automationRunId: integer("automation_run_id").references(() => automationRuns.id, { onDelete: "set null" }),
+    error: text("error"),
+    createdAtMs: integer("created_at_ms").notNull(),
+    updatedAtMs: integer("updated_at_ms").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_auto_trigger_dispatch_unique").on(table.automationId, table.externalEventId),
+    index("idx_auto_trigger_dispatch_created_at").on(table.createdAtMs),
+  ],
+);
+
+export type AutomationTriggerDispatchRow = typeof automationTriggerDispatches.$inferSelect;
+export type InsertAutomationTriggerDispatchRow = typeof automationTriggerDispatches.$inferInsert;
 
 // ── Port Allocations ────────────────────────────────────────────────────────
 

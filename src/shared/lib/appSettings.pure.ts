@@ -23,6 +23,10 @@ export interface AppSettings {
   agentCommandClaude: string;
   agentCommandCodex: string;
   claudeOAuthToken?: string;
+  githubToken?: string;
+  githubWebhookSecret?: string;
+  cloudApiBaseUrl?: string;
+  cloudApiToken?: string;
 }
 
 type AgentCommandTemplate = "claude" | "codex";
@@ -39,6 +43,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   agentCommandCodex:
     "codex exec --dangerously-bypass-approvals-and-sandbox -C \"{workspacePath}\" - < \"{briefPath}\"",
   claudeOAuthToken: "",
+  githubToken: "",
+  githubWebhookSecret: "",
+  cloudApiBaseUrl: "https://cloud.divergence.app",
+  cloudApiToken: "",
 };
 
 const LEGACY_CLAUDE_COMMAND_TEMPLATES = [
@@ -125,6 +133,18 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
   const claudeOAuthToken = typeof input?.claudeOAuthToken === "string"
     ? input.claudeOAuthToken
     : "";
+  const githubToken = typeof input?.githubToken === "string"
+    ? input.githubToken
+    : "";
+  const githubWebhookSecret = typeof input?.githubWebhookSecret === "string"
+    ? input.githubWebhookSecret
+    : "";
+  const cloudApiBaseUrl = typeof input?.cloudApiBaseUrl === "string" && input.cloudApiBaseUrl.trim().length > 0
+    ? input.cloudApiBaseUrl
+    : DEFAULT_APP_SETTINGS.cloudApiBaseUrl;
+  const cloudApiToken = typeof input?.cloudApiToken === "string"
+    ? input.cloudApiToken
+    : "";
   const restoreTabsOnRestart = input?.restoreTabsOnRestart === true;
 
   return {
@@ -137,5 +157,9 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     agentCommandClaude: migratedAgentCommandClaude,
     agentCommandCodex: migratedAgentCommandCodex,
     claudeOAuthToken,
+    githubToken,
+    githubWebhookSecret,
+    cloudApiBaseUrl,
+    cloudApiToken,
   };
 }

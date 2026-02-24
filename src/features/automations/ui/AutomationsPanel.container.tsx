@@ -7,6 +7,10 @@ const EMPTY_FORM: AutomationFormState = {
   id: null,
   name: "",
   projectId: null,
+  runMode: "schedule",
+  sourceProjectId: null,
+  targetProjectId: null,
+  baseBranches: "",
   agent: "claude",
   prompt: "",
   intervalHours: 5,
@@ -19,6 +23,19 @@ function toFormState(automation: Automation): AutomationFormState {
     id: automation.id,
     name: automation.name,
     projectId: automation.projectId,
+    runMode: automation.runMode,
+    sourceProjectId: automation.sourceProjectId ?? null,
+    targetProjectId: automation.targetProjectId ?? null,
+    baseBranches: (() => {
+      if (!automation.triggerConfigJson) return "";
+      try {
+        const parsed = JSON.parse(automation.triggerConfigJson) as { baseBranches?: unknown };
+        if (!Array.isArray(parsed.baseBranches)) return "";
+        return parsed.baseBranches.filter((item): item is string => typeof item === "string").join(", ");
+      } catch {
+        return "";
+      }
+    })(),
     agent: automation.agent,
     prompt: automation.prompt,
     intervalHours: automation.intervalHours,
@@ -62,14 +79,29 @@ function AutomationsPanelContainer(props: AutomationsPanelProps) {
     if (!form.name.trim()) {
       return "Name is required.";
     }
-    if (!form.projectId) {
+    if (form.runMode === "schedule" && !form.projectId) {
       return "Project is required.";
     }
     if (!form.prompt.trim()) {
       return "Prompt is required.";
     }
-    if (!Number.isFinite(form.intervalHours) || form.intervalHours < 1) {
+    if (form.runMode === "schedule" && (!Number.isFinite(form.intervalHours) || form.intervalHours < 1)) {
       return "Interval must be at least 1 hour.";
+    }
+    if (form.runMode === "event") {
+      if (!form.sourceProjectId) {
+        return "Source project is required.";
+      }
+      if (!form.targetProjectId) {
+        return "Target project is required.";
+      }
+      const baseBranches = form.baseBranches
+        .split(",")
+        .map((branch) => branch.trim())
+        .filter((branch) => branch.length > 0);
+      if (baseBranches.length === 0) {
+        return "At least one base branch is required.";
+      }
     }
     return null;
   }, [form]);
@@ -83,13 +115,25 @@ function AutomationsPanelContainer(props: AutomationsPanelProps) {
 
     setIsSubmitting(true);
     try {
+      const baseBranches = form.baseBranches
+        .split(",")
+        .map((branch) => branch.trim())
+        .filter((branch) => branch.length > 0);
+      const triggerConfigJson = form.runMode === "event"
+        ? JSON.stringify({ baseBranches })
+        : null;
       if (form.id === null) {
         await props.onCreateAutomation({
           name: form.name.trim(),
-          projectId: form.projectId!,
+          projectId: form.runMode === "event" ? form.targetProjectId! : form.projectId!,
           agent: form.agent,
           prompt: form.prompt.trim(),
           intervalHours: Math.floor(form.intervalHours),
+          runMode: form.runMode,
+          sourceProjectId: form.runMode === "event" ? form.sourceProjectId : null,
+          targetProjectId: form.runMode === "event" ? form.targetProjectId : null,
+          triggerType: form.runMode === "event" ? "github_pr_merged" : null,
+          triggerConfigJson,
           enabled: form.enabled,
           keepSessionAlive: form.keepSessionAlive,
         });
@@ -97,10 +141,15 @@ function AutomationsPanelContainer(props: AutomationsPanelProps) {
         await props.onUpdateAutomation({
           id: form.id,
           name: form.name.trim(),
-          projectId: form.projectId!,
+          projectId: form.runMode === "event" ? form.targetProjectId! : form.projectId!,
           agent: form.agent,
           prompt: form.prompt.trim(),
           intervalHours: Math.floor(form.intervalHours),
+          runMode: form.runMode,
+          sourceProjectId: form.runMode === "event" ? form.sourceProjectId : null,
+          targetProjectId: form.runMode === "event" ? form.targetProjectId : null,
+          triggerType: form.runMode === "event" ? "github_pr_merged" : null,
+          triggerConfigJson,
           enabled: form.enabled,
           keepSessionAlive: form.keepSessionAlive,
         });
