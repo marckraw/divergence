@@ -14,6 +14,7 @@ import {
   dispatchTriggeredAutomations,
   ensureAutomationWorkspace,
   matchGithubMergedTriggers,
+  parseGithubTriggerBaseBranches,
   useCloudAutomationEventPoller,
 } from "../features/automation-triggers";
 import type { AutomationRunTriggerSource } from "../entities/automation";
@@ -51,9 +52,11 @@ import {
 import {
   ackCloudAutomationEvent,
   Button,
+  getProjectGithubRepository,
   IconButton,
   nackCloudAutomationEvent,
   notifyCommandFinished,
+  pullCloudAutomationEventQueueCounts,
   ProgressBar,
   recordDebugEvent,
   useAppSettings,
@@ -119,7 +122,24 @@ const NOTIFY_IDLE_DELAY_MS = 1500;
 const NOTIFY_COOLDOWN_MS = 3000;
 const GITHUB_POLL_INTERVAL_MS = 2 * 60_000;
 const GITHUB_INITIAL_POLL_DELAY_MS = 15_000;
+const CLOUD_QUEUE_COUNTS_POLL_INTERVAL_MS = 30_000;
 const RESTORE_TABS_TOAST_TTL_MS = 4000;
+
+function formatDebugErrorDetails(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack?.trim() || `${error.name}: ${error.message}`;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error, null, 2);
+  } catch {
+    return String(error);
+  }
+}
 
 function App() {
   const updater = useUpdater(true);
@@ -160,6 +180,7 @@ function App() {
   const [restoredTabsToastMessage, setRestoredTabsToastMessage] = useState<string | null>(null);
   const [idleAttentionSessionIds, setIdleAttentionSessionIds] = useState<Set<string>>(new Set());
   const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>([]);
+  const [queuedCloudCountByAutomationId, setQueuedCloudCountByAutomationId] = useState<Map<number, number>>(new Map());
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
@@ -1245,6 +1266,108 @@ function App() {
     runTask,
   ]);
 
+  useEffect(() => {
+    const cloudApiBaseUrl = appSettings.cloudApiBaseUrl ?? "";
+    const cloudApiToken = appSettings.cloudApiToken ?? "";
+    if (!cloudApiBaseUrl.trim() || !cloudApiToken.trim()) {
+      setQueuedCloudCountByAutomationId(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const refreshQueueCounts = async () => {
+      if (inFlight || cancelled) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const queueCounts = await pullCloudAutomationEventQueueCounts({
+          baseUrl: cloudApiBaseUrl,
+          cloudApiToken,
+        });
+        const queueByRepoAndBase = new Map<string, number>();
+        for (const item of queueCounts) {
+          queueByRepoAndBase.set(`${item.repoKey}::${item.baseRef}`, item.queuedCount);
+        }
+
+        const eventAutomations = automations.filter(
+          (automation) => automation.enabled && automation.runMode === "event" && Boolean(automation.sourceProjectId),
+        );
+        const sourceProjectIds = Array.from(new Set(
+          eventAutomations
+            .map((automation) => automation.sourceProjectId)
+            .filter((value): value is number => typeof value === "number"),
+        ));
+
+        const sourceRepoKeyByProjectId = new Map<number, string | null>();
+        await Promise.all(sourceProjectIds.map(async (projectId) => {
+          const project = projectById.get(projectId);
+          if (!project) {
+            sourceRepoKeyByProjectId.set(projectId, null);
+            return;
+          }
+          const repo = await getProjectGithubRepository(project.path);
+          sourceRepoKeyByProjectId.set(projectId, repo?.repoKey ?? null);
+        }));
+
+        const nextCounts = new Map<number, number>();
+        for (const automation of eventAutomations) {
+          const sourceProjectId = automation.sourceProjectId;
+          if (!sourceProjectId) {
+            continue;
+          }
+          const sourceRepoKey = sourceRepoKeyByProjectId.get(sourceProjectId);
+          if (!sourceRepoKey) {
+            continue;
+          }
+          const baseBranches = parseGithubTriggerBaseBranches(automation.triggerConfigJson);
+          if (baseBranches.length === 0) {
+            continue;
+          }
+          let queuedCount = 0;
+          for (const baseBranch of baseBranches) {
+            queuedCount += queueByRepoAndBase.get(`${sourceRepoKey}::${baseBranch}`) ?? 0;
+          }
+          if (queuedCount > 0) {
+            nextCounts.set(automation.id, queuedCount);
+          }
+        }
+
+        if (!cancelled) {
+          setQueuedCloudCountByAutomationId(nextCounts);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          recordDebugEvent({
+            level: "warn",
+            category: "automation",
+            message: "Failed to refresh cloud automation queue counts",
+            details: formatDebugErrorDetails(error),
+          });
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void refreshQueueCounts();
+    const timerId = window.setInterval(() => {
+      void refreshQueueCounts();
+    }, CLOUD_QUEUE_COUNTS_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timerId);
+    };
+  }, [
+    appSettings.cloudApiBaseUrl,
+    appSettings.cloudApiToken,
+    automations,
+    projectById,
+  ]);
+
   const handleRunAutomationNow = useCallback(
     async (automationId: number) => {
       await executeAutomationRun(automationId);
@@ -1262,8 +1385,24 @@ function App() {
     events: GithubPrMergedAutomationEvent[],
   ): Promise<void> => {
     let shouldRefreshInbox = false;
+    const enabledEventAutomationsCount = automations.filter(
+      (automation) => automation.enabled && automation.runMode === "event",
+    ).length;
+
     for (const event of events) {
       try {
+        recordDebugEvent({
+          level: "info",
+          category: "automation",
+          message: "Processing cloud automation event",
+          metadata: {
+            eventId: event.eventId,
+            externalEventId: event.externalEventId,
+            repoKey: event.repoKey,
+            baseRef: event.baseRef,
+          },
+        });
+
         const insertedId = await insertInboxEvent({
           kind: "github_pr_merged",
           source: "github",
@@ -1287,6 +1426,31 @@ function App() {
           projectsById: projectById,
           event,
         });
+
+        if (matches.length === 0) {
+          recordDebugEvent({
+            level: "warn",
+            category: "automation",
+            message: "No event automation matched cloud event",
+            metadata: {
+              eventId: event.eventId,
+              externalEventId: event.externalEventId,
+              repoKey: event.repoKey,
+              baseRef: event.baseRef,
+              enabledEventAutomations: enabledEventAutomationsCount,
+            },
+          });
+        } else {
+          recordDebugEvent({
+            level: "info",
+            category: "automation",
+            message: "Dispatching matched event automations",
+            metadata: {
+              eventId: event.eventId,
+              matchedAutomations: matches.length,
+            },
+          });
+        }
 
         await dispatchTriggeredAutomations({
           matches,
@@ -1338,11 +1502,41 @@ function App() {
     refreshInbox,
   ]);
 
+  const handleCloudAutomationPollError = useCallback((error: unknown): void => {
+    const errorDetails = formatDebugErrorDetails(error);
+    const errorName = error instanceof Error ? error.name : typeof error;
+
+    recordDebugEvent({
+      level: "warn",
+      category: "automation",
+      message: "Cloud automation event poll failed",
+      details: errorDetails,
+      metadata: {
+        cloudApiBaseUrl: appSettings.cloudApiBaseUrl ?? "",
+        errorType: errorName,
+      },
+    });
+  }, [appSettings.cloudApiBaseUrl]);
+
+  const handleCloudAutomationEventsPulled = useCallback((events: GithubPrMergedAutomationEvent[]): void => {
+    if (events.length === 0) return;
+    recordDebugEvent({
+      level: "info",
+      category: "automation",
+      message: "Pulled cloud automation events",
+      metadata: {
+        count: events.length,
+      },
+    });
+  }, []);
+
   useCloudAutomationEventPoller({
     enabled: Boolean((appSettings.cloudApiToken ?? "").trim() && (appSettings.cloudApiBaseUrl ?? "").trim()),
     cloudApiBaseUrl: appSettings.cloudApiBaseUrl ?? "",
     cloudApiToken: appSettings.cloudApiToken ?? "",
     onEvents: handleCloudAutomationEvents,
+    onPollError: handleCloudAutomationPollError,
+    onPulledEvents: handleCloudAutomationEventsPulled,
   });
 
   // Automation scheduler — periodically triggers due automations
@@ -1790,6 +1984,7 @@ function App() {
               projects={projects}
               automations={automations}
               latestRunByAutomationId={latestRunByAutomationId}
+              queuedCloudCountByAutomationId={queuedCloudCountByAutomationId}
               loading={automationsLoading}
               error={automationsError}
               onRefresh={refreshAutomations}
@@ -1881,6 +2076,7 @@ function App() {
             projects={projects}
             automations={automations}
             latestRunByAutomationId={latestRunByAutomationId}
+            queuedCloudCountByAutomationId={queuedCloudCountByAutomationId}
             automationsLoading={automationsLoading}
             automationsError={automationsError}
             onRefreshAutomations={refreshAutomations}

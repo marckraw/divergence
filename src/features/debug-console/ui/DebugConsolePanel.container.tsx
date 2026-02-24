@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   recordDebugEvent,
+  type DebugEvent,
   useDebugEvents,
 } from "../../../shared";
 import { getTmuxDiagnostics } from "../../../shared/api/tmuxSessions.api";
@@ -48,6 +49,7 @@ function DebugConsolePanelContainer() {
   const [levelFilter, setLevelFilter] = useState<DebugLevelFilter>("all");
   const [categoryFilter, setCategoryFilter] = useState<DebugCategoryFilter>("all");
   const [onlyFailureOrStuck, setOnlyFailureOrStuck] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -74,6 +76,10 @@ function DebugConsolePanelContainer() {
   const visibleCounts = useMemo(() => countEventsByLevel(filteredEvents), [filteredEvents]);
   const totalCount = orderedEvents.length;
   const visibleCount = filteredEvents.length;
+  const selectedEvent = useMemo(
+    () => orderedEvents.find((event) => event.id === selectedEventId) ?? null,
+    [orderedEvents, selectedEventId],
+  );
 
   const handleRefreshTmuxDiagnostics = useCallback(async () => {
     try {
@@ -119,9 +125,23 @@ function DebugConsolePanelContainer() {
     setOnlyFailureOrStuck(false);
   }, []);
 
+  const handleInspectEvent = useCallback((event: DebugEvent) => {
+    setSelectedEventId(event.id);
+  }, []);
+
+  const handleCloseInspectModal = useCallback(() => {
+    setSelectedEventId(null);
+  }, []);
+
+  const handleClear = useCallback(() => {
+    setSelectedEventId(null);
+    clear();
+  }, [clear]);
+
   return (
     <DebugConsolePanelPresentational
       events={filteredEvents}
+      selectedEvent={selectedEvent}
       totalCount={totalCount}
       visibleCount={visibleCount}
       infoCount={visibleCounts.info}
@@ -137,9 +157,11 @@ function DebugConsolePanelContainer() {
       onCategoryFilterChange={setCategoryFilter}
       onToggleOnlyFailureOrStuck={() => setOnlyFailureOrStuck((current) => !current)}
       onResetFilters={handleResetFilters}
+      onInspectEvent={handleInspectEvent}
+      onCloseInspectModal={handleCloseInspectModal}
       onRefreshTmuxDiagnostics={handleRefreshTmuxDiagnostics}
       onCopyJson={handleCopyJson}
-      onClear={clear}
+      onClear={handleClear}
     />
   );
 }

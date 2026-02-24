@@ -152,6 +152,8 @@ export {
 export {
   ackCloudAutomationEvent,
   nackCloudAutomationEvent,
+  pullCloudAutomationEventQueueCounts,
   pullCloudAutomationEvents,
+  type CloudAutomationEventQueueCount,
   type GithubPrMergedAutomationEvent,
 } from "./api/cloudAutomationEvents.api";
