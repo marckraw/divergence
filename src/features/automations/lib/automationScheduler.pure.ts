@@ -34,10 +34,11 @@ export function isAutomationDue(
  * For manual runs or first runs (nextRunAtMs is null), falls back to nowMs as anchor.
  */
 export function computeNextScheduledRunAtMs(
-  automation: Pick<Automation, "enabled" | "intervalHours" | "nextRunAtMs">,
+  automation: Pick<Automation, "enabled" | "intervalHours" | "nextRunAtMs" | "runMode">,
   nowMs: number,
 ): number | null {
   if (!automation.enabled) return null;
+  if (automation.runMode === "event") return null;
   const intervalMs = normalizeAutomationIntervalHours(automation.intervalHours) * HOUR_MS;
   const anchor = automation.nextRunAtMs ?? nowMs;
   let next = anchor + intervalMs;
@@ -58,7 +59,7 @@ export function findDueAutomations(
   nowMs: number,
 ): Automation[] {
   return automations.filter(
-    (a) => isAutomationDue(a, nowMs) && !runningAutomationIds.has(a.id),
+    (a) => a.runMode === "schedule" && isAutomationDue(a, nowMs) && !runningAutomationIds.has(a.id),
   );
 }
 
@@ -96,16 +97,53 @@ export function buildAutomationPromptMarkdown(input: {
   triggerSource: string;
   prompt: string;
   generatedAtMs: number;
+  triggerContext?: {
+    sourceRepoKey: string;
+    targetProjectName: string;
+    targetProjectPath: string;
+    pullRequestNumber: number;
+    pullRequestUrl: string;
+    baseRef: string;
+    headRef: string;
+    mergeCommitSha: string;
+    mergedAtMs: number;
+  };
 }): string {
-  return [
+  const lines = [
     `# Automation Run: ${input.automationName}`,
     "",
     `Project: ${input.projectName}`,
     `Trigger: ${input.triggerSource}`,
     `Generated at: ${new Date(input.generatedAtMs).toISOString()}`,
+  ];
+
+  if (input.triggerContext) {
+    lines.push(
+      "",
+      "## Trigger Context",
+      `Source repo: ${input.triggerContext.sourceRepoKey}`,
+      `Target project: ${input.triggerContext.targetProjectName}`,
+      `Target path: ${input.triggerContext.targetProjectPath}`,
+      `PR: #${input.triggerContext.pullRequestNumber} (${input.triggerContext.pullRequestUrl})`,
+      `Base branch: ${input.triggerContext.baseRef}`,
+      `Head branch: ${input.triggerContext.headRef}`,
+      `Merge commit: ${input.triggerContext.mergeCommitSha}`,
+      `Merged at: ${new Date(input.triggerContext.mergedAtMs).toISOString()}`,
+      "",
+      "## Required Outcome",
+      "- Inspect source merge impact.",
+      "- Update the target project to match the released capabilities.",
+      "- Create a branch, commit, push, and open a PR in the target repository.",
+      "- Return the resulting PR URL in the output.",
+    );
+  }
+
+  lines.push(
     "",
     "## Prompt",
     input.prompt.trim(),
     "",
-  ].join("\n");
+  );
+
+  return lines.join("\n");
 }

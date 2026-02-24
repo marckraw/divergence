@@ -7,7 +7,7 @@ import {
   saveWorkspaceSettings,
   updateWorkspace,
 } from "../../../entities/workspace";
-import { updateWorkspaceFolder } from "../../workspace-management/api/workspaceFolder.api";
+import { updateWorkspaceFolder } from "../../../shared/api/workspaceFolders.api";
 
 export async function updateWorkspaceMembers(
   workspaceId: number,

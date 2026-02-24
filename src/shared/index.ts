@@ -143,3 +143,15 @@ export {
   type RalphyIntegrationsSummary,
   type RalphyLabelsSummary,
 } from "./hooks/useRalphyConfig";
+export {
+  getProjectGithubRepository,
+  isGithubRepoConfigValid,
+  normalizeGithubRepoKey,
+  type GithubRepositoryRef,
+} from "./api/github.api";
+export {
+  ackCloudAutomationEvent,
+  nackCloudAutomationEvent,
+  pullCloudAutomationEvents,
+  type GithubPrMergedAutomationEvent,
+} from "./api/cloudAutomationEvents.api";

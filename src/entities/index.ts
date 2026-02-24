@@ -30,11 +30,14 @@ export type {
 export type {
   Automation,
   AutomationAgent,
+  AutomationRunMode,
+  AutomationTriggerType,
   AutomationRun,
   AutomationRunStatus,
   AutomationRunTriggerSource,
   CreateAutomationInput,
   CreateAutomationRunInput,
+  GithubPrMergedTriggerConfig,
   UpdateAutomationInput,
 } from "./automation";
 export type {
@@ -60,3 +63,9 @@ export type {
   PortEntityType,
   AllocatePortInput,
 } from "./port-management";
+export type {
+  AutomationTriggerDispatchRow,
+  AutomationTriggerDispatchStatus,
+  CreateAutomationTriggerDispatchInput,
+  InsertAutomationTriggerDispatchRow,
+} from "./automation-trigger";

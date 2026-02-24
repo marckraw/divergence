@@ -15,7 +15,11 @@ export async function listAutomations(): Promise<Automation[]> {
 
 export async function insertAutomation(input: CreateAutomationInput): Promise<number> {
   const nowMs = Date.now();
-  const nextRunAtMs = input.enabled ? nowMs + input.intervalHours * 60 * 60 * 1000 : null;
+  const runMode = input.runMode ?? "schedule";
+  const intervalHours = Number.isFinite(input.intervalHours) ? Math.max(1, Math.floor(input.intervalHours ?? 1)) : 1;
+  const nextRunAtMs = runMode === "schedule" && input.enabled
+    ? nowMs + intervalHours * 60 * 60 * 1000
+    : null;
 
   const rows = await db
     .insert(automations)
@@ -24,7 +28,12 @@ export async function insertAutomation(input: CreateAutomationInput): Promise<nu
       projectId: input.projectId,
       agent: input.agent,
       prompt: input.prompt,
-      intervalHours: input.intervalHours,
+      intervalHours,
+      runMode,
+      sourceProjectId: input.sourceProjectId ?? null,
+      targetProjectId: input.targetProjectId ?? null,
+      triggerType: input.triggerType ?? null,
+      triggerConfigJson: input.triggerConfigJson ?? null,
       enabled: input.enabled,
       keepSessionAlive: input.keepSessionAlive,
       workspaceId: input.workspaceId ?? null,
@@ -40,6 +49,8 @@ export async function insertAutomation(input: CreateAutomationInput): Promise<nu
 
 export async function updateAutomation(input: UpdateAutomationInput): Promise<void> {
   const nowMs = Date.now();
+  const runMode = input.runMode ?? "schedule";
+  const intervalHours = Number.isFinite(input.intervalHours) ? Math.max(1, Math.floor(input.intervalHours ?? 1)) : 1;
 
   const existingRows = await db
     .select({ lastRunAtMs: automations.lastRunAtMs })
@@ -47,8 +58,8 @@ export async function updateAutomation(input: UpdateAutomationInput): Promise<vo
     .where(eq(automations.id, input.id));
 
   const lastRunAtMs = existingRows[0]?.lastRunAtMs ?? null;
-  const nextRunAtMs = input.enabled
-    ? (lastRunAtMs ?? nowMs) + input.intervalHours * 60 * 60 * 1000
+  const nextRunAtMs = runMode === "schedule" && input.enabled
+    ? (lastRunAtMs ?? nowMs) + intervalHours * 60 * 60 * 1000
     : null;
 
   await db
@@ -58,7 +69,12 @@ export async function updateAutomation(input: UpdateAutomationInput): Promise<vo
       projectId: input.projectId,
       agent: input.agent,
       prompt: input.prompt,
-      intervalHours: input.intervalHours,
+      intervalHours,
+      runMode,
+      sourceProjectId: input.sourceProjectId ?? null,
+      targetProjectId: input.targetProjectId ?? null,
+      triggerType: input.triggerType ?? null,
+      triggerConfigJson: input.triggerConfigJson ?? null,
       enabled: input.enabled,
       keepSessionAlive: input.keepSessionAlive,
       workspaceId: input.workspaceId ?? null,

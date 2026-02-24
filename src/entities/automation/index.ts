@@ -1,11 +1,14 @@
 export type {
   Automation,
   AutomationAgent,
+  AutomationRunMode,
+  AutomationTriggerType,
   AutomationRun,
   AutomationRunStatus,
   AutomationRunTriggerSource,
   CreateAutomationInput,
   CreateAutomationRunInput,
+  GithubPrMergedTriggerConfig,
   UpdateAutomationInput,
 } from "./model/automation.types";
 export { useAutomations } from "./model/useAutomations";

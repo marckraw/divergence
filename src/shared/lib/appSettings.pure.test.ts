@@ -122,6 +122,40 @@ describe("normalizeAppSettings", () => {
     expect(normalized.claudeOAuthToken).toBe("");
   });
 
+  it("defaults GitHub/cloud integration fields", () => {
+    const normalized = normalizeAppSettings();
+    expect(normalized.githubToken).toBe("");
+    expect(normalized.githubWebhookSecret).toBe("");
+    expect(normalized.cloudApiBaseUrl).toBe("https://cloud.divergence.app");
+    expect(normalized.cloudApiToken).toBe("");
+  });
+
+  it("preserves valid GitHub/cloud integration strings", () => {
+    const normalized = normalizeAppSettings({
+      githubToken: "ghp_test",
+      githubWebhookSecret: "webhook-secret",
+      cloudApiBaseUrl: "https://cloud.internal",
+      cloudApiToken: "cloud-token",
+    });
+    expect(normalized.githubToken).toBe("ghp_test");
+    expect(normalized.githubWebhookSecret).toBe("webhook-secret");
+    expect(normalized.cloudApiBaseUrl).toBe("https://cloud.internal");
+    expect(normalized.cloudApiToken).toBe("cloud-token");
+  });
+
+  it("falls back when GitHub/cloud integration fields are invalid", () => {
+    const normalized = normalizeAppSettings({
+      githubToken: 42 as never,
+      githubWebhookSecret: null as never,
+      cloudApiBaseUrl: "" as never,
+      cloudApiToken: { bad: true } as never,
+    });
+    expect(normalized.githubToken).toBe("");
+    expect(normalized.githubWebhookSecret).toBe("");
+    expect(normalized.cloudApiBaseUrl).toBe("https://cloud.divergence.app");
+    expect(normalized.cloudApiToken).toBe("");
+  });
+
   it("defaults restoreTabsOnRestart to false", () => {
     const normalized = normalizeAppSettings();
     expect(normalized.restoreTabsOnRestart).toBe(false);

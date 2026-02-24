@@ -56,7 +56,7 @@ describe("automation scheduler utils", () => {
       // Scheduled at 2pm, 6h interval -> next is 8pm
       const twopm = Date.UTC(2026, 0, 1, 14, 0, 0);
       const result = computeNextScheduledRunAtMs(
-        { enabled: true, intervalHours: 6, nextRunAtMs: twopm },
+        { enabled: true, intervalHours: 6, nextRunAtMs: twopm, runMode: "schedule" },
         twopm + 30 * 60 * 1000, // now is 2:30pm (run just finished)
       );
       expect(result).toBe(twopm + 6 * HOUR_MS); // 8pm
@@ -68,7 +68,7 @@ describe("automation scheduler utils", () => {
       const twopm = Date.UTC(2026, 0, 1, 14, 0, 0);
       const elevenpm = Date.UTC(2026, 0, 1, 23, 0, 0);
       const result = computeNextScheduledRunAtMs(
-        { enabled: true, intervalHours: 6, nextRunAtMs: twopm },
+        { enabled: true, intervalHours: 6, nextRunAtMs: twopm, runMode: "schedule" },
         elevenpm,
       );
       const twoam = Date.UTC(2026, 0, 2, 2, 0, 0);
@@ -77,7 +77,15 @@ describe("automation scheduler utils", () => {
 
     it("returns null for disabled automation", () => {
       const result = computeNextScheduledRunAtMs(
-        { enabled: false, intervalHours: 6, nextRunAtMs: 1000 },
+        { enabled: false, intervalHours: 6, nextRunAtMs: 1000, runMode: "schedule" },
+        2000,
+      );
+      expect(result).toBeNull();
+    });
+
+    it("returns null for event-run automations", () => {
+      const result = computeNextScheduledRunAtMs(
+        { enabled: true, intervalHours: 6, nextRunAtMs: 1000, runMode: "event" },
         2000,
       );
       expect(result).toBeNull();
@@ -86,7 +94,7 @@ describe("automation scheduler utils", () => {
     it("uses nowMs as anchor when nextRunAtMs is null (manual run)", () => {
       const nowMs = Date.UTC(2026, 0, 1, 15, 0, 0);
       const result = computeNextScheduledRunAtMs(
-        { enabled: true, intervalHours: 4, nextRunAtMs: null },
+        { enabled: true, intervalHours: 4, nextRunAtMs: null, runMode: "schedule" },
         nowMs,
       );
       expect(result).toBe(nowMs + 4 * HOUR_MS);
@@ -98,7 +106,7 @@ describe("automation scheduler utils", () => {
       const intervalHours = 2;
       const nowMs = anchor + intervalHours * HOUR_MS; // next === nowMs
       const result = computeNextScheduledRunAtMs(
-        { enabled: true, intervalHours, nextRunAtMs: anchor },
+        { enabled: true, intervalHours, nextRunAtMs: anchor, runMode: "schedule" },
         nowMs,
       );
       expect(result).toBe(nowMs + intervalHours * HOUR_MS);
@@ -112,7 +120,7 @@ describe("automation scheduler utils", () => {
       const next = anchor + intervalHours * HOUR_MS; // 1pm
       const nowMs = next + intervalHours * HOUR_MS;  // 4pm (missed by exactly 1 interval)
       const result = computeNextScheduledRunAtMs(
-        { enabled: true, intervalHours, nextRunAtMs: anchor },
+        { enabled: true, intervalHours, nextRunAtMs: anchor, runMode: "schedule" },
         nowMs,
       );
       expect(result).toBe(nowMs + intervalHours * HOUR_MS); // 7pm
@@ -122,13 +130,18 @@ describe("automation scheduler utils", () => {
 
   describe("findDueAutomations", () => {
     function makeAutomation(overrides: Partial<Automation>): Automation {
-      return {
+      const merged: Automation = {
         id: 1,
         name: "test",
         projectId: 1,
         agent: "claude",
         prompt: "test",
         intervalHours: 6,
+        runMode: "schedule",
+        sourceProjectId: null,
+        targetProjectId: null,
+        triggerType: null,
+        triggerConfigJson: null,
         enabled: true,
         keepSessionAlive: false,
         lastRunAtMs: null,
@@ -137,6 +150,13 @@ describe("automation scheduler utils", () => {
         updatedAtMs: 500,
         workspaceId: null,
         ...overrides,
+      };
+      return {
+        ...merged,
+        sourceProjectId: merged.sourceProjectId ?? null,
+        targetProjectId: merged.targetProjectId ?? null,
+        triggerType: merged.triggerType ?? null,
+        triggerConfigJson: merged.triggerConfigJson ?? null,
       };
     }
 
@@ -176,6 +196,15 @@ describe("automation scheduler utils", () => {
       const nowMs = 2000;
       const automations = [
         makeAutomation({ id: 1, nextRunAtMs: null, enabled: true }),
+      ];
+      const result = findDueAutomations(automations, new Set(), nowMs);
+      expect(result).toEqual([]);
+    });
+
+    it("excludes event-mode automations from scheduler", () => {
+      const nowMs = 2000;
+      const automations = [
+        makeAutomation({ id: 1, nextRunAtMs: 1000, enabled: true, runMode: "event" }),
       ];
       const result = findDueAutomations(automations, new Set(), nowMs);
       expect(result).toEqual([]);

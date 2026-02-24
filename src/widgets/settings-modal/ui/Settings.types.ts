@@ -5,6 +5,7 @@ import type { Project } from "../../../entities";
 import type {
   Automation,
   AutomationAgent,
+  AutomationRunMode,
   AutomationRun,
   CreateAutomationInput,
   UpdateAutomationInput,
@@ -45,12 +46,20 @@ export interface SettingsState {
   agentCommandClaude: string;
   agentCommandCodex: string;
   claudeOAuthToken: string;
+  githubToken: string;
+  githubWebhookSecret: string;
+  cloudApiBaseUrl: string;
+  cloudApiToken: string;
 }
 
 export interface SettingsAutomationFormState {
   id: number | null;
   name: string;
   projectId: number | null;
+  runMode: AutomationRunMode;
+  sourceProjectId: number | null;
+  targetProjectId: number | null;
+  baseBranches: string;
   agent: AutomationAgent;
   prompt: string;
   intervalHours: number;
@@ -96,5 +105,9 @@ export interface SettingsPresentationalProps {
   onSubmitAutomationForm: () => Promise<void>;
   onCloseAutomationEditor: () => void;
   oauthTokenVisible: boolean;
+  githubTokenVisible: boolean;
+  cloudTokenVisible: boolean;
   onToggleOAuthTokenVisible: () => void;
+  onToggleGithubTokenVisible: () => void;
+  onToggleCloudTokenVisible: () => void;
 }

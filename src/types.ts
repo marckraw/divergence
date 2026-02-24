@@ -41,11 +41,14 @@ export type {
 export type {
   Automation,
   AutomationAgent,
+  AutomationRunMode,
+  AutomationTriggerType,
   AutomationRun,
   AutomationRunStatus,
   AutomationRunTriggerSource,
   CreateAutomationInput,
   CreateAutomationRunInput,
+  GithubPrMergedTriggerConfig,
   UpdateAutomationInput,
 } from "./entities/automation";
 export type {

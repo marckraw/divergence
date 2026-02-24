@@ -10,6 +10,12 @@ import {
   useAutomationRunPoller,
   useAutomationScheduler,
 } from "../features/automations";
+import {
+  dispatchTriggeredAutomations,
+  ensureAutomationWorkspace,
+  matchGithubMergedTriggers,
+  useCloudAutomationEventPoller,
+} from "../features/automation-triggers";
 import type { AutomationRunTriggerSource } from "../entities/automation";
 import QuickSwitcher from "../features/quick-switcher";
 import Settings from "../widgets/settings-modal";
@@ -42,7 +48,18 @@ import {
   getGithubPollState,
   upsertGithubPollState,
 } from "../entities/inbox-event";
-import { Button, IconButton, ProgressBar, recordDebugEvent, useAppSettings, useUpdater } from "../shared";
+import {
+  ackCloudAutomationEvent,
+  Button,
+  IconButton,
+  nackCloudAutomationEvent,
+  notifyCommandFinished,
+  ProgressBar,
+  recordDebugEvent,
+  useAppSettings,
+  useUpdater,
+  type GithubPrMergedAutomationEvent,
+} from "../shared";
 import {
   areSplitPaneSizesEqual,
   normalizeSplitPaneSizes,
@@ -55,6 +72,7 @@ import type {
   SplitPaneId,
   SplitSessionState,
   BackgroundTask,
+  Workspace,
 } from "../entities";
 import { buildSplitTmuxSessionName } from "../entities/terminal-session";
 import { getRalphyConfigSummary } from "../shared/api/ralphyConfig.api";
@@ -64,7 +82,6 @@ import {
   writeReviewBriefFile,
   type DiffReviewAgent,
 } from "../features/diff-review";
-import { notifyCommandFinished } from "../shared";
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
 import { buildTerminalSession, buildWorkspaceKey, buildWorkspaceTerminalSession, buildWorkspaceDivergenceTerminalSession, generateSessionEntropy } from "./lib/sessionBuilder.pure";
 import {
@@ -1149,24 +1166,73 @@ function App() {
 
   const executeAutomationRun = useCallback(async (
     automationId: number,
-    triggerSource?: AutomationRunTriggerSource,
-  ): Promise<void> => {
+    input?: {
+      triggerSource?: AutomationRunTriggerSource;
+      eventContext?: GithubPrMergedAutomationEvent;
+    },
+  ): Promise<number | null> => {
     const automation = automations.find((item) => item.id === automationId);
     if (!automation) {
-      if (triggerSource) return; // scheduled runs silently skip missing automations
+      if (input?.triggerSource) return null; // scheduled runs silently skip missing automations
       throw new Error("Automation not found.");
     }
-    const project = projectById.get(automation.projectId) ?? null;
-    await runAutomationNow({
+    let project = projectById.get(automation.projectId) ?? null;
+    let workspace: Workspace | null = null;
+    let triggerContext: {
+      sourceRepoKey: string;
+      targetProjectName: string;
+      targetProjectPath: string;
+      pullRequestNumber: number;
+      pullRequestUrl: string;
+      baseRef: string;
+      headRef: string;
+      mergeCommitSha: string;
+      mergedAtMs: number;
+    } | undefined;
+
+    if (automation.runMode === "event" && automation.sourceProjectId && automation.targetProjectId) {
+      const sourceProject = projectById.get(automation.sourceProjectId) ?? null;
+      const targetProject = projectById.get(automation.targetProjectId) ?? null;
+      if (!sourceProject || !targetProject) {
+        throw new Error("Source or target project for event automation was not found.");
+      }
+
+      workspace = await ensureAutomationWorkspace({
+        sourceProject,
+        targetProject,
+        allProjectsById: projectById,
+      });
+      project = targetProject;
+      await refreshWorkspaces();
+
+      if (input?.eventContext) {
+        triggerContext = {
+          sourceRepoKey: input.eventContext.repoKey,
+          targetProjectName: targetProject.name,
+          targetProjectPath: targetProject.path,
+          pullRequestNumber: input.eventContext.prNumber,
+          pullRequestUrl: input.eventContext.htmlUrl,
+          baseRef: input.eventContext.baseRef,
+          headRef: input.eventContext.headRef,
+          mergeCommitSha: input.eventContext.mergeCommitSha,
+          mergedAtMs: input.eventContext.mergedAtMs,
+        };
+      }
+    }
+
+    const result = await runAutomationNow({
       automation,
       project,
+      workspace,
       runTask,
       agentCommandClaude: appSettings.agentCommandClaude,
       agentCommandCodex: appSettings.agentCommandCodex,
       claudeOAuthToken: appSettings.claudeOAuthToken ?? "",
-      triggerSource,
+      triggerSource: input?.triggerSource,
+      triggerContext,
     });
     await Promise.all([refreshAutomations(), refreshDivergences()]);
+    return result.status === "launched" ? result.runId : null;
   }, [
     appSettings.agentCommandClaude,
     appSettings.agentCommandCodex,
@@ -1175,19 +1241,109 @@ function App() {
     projectById,
     refreshAutomations,
     refreshDivergences,
+    refreshWorkspaces,
     runTask,
   ]);
 
   const handleRunAutomationNow = useCallback(
-    (automationId: number) => executeAutomationRun(automationId),
+    async (automationId: number) => {
+      await executeAutomationRun(automationId);
+    },
     [executeAutomationRun],
   );
 
   const handleRunScheduledAutomation = useCallback(
     (automationId: number, triggerSource: AutomationRunTriggerSource) =>
-      executeAutomationRun(automationId, triggerSource),
+      executeAutomationRun(automationId, { triggerSource }).then(() => undefined),
     [executeAutomationRun],
   );
+
+  const handleCloudAutomationEvents = useCallback(async (
+    events: GithubPrMergedAutomationEvent[],
+  ): Promise<void> => {
+    let shouldRefreshInbox = false;
+    for (const event of events) {
+      try {
+        const insertedId = await insertInboxEvent({
+          kind: "github_pr_merged",
+          source: "github",
+          externalId: event.externalEventId,
+          title: `${event.repoKey} PR #${event.prNumber} merged into ${event.baseRef}`,
+          body: [
+            `PR #${event.prNumber}`,
+            `Base: ${event.baseRef}`,
+            `Head: ${event.headRef}`,
+            event.htmlUrl,
+          ].join("\n"),
+          payloadJson: JSON.stringify(event),
+          createdAtMs: event.mergedAtMs,
+        });
+        if (insertedId) {
+          shouldRefreshInbox = true;
+        }
+
+        const matches = await matchGithubMergedTriggers({
+          automations,
+          projectsById: projectById,
+          event,
+        });
+
+        await dispatchTriggeredAutomations({
+          matches,
+          externalEventId: event.externalEventId,
+          launchAutomation: (automationId: number) =>
+            executeAutomationRun(automationId, {
+              triggerSource: "manual",
+              eventContext: event,
+            }),
+        });
+
+        await ackCloudAutomationEvent({
+          baseUrl: appSettings.cloudApiBaseUrl ?? "",
+          cloudApiToken: appSettings.cloudApiToken ?? "",
+          eventId: event.eventId,
+        });
+      } catch (error) {
+        recordDebugEvent({
+          level: "warn",
+          category: "automation",
+          message: "Failed to process cloud automation event",
+          details: error instanceof Error ? error.message : String(error),
+          metadata: {
+            eventId: event.eventId,
+            externalEventId: event.externalEventId,
+          },
+        });
+        try {
+          await nackCloudAutomationEvent({
+            baseUrl: appSettings.cloudApiBaseUrl ?? "",
+            cloudApiToken: appSettings.cloudApiToken ?? "",
+            eventId: event.eventId,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        } catch (nackError) {
+          console.warn(`Failed to nack cloud automation event ${event.eventId}:`, nackError);
+        }
+      }
+    }
+    if (shouldRefreshInbox) {
+      await refreshInbox();
+    }
+  }, [
+    appSettings.cloudApiBaseUrl,
+    appSettings.cloudApiToken,
+    automations,
+    executeAutomationRun,
+    projectById,
+    refreshInbox,
+  ]);
+
+  useCloudAutomationEventPoller({
+    enabled: Boolean((appSettings.cloudApiToken ?? "").trim() && (appSettings.cloudApiBaseUrl ?? "").trim()),
+    cloudApiBaseUrl: appSettings.cloudApiBaseUrl ?? "",
+    cloudApiToken: appSettings.cloudApiToken ?? "",
+    onEvents: handleCloudAutomationEvents,
+  });
 
   // Automation scheduler — periodically triggers due automations
   useAutomationScheduler({

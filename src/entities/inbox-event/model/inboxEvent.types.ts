@@ -1,6 +1,11 @@
 export type { InboxEvent } from "../../../shared/api/schema.types";
 
-export type InboxEventKind = "automation_run" | "github_pr_opened" | "github_pr_updated" | "system";
+export type InboxEventKind =
+  | "automation_run"
+  | "github_pr_opened"
+  | "github_pr_updated"
+  | "github_pr_merged"
+  | "system";
 
 export type InboxFilter = "all" | "unread" | "automation" | "github";
 
