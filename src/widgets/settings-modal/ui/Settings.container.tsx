@@ -47,6 +47,7 @@ function SettingsContainer({
   projects,
   automations,
   latestRunByAutomationId,
+  queuedCloudCountByAutomationId,
   automationsLoading,
   automationsError,
   onRefreshAutomations,
@@ -323,6 +324,7 @@ function SettingsContainer({
       projects={projects}
       automations={automations}
       latestRunByAutomationId={latestRunByAutomationId}
+      queuedCloudCountByAutomationId={queuedCloudCountByAutomationId}
       automationsLoading={automationsLoading}
       automationsError={automationsError}
       automationActionError={automationActionError}

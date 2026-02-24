@@ -27,6 +27,7 @@ export interface AutomationsPanelProps {
   projects: Project[];
   automations: Automation[];
   latestRunByAutomationId: Map<number, AutomationRun>;
+  queuedCloudCountByAutomationId: Map<number, number>;
   loading: boolean;
   error: string | null;
   onRefresh: () => Promise<void>;

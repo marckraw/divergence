@@ -26,6 +26,7 @@ export interface SettingsProps {
   projects: Project[];
   automations: Automation[];
   latestRunByAutomationId: Map<number, AutomationRun>;
+  queuedCloudCountByAutomationId: Map<number, number>;
   automationsLoading: boolean;
   automationsError: string | null;
   onRefreshAutomations: () => Promise<void>;
@@ -81,6 +82,7 @@ export interface SettingsPresentationalProps {
   projects: Project[];
   automations: Automation[];
   latestRunByAutomationId: Map<number, AutomationRun>;
+  queuedCloudCountByAutomationId: Map<number, number>;
   automationsLoading: boolean;
   automationsError: string | null;
   automationActionError: string | null;

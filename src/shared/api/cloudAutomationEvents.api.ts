@@ -16,6 +16,16 @@ interface PullAutomationEventsResponse {
   events: GithubPrMergedAutomationEvent[];
 }
 
+export interface CloudAutomationEventQueueCount {
+  repoKey: string;
+  baseRef: string;
+  queuedCount: number;
+}
+
+interface PullAutomationEventQueueCountsResponse {
+  queueCounts: CloudAutomationEventQueueCount[];
+}
+
 function buildAuthHeaders(cloudApiToken: string): HeadersInit {
   return {
     Accept: "application/json",
@@ -96,4 +106,32 @@ export async function nackCloudAutomationEvent(input: {
   });
   const text = await response.text();
   assertOk(response, text);
+}
+
+export async function pullCloudAutomationEventQueueCounts(input: {
+  baseUrl: string;
+  cloudApiToken: string;
+}): Promise<CloudAutomationEventQueueCount[]> {
+  const url = `${normalizeBaseUrl(input.baseUrl)}/api/v1/automation-events/queue-counts`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: buildAuthHeaders(input.cloudApiToken),
+  });
+  const text = await response.text();
+  if (response.status === 404) {
+    return [];
+  }
+  assertOk(response, text);
+
+  let parsed: unknown;
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error(`Failed to parse cloud queue counts response: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const payload = (parsed && typeof parsed === "object" && "queueCounts" in parsed)
+    ? parsed as PullAutomationEventQueueCountsResponse
+    : { queueCounts: [] };
+  return Array.isArray(payload.queueCounts) ? payload.queueCounts : [];
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatUtilization,
   formatResetTime,
@@ -9,7 +9,18 @@ import {
   getSummaryUsageLevel,
 } from "./usageLimits.pure";
 
+const FIXED_NOW = new Date("2026-02-24T12:00:00.000Z");
+
 describe("usage limits pure utils", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe("formatUtilization", () => {
     it("formats decimal as percentage", () => {
       expect(formatUtilization(0)).toBe("0%");

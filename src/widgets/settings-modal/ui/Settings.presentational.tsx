@@ -292,6 +292,7 @@ function SettingsPresentational({
   projects,
   automations,
   latestRunByAutomationId,
+  queuedCloudCountByAutomationId,
   automationsLoading,
   automationsError,
   automationActionError,
@@ -716,6 +717,7 @@ function SettingsPresentational({
             <div className="space-y-2">
               {automations.map((automation) => {
                 const latestRun = latestRunByAutomationId.get(automation.id);
+                const queuedCloudCount = queuedCloudCountByAutomationId.get(automation.id) ?? 0;
                 return (
                   <AutomationCard
                     key={automation.id}
@@ -734,6 +736,11 @@ function SettingsPresentational({
                         {automation.runMode === "event" && (
                           <div>
                             {`Source #${automation.sourceProjectId ?? "?"} -> Target #${automation.targetProjectId ?? "?"}`}
+                          </div>
+                        )}
+                        {automation.runMode === "event" && (
+                          <div>
+                            Queued cloud events: {queuedCloudCount}
                           </div>
                         )}
                         <div>
