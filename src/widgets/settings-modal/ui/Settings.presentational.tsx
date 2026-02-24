@@ -395,6 +395,24 @@ function SettingsPresentational({
 
           <div>
             <label className="block text-sm font-medium text-text mb-2">
+              Terminal Tabs
+            </label>
+            <label className="inline-flex items-center gap-2 text-sm text-text">
+              <input
+                type="checkbox"
+                checked={settings.restoreTabsOnRestart}
+                onChange={(event) => onUpdateSetting("restoreTabsOnRestart", event.target.checked)}
+                className="accent-primary"
+              />
+              Restore open terminal tabs on restart
+            </label>
+            <p className="text-xs text-subtext mt-1">
+              Reopens your currently open tabs when Divergence launches again.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text mb-2">
               Claude Command Template
             </label>
             <TextInput

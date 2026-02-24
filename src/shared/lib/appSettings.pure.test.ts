@@ -121,4 +121,23 @@ describe("normalizeAppSettings", () => {
     });
     expect(normalized.claudeOAuthToken).toBe("");
   });
+
+  it("defaults restoreTabsOnRestart to false", () => {
+    const normalized = normalizeAppSettings();
+    expect(normalized.restoreTabsOnRestart).toBe(false);
+  });
+
+  it("preserves boolean restoreTabsOnRestart", () => {
+    const normalized = normalizeAppSettings({
+      restoreTabsOnRestart: true,
+    });
+    expect(normalized.restoreTabsOnRestart).toBe(true);
+  });
+
+  it("falls back to false for non-boolean restoreTabsOnRestart", () => {
+    const normalized = normalizeAppSettings({
+      restoreTabsOnRestart: "yes" as never,
+    });
+    expect(normalized.restoreTabsOnRestart).toBe(false);
+  });
 });

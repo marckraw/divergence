@@ -89,6 +89,11 @@ import {
 } from "./lib/githubInbox.pure";
 import { fetchGithubPullRequests } from "./api/githubPullRequests.api";
 import type { GithubRepoTarget } from "./model/githubPullRequests.types";
+import {
+  clearPersistedTerminalTabsState,
+  loadPersistedTerminalTabsState,
+  savePersistedTerminalTabsState,
+} from "./api/sessionPersistence.api";
 import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
 
@@ -97,6 +102,7 @@ const NOTIFY_IDLE_DELAY_MS = 1500;
 const NOTIFY_COOLDOWN_MS = 3000;
 const GITHUB_POLL_INTERVAL_MS = 2 * 60_000;
 const GITHUB_INITIAL_POLL_DELAY_MS = 15_000;
+const RESTORE_TABS_TOAST_TTL_MS = 4000;
 
 function App() {
   const updater = useUpdater(true);
@@ -134,6 +140,7 @@ function App() {
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<WorkSidebarMode>("projects");
   const [workTab, setWorkTab] = useState<WorkSidebarTab>("inbox");
+  const [restoredTabsToastMessage, setRestoredTabsToastMessage] = useState<string | null>(null);
   const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>([]);
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
@@ -147,6 +154,8 @@ function App() {
   const githubTokenWarningShownRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartWidthRef = useRef(0);
+  const hasRestoredTabsRef = useRef(false);
+  const restoredTabsToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
     automations,
     runs: automationRuns,
@@ -282,6 +291,60 @@ function App() {
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (restoredTabsToastTimerRef.current) {
+        clearTimeout(restoredTabsToastTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hasRestoredTabsRef.current) {
+      return;
+    }
+    hasRestoredTabsRef.current = true;
+
+    if (!appSettings.restoreTabsOnRestart) {
+      clearPersistedTerminalTabsState();
+      return;
+    }
+
+    const restored = loadPersistedTerminalTabsState();
+    if (restored.sessions.size === 0) {
+      return;
+    }
+
+    setSessions(restored.sessions);
+    setActiveSessionId(restored.activeSessionId);
+    setRestoredTabsToastMessage(
+      `Restored ${restored.sessions.size} tab${restored.sessions.size === 1 ? "" : "s"} from your previous session.`
+    );
+    if (restoredTabsToastTimerRef.current) {
+      clearTimeout(restoredTabsToastTimerRef.current);
+    }
+    restoredTabsToastTimerRef.current = setTimeout(() => {
+      setRestoredTabsToastMessage(null);
+      restoredTabsToastTimerRef.current = null;
+    }, RESTORE_TABS_TOAST_TTL_MS);
+  }, [appSettings.restoreTabsOnRestart]);
+
+  useEffect(() => {
+    if (!hasRestoredTabsRef.current) {
+      return;
+    }
+
+    if (!appSettings.restoreTabsOnRestart) {
+      clearPersistedTerminalTabsState();
+      return;
+    }
+
+    savePersistedTerminalTabsState({
+      sessions,
+      activeSessionId,
+    });
+  }, [sessions, activeSessionId, appSettings.restoreTabsOnRestart]);
 
   useEffect(() => {
     githubRepoTargetsRef.current = githubRepoTargets;
@@ -1666,6 +1729,28 @@ function App() {
         onDismiss={dismissToast}
         onViewTask={handleViewTaskCenterTask}
       />
+
+      {restoredTabsToastMessage && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className="rounded-md border border-surface bg-sidebar px-3 py-2 shadow-lg">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs text-text">{restoredTabsToastMessage}</p>
+              <IconButton
+                onClick={() => setRestoredTabsToastMessage(null)}
+                variant="subtle"
+                size="xs"
+                className="text-subtext hover:text-text"
+                label="Dismiss restored tabs notification"
+                icon={(
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Update Banner */}
       {!bannerDismissed && (updater.status === "available" || updater.status === "downloading" || updater.status === "error") && (

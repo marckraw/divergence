@@ -18,6 +18,7 @@ export interface AppSettings {
   editorThemeForLightMode: EditorThemeId;
   editorThemeForDarkMode: EditorThemeId;
   tmuxHistoryLimit: number;
+  restoreTabsOnRestart: boolean;
   divergenceBasePath?: string;
   agentCommandClaude: string;
   agentCommandCodex: string;
@@ -32,6 +33,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   editorThemeForLightMode: DEFAULT_EDITOR_THEME_LIGHT,
   editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
+  restoreTabsOnRestart: false,
   divergenceBasePath: "",
   agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
   agentCommandCodex:
@@ -123,11 +125,13 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
   const claudeOAuthToken = typeof input?.claudeOAuthToken === "string"
     ? input.claudeOAuthToken
     : "";
+  const restoreTabsOnRestart = input?.restoreTabsOnRestart === true;
 
   return {
     ...DEFAULT_APP_SETTINGS,
     ...input,
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
+    restoreTabsOnRestart,
     editorThemeForLightMode,
     editorThemeForDarkMode,
     agentCommandClaude: migratedAgentCommandClaude,
