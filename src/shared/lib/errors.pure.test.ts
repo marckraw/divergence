@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getErrorMessage } from "./errors.pure";
+import { getErrorMessage, normalizeUnknownError } from "./errors.pure";
 
 describe("errors utils", () => {
   it("extracts message from string and Error", () => {
@@ -11,5 +11,11 @@ describe("errors utils", () => {
     expect(getErrorMessage({ message: "object-msg" }, "fallback")).toBe("object-msg");
     expect(getErrorMessage({ message: 42 }, "fallback")).toBe("fallback");
     expect(getErrorMessage(null, "fallback")).toBe("fallback");
+  });
+
+  it("normalizes unknown errors to Error instances", () => {
+    const err = new Error("boom");
+    expect(normalizeUnknownError(err)).toBe(err);
+    expect(normalizeUnknownError("boom").message).toBe("boom");
   });
 });

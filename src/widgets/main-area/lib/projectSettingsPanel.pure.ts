@@ -1,5 +1,9 @@
 import type { RalphyConfigSummary } from "../../../shared";
 
+export function joinWithBullet(parts: string[]): string {
+  return parts.join(" · ");
+}
+
 export function parseSkipListInput(value: string): string[] {
   return value
     .split("\n")
@@ -28,7 +32,7 @@ export function formatRalphyProjectSummary(summary: RalphyConfigSummary): string
   if (summary.team_id) {
     parts.push(`team ${summary.team_id}`);
   }
-  return parts.join(" · ");
+  return joinWithBullet(parts);
 }
 
 export function formatRalphyLabelsSummary(summary: RalphyConfigSummary): string {
@@ -51,7 +55,7 @@ export function formatRalphyLabelsSummary(summary: RalphyConfigSummary): string 
     parts.push(`pr: ${labels.pr_feedback}`);
   }
 
-  return parts.join(" · ");
+  return joinWithBullet(parts);
 }
 
 export function formatRalphyClaudeSummary(summary: RalphyConfigSummary): string {
@@ -68,7 +72,7 @@ export function formatRalphyClaudeSummary(summary: RalphyConfigSummary): string 
     parts.push(`${claude.max_iterations} iterations`);
   }
 
-  return parts.join(" · ");
+  return joinWithBullet(parts);
 }
 
 export function formatRalphyGithubSummary(summary: RalphyConfigSummary): string {

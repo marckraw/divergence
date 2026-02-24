@@ -1,19 +1,10 @@
-import type { Divergence } from "../../../entities";
-import type {
-  BackgroundTaskControls,
-  BackgroundTaskRunOptions,
-  RunBackgroundTask,
-} from "../../../entities/task";
-
-export type DeleteDivergenceTaskControls = BackgroundTaskControls;
-export type DeleteDivergenceTaskOptions<T> = BackgroundTaskRunOptions<T>;
-export type DeleteDivergenceRunTask = RunBackgroundTask;
+import type { Divergence, RunBackgroundTask } from "../../../entities";
 
 export interface DeleteDivergenceParams {
   divergence: Divergence;
   origin: string;
   projectName: string;
-  runTask: DeleteDivergenceRunTask;
+  runTask: RunBackgroundTask;
   closeSessionsForDivergence: (divergenceId: number) => void;
   refreshDivergences: () => Promise<void>;
   refreshPortAllocations?: () => void;

@@ -1,4 +1,5 @@
 import type { BackgroundTask, BackgroundTaskPhaseEvent } from "../model/task.types";
+export { normalizeUnknownError } from "../../../shared/lib/errors.pure";
 
 // ── Hydration types ─────────────────────────────────────────────────────────
 
@@ -132,13 +133,6 @@ export function getTaskStatusClass(task: Pick<BackgroundTask, "status">): string
     return "text-yellow";
   }
   return "text-accent";
-}
-
-export function normalizeUnknownError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
-  return new Error(String(error));
 }
 
 export function getRunningTasks(tasks: BackgroundTask[]): BackgroundTask[] {

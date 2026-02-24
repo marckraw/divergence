@@ -24,7 +24,13 @@ export interface AppSettings {
   claudeOAuthToken?: string;
 }
 
-type AgentCommandTemplate = "claude" | "codex";
+/**
+ * Shared union of supported AI agent identifiers.
+ * Used by automations, diff-review, and agent command templates.
+ */
+export type AgentKind = "claude" | "codex";
+
+type AgentCommandTemplate = AgentKind;
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   defaultShell: "/bin/zsh",

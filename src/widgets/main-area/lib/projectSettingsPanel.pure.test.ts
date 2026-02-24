@@ -5,10 +5,17 @@ import {
   formatRalphyGithubSummary,
   formatRalphyLabelsSummary,
   formatRalphyProjectSummary,
+  joinWithBullet,
   parseSkipListInput,
 } from "./projectSettingsPanel.pure";
 
 describe("project settings panel utils", () => {
+  it("joins parts with bullet separator", () => {
+    expect(joinWithBullet(["a", "b", "c"])).toBe("a · b · c");
+    expect(joinWithBullet([])).toBe("");
+    expect(joinWithBullet(["only"])).toBe("only");
+  });
+
   it("parses skip list input", () => {
     expect(parseSkipListInput(" node_modules \n\n dist \n")).toEqual(["node_modules", "dist"]);
   });

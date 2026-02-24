@@ -109,8 +109,12 @@ export {
   SETTINGS_UPDATED_EVENT,
   normalizeAppSettings,
   normalizeTmuxHistoryLimit,
+  type AgentKind,
   type AppSettings,
 } from "./lib/appSettings.pure";
+export { formatRelativeAge, formatTimestamp } from "./lib/dateTime.pure";
+export { getErrorMessage, normalizeUnknownError } from "./lib/errors.pure";
+export { joinPath } from "./lib/pathJoin.pure";
 export {
   broadcastAppSettings,
   loadAppSettings,

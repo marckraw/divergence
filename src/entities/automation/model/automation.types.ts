@@ -1,6 +1,8 @@
 export type { Automation, AutomationRun } from "../../../shared/api/schema.types";
 
-export type AutomationAgent = "claude" | "codex";
+import type { AgentKind } from "../../../shared";
+
+export type AutomationAgent = AgentKind;
 
 export type AutomationRunTriggerSource = "schedule" | "manual" | "startup_catchup";
 
