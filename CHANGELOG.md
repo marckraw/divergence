@@ -1,5 +1,11 @@
 # divergence
 
+## 0.22.1
+
+### Patch Changes
+
+- aecf84c: Add a settings option to restore terminal tabs after app restart and persist open tabs between launches.
+
 ## 0.22.0
 
 ### Minor Changes
