@@ -76,7 +76,7 @@ export function useTerminal(options: UseTerminalOptions = {}) {
     const rows = terminal.rows;
 
     try {
-      const pty = spawnLoginPty({
+      const pty = await spawnLoginPty({
         cols,
         rows,
         cwd: options.cwd || "/",

@@ -2,6 +2,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 // ── Response types ──────────────────────────────────────────────────────────
@@ -328,7 +329,7 @@ fn read_claude_oauth_token_from_env() -> Option<String> {
     normalize_claude_auth_token(std::env::var("CLAUDE_CODE_OAUTH_TOKEN").ok())
 }
 
-/// Read Claude credentials from macOS Keychain.
+#[cfg(target_os = "macos")]
 fn read_claude_keychain() -> Option<String> {
     let output = Command::new("security")
         .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
@@ -342,6 +343,11 @@ fn read_claude_keychain() -> Option<String> {
             return Some(trimmed);
         }
     }
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+fn read_claude_keychain() -> Option<String> {
     None
 }
 

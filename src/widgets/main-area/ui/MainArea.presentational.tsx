@@ -244,7 +244,7 @@ function MainAreaPresentational({
           >
             Reconnect
           </ToolbarButton>
-          <UsageLimitsButton />
+          {!navigator.platform.includes("Linux") && <UsageLimitsButton />}
           <ToolbarButton
             iconOnly
             onClick={onToggleRightPanel}
