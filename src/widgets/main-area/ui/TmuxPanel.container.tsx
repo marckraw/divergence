@@ -250,7 +250,7 @@ function TmuxPanel({
                     </div>
 
                     <div className="mt-2 text-subtext/50 italic">
-                      Tip: Check ~/Library/Logs/Divergence/tmux-debug.log for detailed Rust-side diagnostics.
+                      Tip: Check {navigator.platform.includes("Linux") ? "~/.local/share/divergence/logs/tmux-debug.log" : "~/Library/Logs/Divergence/tmux-debug.log"} for detailed Rust-side diagnostics.
                     </div>
                   </div>
                 )}
