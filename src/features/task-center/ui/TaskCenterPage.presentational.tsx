@@ -5,7 +5,7 @@ import {
   getTaskStatusLabel,
   type BackgroundTask,
 } from "../../../entities/task";
-import { Button, IconButton, ModalShell } from "../../../shared";
+import { Button, ErrorBanner, ModalHeader, ModalShell, PanelHeader, ProgressBar } from "../../../shared";
 import type { TaskCenterPageProps } from "./TaskCenterPage.types";
 
 interface TaskCenterPagePresentationalProps extends TaskCenterPageProps {
@@ -98,9 +98,7 @@ function TaskCenterTaskCard({
       )}
 
       {typeof task.progress === "number" && task.status === "running" && (
-        <div className="mt-2 h-1.5 bg-surface rounded-full overflow-hidden">
-          <div className="h-full bg-accent transition-all" style={{ width: `${task.progress}%` }} />
-        </div>
+        <ProgressBar value={task.progress} className="mt-2" barClassName="bg-accent" />
       )}
 
       {task.error && task.status === "error" && (
@@ -169,19 +167,11 @@ function TaskInspectModal({
       overlayClassName="z-50 p-4"
       panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto"
     >
-        <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm text-text font-semibold">Task Inspect</h3>
-            <p className="text-xs text-subtext mt-1">{task.title}</p>
-          </div>
-          <IconButton
-            onClick={onClose}
-            variant="subtle"
-            size="sm"
-            label="Close"
-            icon="x"
-          />
-        </div>
+        <ModalHeader
+          title="Task Inspect"
+          description={task.title}
+          onClose={onClose}
+        />
 
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -232,9 +222,7 @@ function TaskInspectModal({
           </div>
 
           {task.error && (
-            <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red break-words">
-              {task.error}
-            </div>
+            <ErrorBanner className="break-words">{task.error}</ErrorBanner>
           )}
 
           <div>
@@ -309,10 +297,10 @@ function TaskCenterPagePresentational({
 
   return (
     <div className="h-full flex flex-col bg-main">
-      <div className="px-5 py-4 border-b border-surface">
-        <h2 className="text-lg font-semibold text-text">Task Center</h2>
-        <p className="text-xs text-subtext">Live and recent background tasks</p>
-      </div>
+      <PanelHeader
+        title="Task Center"
+        description="Live and recent background tasks"
+      />
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
         <section>

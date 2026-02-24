@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTmuxSessions } from "../../../entities/terminal-session";
 import type { Project, Divergence } from "../../../entities";
-import { Button, IconButton } from "../../../shared";
+import { Button, EmptyState, ErrorBanner, IconButton } from "../../../shared";
 import {
   filterTmuxSessions,
   getTmuxOwnershipBadge,
@@ -179,15 +179,13 @@ function TmuxPanel({
       {/* Session list */}
       <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
         {error && (
-          <div className="px-2 py-2 text-xs text-red bg-red/10 border border-red/30 rounded">
-            {error}
-          </div>
+          <ErrorBanner className="px-2">{error}</ErrorBanner>
         )}
 
         {!error && loading && sessions.length === 0 && (
-          <div className="px-2 py-8 text-center text-xs text-subtext">
+          <EmptyState className="px-2 text-xs">
             Loading...
-          </div>
+          </EmptyState>
         )}
 
         {!error && !loading && sessions.length === 0 && (
@@ -260,9 +258,9 @@ function TmuxPanel({
         )}
 
         {!error && !loading && sessions.length > 0 && filteredSessions.length === 0 && isFiltering && (
-          <div className="px-2 py-8 text-center text-xs text-subtext">
-            No sessions match "{searchQuery}"
-          </div>
+          <EmptyState className="px-2 text-xs">
+            No sessions match &quot;{searchQuery}&quot;
+          </EmptyState>
         )}
 
         {filteredSessions.map((session) => {

@@ -1,10 +1,21 @@
-import type { Automation } from "../../../entities/automation";
+import {
+  AutomationCard,
+  formatRunStatus,
+} from "../../../entities/automation";
 import {
   Button,
+  ErrorBanner,
+  EmptyState,
   FormField,
-  IconButton,
+  ModalFooter,
+  ModalHeader,
   ModalShell,
+  PanelHeader,
   Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   TextInput,
   Textarea,
 } from "../../../shared";
@@ -22,96 +33,6 @@ function formatLastRun(value: number | null): string {
     return "Never";
   }
   return new Date(value).toLocaleString();
-}
-
-function formatRunStatus(status?: string): string {
-  if (!status) {
-    return "No runs yet";
-  }
-  if (status === "success") {
-    return "Success";
-  }
-  if (status === "error") {
-    return "Failed";
-  }
-  if (status === "running") {
-    return "Running";
-  }
-  if (status === "queued") {
-    return "Queued";
-  }
-  if (status === "skipped") {
-    return "Skipped";
-  }
-  return status;
-}
-
-function AutomationCard({
-  automation,
-  onEdit,
-  onDelete,
-  onRunNow,
-  runStatus,
-}: {
-  automation: Automation;
-  onEdit: () => void;
-  onDelete: () => Promise<void>;
-  onRunNow: () => Promise<void>;
-  runStatus?: string;
-}) {
-  return (
-    <div className="rounded-md border border-surface bg-sidebar/50 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm text-text font-semibold">{automation.name}</div>
-          <div className="text-xs text-subtext mt-1">
-            {automation.agent.toUpperCase()} - every {automation.intervalHours}h
-          </div>
-          <div className="text-xs text-subtext mt-1">
-            {automation.enabled ? "Enabled" : "Disabled"}
-            {" - "}
-            {automation.keepSessionAlive ? "Interactive" : "Autonomous"}
-          </div>
-        </div>
-        <div className="text-xs text-subtext">
-          {formatRunStatus(runStatus)}
-        </div>
-      </div>
-
-      <div className="mt-3 text-xs text-subtext space-y-1">
-        <div>Last run: {formatLastRun(automation.lastRunAtMs)}</div>
-        <div>Next run: {formatNextRun(automation.nextRunAtMs)}</div>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button
-          onClick={() => {
-            void onRunNow();
-          }}
-          size="sm"
-          variant="secondary"
-        >
-          Run now
-        </Button>
-        <Button
-          onClick={onEdit}
-          size="sm"
-          variant="secondary"
-        >
-          Edit
-        </Button>
-        <Button
-          onClick={() => {
-            void onDelete();
-          }}
-          size="sm"
-          variant="danger"
-        >
-          Delete
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 function AutomationTemplateCard({
@@ -166,24 +87,12 @@ function AutomationEditorModal({
       overlayClassName="z-50 p-4"
       panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto"
     >
-      <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm text-text font-semibold">
-            {form.id === null ? "New automation" : "Edit automation"}
-          </h3>
-          <p className="text-xs text-subtext mt-1">
-            Configure scheduled runs for this automation template.
-          </p>
-        </div>
-        <IconButton
-          onClick={onCloseEditor}
-          variant="subtle"
-          size="sm"
-          disabled={isSubmitting}
-          label="Close"
-          icon="x"
-        />
-      </div>
+      <ModalHeader
+        title={form.id === null ? "New automation" : "Edit automation"}
+        description="Configure scheduled runs for this automation template."
+        onClose={onCloseEditor}
+        closeDisabled={isSubmitting}
+      />
 
       <div className="p-4 space-y-3">
         <FormField label="Name" htmlFor="automation-form-name">
@@ -197,31 +106,40 @@ function AutomationEditorModal({
 
         <FormField label="Project" htmlFor="automation-form-project">
           <Select
-            id="automation-form-project"
-            value={form.projectId ?? ""}
-            onChange={(event) => {
-              const value = Number(event.target.value);
-              onFormChange("projectId", Number.isFinite(value) ? value : null);
+            value={form.projectId != null ? String(form.projectId) : "__none__"}
+            onValueChange={(val) => {
+              if (val === "__none__") {
+                onFormChange("projectId", null);
+              } else {
+                const value = Number(val);
+                onFormChange("projectId", Number.isFinite(value) ? value : null);
+              }
             }}
           >
-            <option value="">Select project</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
+            <SelectTrigger id="automation-form-project">
+              <SelectValue placeholder="Select project" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">Select project</SelectItem>
+              {projects.map((project) => (
+                <SelectItem key={project.id} value={String(project.id)}>
+                  {project.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </FormField>
 
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Agent" htmlFor="automation-form-agent" labelClassName="text-xs text-subtext">
-            <Select
-              id="automation-form-agent"
-              value={form.agent}
-              onChange={(event) => onFormChange("agent", event.target.value as typeof form.agent)}
-            >
-              <option value="claude">Claude</option>
-              <option value="codex">Codex</option>
+            <Select value={form.agent} onValueChange={(val) => onFormChange("agent", val as typeof form.agent)}>
+              <SelectTrigger id="automation-form-agent">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="claude">Claude</SelectItem>
+                <SelectItem value="codex">Codex</SelectItem>
+              </SelectContent>
             </Select>
           </FormField>
           <FormField label="Every (hours)" htmlFor="automation-form-interval" labelClassName="text-xs text-subtext">
@@ -250,7 +168,7 @@ function AutomationEditorModal({
             type="checkbox"
             checked={form.enabled}
             onChange={(event) => onFormChange("enabled", event.target.checked)}
-            className="accent-accent"
+            className="accent-primary"
           />
           Enabled
         </label>
@@ -261,7 +179,7 @@ function AutomationEditorModal({
               type="checkbox"
               checked={form.keepSessionAlive}
               onChange={(event) => onFormChange("keepSessionAlive", event.target.checked)}
-              className="accent-accent"
+              className="accent-primary"
             />
             Keep terminal session alive after completion
           </label>
@@ -271,14 +189,10 @@ function AutomationEditorModal({
           </div>
         </div>
 
-        {formError && (
-          <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
-            {formError}
-          </div>
-        )}
+        {formError && <ErrorBanner>{formError}</ErrorBanner>}
       </div>
 
-      <div className="px-4 py-3 border-t border-surface flex items-center justify-between gap-2">
+      <ModalFooter className="justify-between">
         <Button
           onClick={onCloseEditor}
           variant="secondary"
@@ -297,7 +211,7 @@ function AutomationEditorModal({
         >
           {isSubmitting ? "Saving..." : submitLabel}
         </Button>
-      </div>
+      </ModalFooter>
     </ModalShell>
   );
 }
@@ -325,31 +239,31 @@ function AutomationsPanelPresentational({
 }: AutomationsPanelPresentationalProps) {
   return (
     <div className="h-full flex flex-col bg-main">
-      <div className="px-5 py-4 border-b border-surface flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-text">Automations</h2>
-          <p className="text-xs text-subtext">Run agent prompts on a schedule</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={onOpenCreateTemplate}
-            variant="primary"
-            size="sm"
-          >
-            New automation
-          </Button>
-          <Button
-            onClick={() => {
-              void onRefresh();
-            }}
-            variant="secondary"
-            size="sm"
-            disabled={loading}
-          >
-            {loading ? "Refreshing..." : "Refresh"}
-          </Button>
-        </div>
-      </div>
+      <PanelHeader
+        title="Automations"
+        description="Run agent prompts on a schedule"
+        actions={
+          <>
+            <Button
+              onClick={onOpenCreateTemplate}
+              variant="primary"
+              size="sm"
+            >
+              New automation
+            </Button>
+            <Button
+              onClick={() => {
+                void onRefresh();
+              }}
+              variant="secondary"
+              size="sm"
+              disabled={loading}
+            >
+              {loading ? "Refreshing..." : "Refresh"}
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
         <section>
@@ -365,27 +279,66 @@ function AutomationsPanelPresentational({
           <h3 className="text-xs font-semibold uppercase tracking-wide text-subtext mb-2">
             Active automations
           </h3>
-          {error && (
-            <div className="mb-3 px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
-              {error}
-            </div>
-          )}
+          {error && <ErrorBanner className="mb-3">{error}</ErrorBanner>}
 
           {automations.length === 0 && !error && (
-            <div className="px-3 py-8 rounded-md border border-surface bg-sidebar/50 text-center text-sm text-subtext">
+            <EmptyState bordered className="bg-sidebar/50">
               No automations yet.
-            </div>
+            </EmptyState>
           )}
 
           <div className="space-y-3">
             {automations.map((automation) => (
               <AutomationCard
                 key={automation.id}
-                automation={automation}
-                runStatus={latestRunByAutomationId.get(automation.id)?.status}
-                onEdit={() => onEditAutomation(automation.id)}
-                onDelete={() => onDeleteAutomation(automation.id)}
-                onRunNow={() => onRunAutomationNow(automation.id)}
+                className="bg-sidebar/50"
+                name={
+                  <div className="text-sm text-text font-semibold">{automation.name}</div>
+                }
+                metadata={
+                  <div className="text-xs text-subtext mt-1 space-y-1">
+                    <div>
+                      {automation.agent.toUpperCase()} - every {automation.intervalHours}h
+                    </div>
+                    <div>
+                      {automation.enabled ? "Enabled" : "Disabled"}
+                      {" - "}
+                      {automation.keepSessionAlive ? "Interactive" : "Autonomous"}
+                    </div>
+                    <div>Last run: {formatLastRun(automation.lastRunAtMs)}</div>
+                    <div>Next run: {formatNextRun(automation.nextRunAtMs)}</div>
+                  </div>
+                }
+                status={formatRunStatus(latestRunByAutomationId.get(automation.id)?.status)}
+                actions={
+                  <>
+                    <Button
+                      onClick={() => {
+                        void onRunAutomationNow(automation.id);
+                      }}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Run now
+                    </Button>
+                    <Button
+                      onClick={() => onEditAutomation(automation.id)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        void onDeleteAutomation(automation.id);
+                      }}
+                      size="sm"
+                      variant="danger"
+                    >
+                      Delete
+                    </Button>
+                  </>
+                }
               />
             ))}
           </div>

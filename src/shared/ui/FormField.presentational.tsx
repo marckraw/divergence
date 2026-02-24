@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { buildFormLabelClassName } from "./form.styles";
+import { cn } from "../lib/cn.pure";
+import Label from "./Label.presentational";
 
 export interface FormFieldProps {
   label?: ReactNode;
@@ -21,9 +22,9 @@ function FormField({
   return (
     <div>
       {label && (
-        <label htmlFor={htmlFor} className={buildFormLabelClassName(labelClassName)}>
+        <Label htmlFor={htmlFor} className={cn(labelClassName)}>
           {label}
-        </label>
+        </Label>
       )}
       {children}
       {hint && !error && (

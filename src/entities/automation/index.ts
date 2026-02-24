@@ -24,3 +24,6 @@ export {
   updateAutomationRunDivergence,
   updateAutomationRunTmuxSession,
 } from "./api/automation.api";
+export { default as AutomationCard } from "./ui/AutomationCard.presentational";
+export type { AutomationCardProps } from "./ui/AutomationCard.presentational";
+export { formatRunStatus } from "./lib/automationFormatting.pure";

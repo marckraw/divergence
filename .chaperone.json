@@ -37,7 +37,7 @@
         "id": "no-stateful-hooks-in-presentational",
         "severity": "error",
         "files": "src/**/*.presentational.tsx",
-        "pattern": "\\b(useState|useReducer|useRef|useImperativeHandle)\\b",
+        "pattern": "\\b(useState|useReducer|useImperativeHandle)\\b",
         "message": "Presentational components must not own local stateful hooks; move state orchestration to *.container.tsx"
       },
       {

@@ -1,7 +1,9 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Divergence, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
 import {
+  EmptyState,
   FAST_EASE_OUT,
+  Kbd,
   ModalShell,
   getContentSwapVariants,
 } from "../../../shared";
@@ -57,17 +59,13 @@ function QuickSwitcherPresentational({
             placeholder="Search projects, divergences, sessions, and workspaces..."
             className="flex-1 bg-transparent text-text placeholder-subtext focus:outline-none"
           />
-          <kbd className="text-xs text-subtext bg-surface px-1.5 py-0.5 rounded">
-            esc
-          </kbd>
+          <Kbd className="text-subtext">esc</Kbd>
         </div>
       </div>
 
       <div ref={listRef} className="flex-1 overflow-y-auto p-2">
         {filteredItems.length === 0 ? (
-          <div className="text-center py-8 text-subtext">
-            No results found
-          </div>
+          <EmptyState>No results found</EmptyState>
         ) : (
           <AnimatePresence initial={false}>
             {filteredItems.map((result, index) => (
@@ -211,13 +209,13 @@ function QuickSwitcherPresentational({
 
       <div className="p-2 border-t border-surface text-xs text-subtext flex items-center justify-center gap-4">
         <span>
-          <kbd className="px-1 py-0.5 bg-surface rounded">up/down</kbd> navigate
+          <Kbd className="px-1">up/down</Kbd> navigate
         </span>
         <span>
-          <kbd className="px-1 py-0.5 bg-surface rounded">enter</kbd> select
+          <Kbd className="px-1">enter</Kbd> select
         </span>
         <span>
-          <kbd className="px-1 py-0.5 bg-surface rounded">esc</kbd> close
+          <Kbd className="px-1">esc</Kbd> close
         </span>
       </div>
     </ModalShell>

@@ -42,7 +42,7 @@ import {
   getGithubPollState,
   upsertGithubPollState,
 } from "../entities/inbox-event";
-import { Button, IconButton, recordDebugEvent, useAppSettings, useUpdater } from "../shared";
+import { Button, IconButton, ProgressBar, recordDebugEvent, useAppSettings, useUpdater } from "../shared";
 import {
   areSplitPaneSizesEqual,
   normalizeSplitPaneSizes,
@@ -1689,12 +1689,7 @@ function App() {
             {updater.status === "downloading" && (
               <>
                 <span>Downloading update... {updater.progress}%</span>
-                <div className="h-1.5 w-24 overflow-hidden rounded-full bg-blue-400">
-                  <div
-                    className="h-full rounded-full bg-white transition-all"
-                    style={{ width: `${updater.progress}%` }}
-                  />
-                </div>
+                <ProgressBar value={updater.progress} className="w-24 bg-blue-400" barClassName="bg-white" />
               </>
             )}
             {updater.status === "error" && (

@@ -8,7 +8,7 @@ import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared";
-import { IconButton, TabButton, ToolbarButton } from "../../../shared";
+import { IconButton, Kbd, TabButton, ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
 import type { MainAreaPresentationalProps } from "./MainArea.types";
 
@@ -455,7 +455,7 @@ function MainAreaPresentational({
                 Each project gets its own terminal running Claude Code
               </p>
               <p className="text-xs mt-4 text-subtext/70">
-                Press <kbd className="px-1.5 py-0.5 bg-surface rounded text-xs">⌘K</kbd> to quick switch
+                Press <Kbd>⌘K</Kbd> to quick switch
               </p>
             </div>
           </div>

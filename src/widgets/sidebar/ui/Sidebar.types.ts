@@ -1,4 +1,3 @@
-import type { MouseEvent } from "react";
 import type { Project, Divergence, TerminalSession, Workspace, WorkspaceMember, WorkspaceDivergence } from "../../../entities";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../../features/work-sidebar";
 
@@ -46,35 +45,16 @@ export interface SidebarDeleteState {
   branch: string;
 }
 
-export interface SidebarContextMenuState {
-  type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence";
-  id: number | string;
-  x: number;
-  y: number;
-  item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence;
-}
-
 export interface SidebarPresentationalProps extends SidebarProps {
   expandedProjects: Set<number>;
   deletingDivergences: SidebarDeleteState[];
   deleteError: string | null;
-  contextMenu: SidebarContextMenuState | null;
   hasExpandableProjects: boolean;
   isAllExpanded: boolean;
   onAddProjectClick: () => Promise<void>;
   onToggleProjectExpand: (projectId: number) => void;
   onToggleAllProjects: () => void;
-  onContextMenuOpen: (
-    event: MouseEvent,
-    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
-    item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence
-  ) => void;
-  onContextMenuClose: () => void;
-  onContextMenuRemoveProject: () => Promise<void>;
-  onContextMenuCreateAdditionalSession: () => void;
-  onContextMenuDeleteDivergence: () => void;
-  onContextMenuCloseSession: () => void;
-  onContextMenuCloseSessionAndKillTmux: () => Promise<void>;
+  onDeleteDivergenceFromMenu: (divergence: Divergence) => void;
   expandedWorkspaces: Set<number>;
   onToggleWorkspaceExpand: (workspaceId: number) => void;
 }

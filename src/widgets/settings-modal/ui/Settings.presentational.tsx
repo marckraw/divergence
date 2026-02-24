@@ -1,12 +1,25 @@
-import type { Automation } from "../../../entities/automation";
+import {
+  AutomationCard,
+  formatRunStatus,
+} from "../../../entities/automation";
 import {
   Button,
   EDITOR_THEME_OPTIONS_DARK,
   EDITOR_THEME_OPTIONS_LIGHT,
+  EmptyState,
+  ErrorBanner,
   FormField,
   IconButton,
+  Kbd,
+  ModalFooter,
+  ModalHeader,
   ModalShell,
+  ProgressBar,
   Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   TextInput,
   Textarea,
   type EditorThemeId,
@@ -18,94 +31,6 @@ function formatDateTime(value: number | null | undefined): string {
     return "Never";
   }
   return new Date(value).toLocaleString();
-}
-
-function formatRunStatus(status: string | undefined): string {
-  if (!status) {
-    return "No runs yet";
-  }
-  if (status === "success") {
-    return "Success";
-  }
-  if (status === "error") {
-    return "Failed";
-  }
-  if (status === "running") {
-    return "Running";
-  }
-  if (status === "queued") {
-    return "Queued";
-  }
-  if (status === "skipped") {
-    return "Skipped";
-  }
-  return status;
-}
-
-function AutomationCard({
-  automation,
-  isBusy,
-  latestStatus,
-  latestEndedAtMs,
-  onEdit,
-  onDelete,
-  onRunNow,
-}: {
-  automation: Automation;
-  isBusy: boolean;
-  latestStatus?: string;
-  latestEndedAtMs?: number | null;
-  onEdit: () => void;
-  onDelete: () => Promise<void>;
-  onRunNow: () => Promise<void>;
-}) {
-  return (
-    <div className="rounded-md border border-surface bg-main/60 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-sm text-text font-semibold truncate">{automation.name}</div>
-          <div className="text-xs text-subtext mt-1">
-            {automation.agent.toUpperCase()} - every {automation.intervalHours}h -{" "}
-            {automation.enabled ? "Enabled" : "Disabled"}
-          </div>
-          <div className="text-xs text-subtext mt-1">
-            Last run: {formatDateTime(latestEndedAtMs ?? automation.lastRunAtMs)}
-          </div>
-        </div>
-        <div className="text-xs text-subtext">{formatRunStatus(latestStatus)}</div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button
-          onClick={() => {
-            void onRunNow();
-          }}
-          disabled={isBusy}
-          size="sm"
-          variant="secondary"
-        >
-          {isBusy ? "Running..." : "Run now"}
-        </Button>
-        <Button
-          onClick={onEdit}
-          disabled={isBusy}
-          size="sm"
-          variant="secondary"
-        >
-          Edit
-        </Button>
-        <Button
-          onClick={() => {
-            void onDelete();
-          }}
-          disabled={isBusy}
-          size="sm"
-          variant="danger"
-        >
-          Delete
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 function AutomationEditorModal({
@@ -136,24 +61,12 @@ function AutomationEditorModal({
       overlayClassName="z-[60] p-4"
       panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto"
     >
-        <div className="px-4 py-3 border-b border-surface flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm text-text font-semibold">
-              {automationForm.id === null ? "New automation" : "Edit automation"}
-            </h3>
-            <p className="text-xs text-subtext mt-1">
-              Manual-only mode. Scheduled execution is disabled while we rebuild this feature.
-            </p>
-          </div>
-          <IconButton
-            onClick={onCloseAutomationEditor}
-            variant="subtle"
-            size="sm"
-            disabled={isSubmittingAutomation}
-            label="Close"
-            icon="x"
-          />
-        </div>
+        <ModalHeader
+          title={automationForm.id === null ? "New automation" : "Edit automation"}
+          description="Manual-only mode. Scheduled execution is disabled while we rebuild this feature."
+          onClose={onCloseAutomationEditor}
+          closeDisabled={isSubmittingAutomation}
+        />
 
         <div className="p-4 space-y-3">
           <FormField label="Name" htmlFor="settings-automation-name" labelClassName="block text-xs text-subtext mb-1">
@@ -169,35 +82,40 @@ function AutomationEditorModal({
 
           <FormField label="Project" htmlFor="settings-automation-project" labelClassName="block text-xs text-subtext mb-1">
             <Select
-              id="settings-automation-project"
-              value={automationForm.projectId ?? ""}
-              onChange={(event) => {
-                const value = Number(event.target.value);
-                onAutomationFormChange("projectId", Number.isFinite(value) ? value : null);
+              value={automationForm.projectId != null ? String(automationForm.projectId) : "__none__"}
+              onValueChange={(val) => {
+                if (val === "__none__") {
+                  onAutomationFormChange("projectId", null);
+                } else {
+                  const value = Number(val);
+                  onAutomationFormChange("projectId", Number.isFinite(value) ? value : null);
+                }
               }}
-              className="text-sm focus:ring-0"
             >
-              <option value="">Select project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
+              <SelectTrigger id="settings-automation-project" className="text-sm">
+                <SelectValue placeholder="Select project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select project</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={String(project.id)}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </FormField>
 
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Agent" htmlFor="settings-automation-agent" labelClassName="block text-xs text-subtext mb-1">
-              <Select
-                id="settings-automation-agent"
-                value={automationForm.agent}
-                onChange={(event) => {
-                  onAutomationFormChange("agent", event.target.value as typeof automationForm.agent);
-                }}
-                className="text-sm focus:ring-0"
-              >
-                <option value="claude">Claude</option>
-                <option value="codex">Codex</option>
+              <Select value={automationForm.agent} onValueChange={(val) => onAutomationFormChange("agent", val as typeof automationForm.agent)}>
+                <SelectTrigger id="settings-automation-agent" className="text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="claude">Claude</SelectItem>
+                  <SelectItem value="codex">Codex</SelectItem>
+                </SelectContent>
               </Select>
             </FormField>
             <FormField label="Every (hours)" htmlFor="settings-automation-interval" labelClassName="block text-xs text-subtext mb-1">
@@ -227,7 +145,7 @@ function AutomationEditorModal({
               type="checkbox"
               checked={automationForm.enabled}
               onChange={(event) => onAutomationFormChange("enabled", event.target.checked)}
-              className="accent-accent"
+              className="accent-primary"
             />
             Enabled (stored only for future scheduler phases)
           </label>
@@ -238,7 +156,7 @@ function AutomationEditorModal({
                 type="checkbox"
                 checked={automationForm.keepSessionAlive}
                 onChange={(event) => onAutomationFormChange("keepSessionAlive", event.target.checked)}
-                className="accent-accent"
+                className="accent-primary"
               />
               Keep terminal session alive after completion
             </label>
@@ -248,14 +166,10 @@ function AutomationEditorModal({
             </div>
           </div>
 
-          {automationFormError && (
-            <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
-              {automationFormError}
-            </div>
-          )}
+          {automationFormError && <ErrorBanner>{automationFormError}</ErrorBanner>}
         </div>
 
-        <div className="px-4 py-3 border-t border-surface flex items-center justify-between gap-2">
+        <ModalFooter className="justify-between">
           <Button
             onClick={onCloseAutomationEditor}
             variant="secondary"
@@ -274,7 +188,7 @@ function AutomationEditorModal({
           >
             {isSubmittingAutomation ? "Saving..." : automationSubmitLabel}
           </Button>
-        </div>
+        </ModalFooter>
     </ModalShell>
   );
 }
@@ -361,14 +275,15 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Default Shell
             </label>
-            <Select
-              value={settings.defaultShell}
-              onChange={(event) => onUpdateSetting("defaultShell", event.target.value)}
-              className="focus:ring-0"
-            >
-              <option value="/bin/zsh">zsh</option>
-              <option value="/bin/bash">bash</option>
-              <option value="/bin/sh">sh</option>
+            <Select value={settings.defaultShell} onValueChange={(val) => onUpdateSetting("defaultShell", val)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="/bin/zsh">zsh</SelectItem>
+                <SelectItem value="/bin/bash">bash</SelectItem>
+                <SelectItem value="/bin/sh">sh</SelectItem>
+              </SelectContent>
             </Select>
             <p className="text-xs text-subtext mt-1">
               Shell used for new terminal sessions
@@ -386,7 +301,7 @@ function SettingsPresentational({
                 size="md"
                 className={`flex-1 px-4 py-2 rounded border ${
                   settings.theme === "dark"
-                    ? "border-accent bg-accent/10 text-accent"
+                    ? "border-primary bg-primary/10 text-primary"
                     : "border-surface text-subtext hover:text-text"
                 }`}
               >
@@ -398,7 +313,7 @@ function SettingsPresentational({
                 size="md"
                 className={`flex-1 px-4 py-2 rounded border ${
                   settings.theme === "light"
-                    ? "border-accent bg-accent/10 text-accent"
+                    ? "border-primary bg-primary/10 text-primary"
                     : "border-surface text-subtext hover:text-text"
                 }`}
               >
@@ -411,16 +326,17 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Editor Theme (When App is Light)
             </label>
-            <Select
-              value={settings.editorThemeForLightMode}
-              onChange={(event) => onUpdateSetting("editorThemeForLightMode", event.target.value as EditorThemeId)}
-              className="focus:ring-0"
-            >
-              {EDITOR_THEME_OPTIONS_LIGHT.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
+            <Select value={settings.editorThemeForLightMode} onValueChange={(val) => onUpdateSetting("editorThemeForLightMode", val as EditorThemeId)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EDITOR_THEME_OPTIONS_LIGHT.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             <p className="text-xs text-subtext mt-1">
               Editor theme used when the app is in light mode.
@@ -431,16 +347,17 @@ function SettingsPresentational({
             <label className="block text-sm font-medium text-text mb-2">
               Editor Theme (When App is Dark)
             </label>
-            <Select
-              value={settings.editorThemeForDarkMode}
-              onChange={(event) => onUpdateSetting("editorThemeForDarkMode", event.target.value as EditorThemeId)}
-              className="focus:ring-0"
-            >
-              {EDITOR_THEME_OPTIONS_DARK.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
+            <Select value={settings.editorThemeForDarkMode} onValueChange={(val) => onUpdateSetting("editorThemeForDarkMode", val as EditorThemeId)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EDITOR_THEME_OPTIONS_DARK.map((option) => (
+                  <SelectItem key={option.id} value={String(option.id)}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             <p className="text-xs text-subtext mt-1">
               Editor theme used when the app is in dark mode.
@@ -557,7 +474,7 @@ function SettingsPresentational({
                   onClick={onOpenCreateAutomation}
                   variant="primary"
                   size="sm"
-                  className="px-2.5 py-1.5 text-xs rounded bg-accent text-main hover:bg-accent/80"
+                  className="px-2.5 py-1.5 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/80"
                 >
                   New automation
                 </Button>
@@ -577,15 +494,13 @@ function SettingsPresentational({
             </div>
 
             {(automationsError || automationActionError) && (
-              <div className="px-3 py-2 rounded border border-red/30 bg-red/10 text-xs text-red">
-                {automationsError ?? automationActionError}
-              </div>
+              <ErrorBanner>{automationsError ?? automationActionError}</ErrorBanner>
             )}
 
             {automations.length === 0 && !automationsError && (
-              <div className="px-3 py-6 rounded border border-surface text-center text-sm text-subtext">
+              <EmptyState bordered className="py-6">
                 No automations yet.
-              </div>
+              </EmptyState>
             )}
 
             <div className="space-y-2">
@@ -594,13 +509,54 @@ function SettingsPresentational({
                 return (
                   <AutomationCard
                     key={automation.id}
-                    automation={automation}
-                    isBusy={automationActionInFlightId === automation.id}
-                    latestStatus={latestRun?.status}
-                    latestEndedAtMs={latestRun?.endedAtMs}
-                    onEdit={() => onEditAutomation(automation.id)}
-                    onDelete={() => onDeleteAutomation(automation.id)}
-                    onRunNow={() => onRunAutomationNow(automation.id)}
+                    className="bg-main/60"
+                    name={
+                      <div className="text-sm text-text font-semibold truncate">{automation.name}</div>
+                    }
+                    metadata={
+                      <div className="text-xs text-subtext mt-1 space-y-1">
+                        <div>
+                          {automation.agent.toUpperCase()} - every {automation.intervalHours}h -{" "}
+                          {automation.enabled ? "Enabled" : "Disabled"}
+                        </div>
+                        <div>
+                          Last run: {formatDateTime(latestRun?.endedAtMs ?? automation.lastRunAtMs)}
+                        </div>
+                      </div>
+                    }
+                    status={formatRunStatus(latestRun?.status)}
+                    actions={
+                      <>
+                        <Button
+                          onClick={() => {
+                            void onRunAutomationNow(automation.id);
+                          }}
+                          disabled={automationActionInFlightId === automation.id}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          {automationActionInFlightId === automation.id ? "Running..." : "Run now"}
+                        </Button>
+                        <Button
+                          onClick={() => onEditAutomation(automation.id)}
+                          disabled={automationActionInFlightId === automation.id}
+                          size="sm"
+                          variant="secondary"
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            void onDeleteAutomation(automation.id);
+                          }}
+                          disabled={automationActionInFlightId === automation.id}
+                          size="sm"
+                          variant="danger"
+                        >
+                          Delete
+                        </Button>
+                      </>
+                    }
                   />
                 );
               })}
@@ -614,31 +570,31 @@ function SettingsPresentational({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Toggle Sidebar</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd B</kbd>
+                <Kbd className="px-2">Cmd B</Kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Quick Switcher</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd K</kbd>
+                <Kbd className="px-2">Cmd K</Kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Open Work Inbox</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd I</kbd>
+                <Kbd className="px-2">Cmd I</Kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">New Divergence</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd T</kbd>
+                <Kbd className="px-2">Cmd T</Kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Close Terminal</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd W</kbd>
+                <Kbd className="px-2">Cmd W</Kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Switch Tab</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd 1-9</kbd>
+                <Kbd className="px-2">Cmd 1-9</Kbd>
               </div>
               <div className="flex justify-between px-3 py-2 bg-main border border-surface rounded">
                 <span className="text-subtext">Previous/Next Tab</span>
-                <kbd className="px-2 py-0.5 bg-surface rounded text-xs">Cmd [ / ]</kbd>
+                <Kbd className="px-2">Cmd [ / ]</Kbd>
               </div>
             </div>
           </div>
@@ -661,12 +617,11 @@ function SettingsPresentational({
               </p>
 
               {updaterPresentation.showProgress && (
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
-                  <div
-                    className="h-full rounded-full bg-accent transition-all"
-                    style={{ width: `${updater.progress}%` }}
-                  />
-                </div>
+                <ProgressBar
+                  value={updater.progress}
+                  className="w-full"
+                  barClassName="bg-accent"
+                />
               )}
 
               <div className="flex gap-2">
@@ -685,7 +640,7 @@ function SettingsPresentational({
                     onClick={updater.downloadAndInstall}
                     variant="primary"
                     size="sm"
-                    className="px-3 py-1.5 text-sm bg-accent text-main rounded hover:bg-accent/80"
+                    className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/80"
                   >
                     Install and Restart
                   </Button>
@@ -695,7 +650,7 @@ function SettingsPresentational({
           </div>
         </div>
 
-        <div className="p-4 border-t border-surface flex justify-end gap-2">
+        <ModalFooter className="p-4 justify-end">
           <Button
             onClick={onClose}
             variant="ghost"
@@ -710,7 +665,7 @@ function SettingsPresentational({
           >
             Save
           </Button>
-        </div>
+        </ModalFooter>
 
       {isEditorOpen && (
         <AutomationEditorModal

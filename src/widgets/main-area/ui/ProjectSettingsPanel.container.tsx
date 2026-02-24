@@ -4,7 +4,7 @@ import {
   DEFAULT_COPY_IGNORED_SKIP,
   DEFAULT_USE_TMUX,
 } from "../../../entities/project";
-import { Button, normalizeTmuxHistoryLimit } from "../../../shared";
+import { Button, ErrorBanner, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, TextInput, Textarea, normalizeTmuxHistoryLimit } from "../../../shared";
 import type { ProjectSettings } from "../../../entities/project";
 import { useProjectSettings } from "../../../entities/project";
 import { useRalphyConfig } from "../../../shared";
@@ -175,7 +175,7 @@ function ProjectSettingsPanel({
               checked={useTmux}
               onChange={(e) => setUseTmux(e.target.checked)}
               disabled={loading}
-              className="accent-accent"
+              className="accent-primary"
             />
             Use tmux
           </label>
@@ -197,18 +197,18 @@ function ProjectSettingsPanel({
                 checked={useCustomHistoryLimit}
                 onChange={(e) => setUseCustomHistoryLimit(e.target.checked)}
                 disabled={loading}
-                className="accent-accent"
+                className="accent-primary"
               />
               Override
             </label>
-            <input
+            <TextInput
               type="number"
               min={1000}
               max={500000}
               value={tmuxHistoryLimit}
               onChange={(e) => setTmuxHistoryLimit(Number(e.target.value))}
               disabled={loading || !useCustomHistoryLimit}
-              className="w-24 px-2 py-1 bg-main border border-surface rounded text-text focus:outline-none focus:border-accent text-right"
+              className="w-24 px-2 py-1 text-right"
             />
           </div>
         </div>
@@ -289,19 +289,19 @@ function ProjectSettingsPanel({
           <div className="mt-3 space-y-3">
             <div className="flex items-center gap-3">
               <label className="text-xs text-subtext w-20 shrink-0">Framework</label>
-              <select
-                value={framework}
-                onChange={(e) => setFramework(e.target.value)}
-                disabled={loading}
-                className="flex-1 px-2 py-1 bg-main border border-surface rounded text-xs text-text focus:outline-none focus:border-accent"
-              >
-                <option value="">Auto-detect</option>
-                {frameworkOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={framework || "__none__"} onValueChange={(val) => setFramework(val === "__none__" ? "" : val)} disabled={loading}>
+                <SelectTrigger className="flex-1 text-xs h-7">
+                  <SelectValue placeholder="Auto-detect" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Auto-detect</SelectItem>
+                  {frameworkOptions.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button
                 type="button"
                 onClick={() => { void handleAutoDetectFramework(); }}
@@ -315,7 +315,7 @@ function ProjectSettingsPanel({
             </div>
             <div className="flex items-center gap-3">
               <label className="text-xs text-subtext w-20 shrink-0">Default Port</label>
-              <input
+              <TextInput
                 type="number"
                 min={1024}
                 max={65535}
@@ -323,7 +323,7 @@ function ProjectSettingsPanel({
                 value={defaultPort}
                 onChange={(e) => setDefaultPort(e.target.value)}
                 disabled={loading}
-                className="flex-1 px-2 py-1 bg-main border border-surface rounded text-xs text-text focus:outline-none focus:border-accent"
+                className="flex-1 px-2 py-1 text-xs"
               />
             </div>
           </div>
@@ -352,8 +352,8 @@ function ProjectSettingsPanel({
           <p className="text-xs text-subtext/80 mb-2">
             These ignored paths will not be copied into new divergences. Enter one entry per line.
           </p>
-          <textarea
-            className="w-full min-h-[160px] bg-main border border-surface rounded p-2 text-sm text-text focus:outline-none focus:border-accent"
+          <Textarea
+            className="min-h-[160px]"
             value={draftSkipList}
             onChange={(e) => setDraftSkipList(e.target.value)}
             placeholder={defaultListText}
@@ -362,9 +362,7 @@ function ProjectSettingsPanel({
         </div>
 
         {error && (
-          <div className="text-xs text-red bg-red/10 border border-red/30 rounded px-2 py-1">
-            {error}
-          </div>
+          <ErrorBanner className="px-2 py-1">{error}</ErrorBanner>
         )}
       </div>
 
@@ -386,7 +384,7 @@ function ProjectSettingsPanel({
             onClick={handleSave}
             variant="primary"
             size="sm"
-            className="px-3 py-1.5 bg-accent text-main text-xs rounded hover:bg-accent/80 disabled:opacity-60"
+            className="px-3 py-1.5 bg-primary text-primary-foreground text-xs rounded hover:bg-primary/80 disabled:opacity-60"
             disabled={loading || isSaving}
           >
             {isSaving ? "Saving..." : "Save"}
