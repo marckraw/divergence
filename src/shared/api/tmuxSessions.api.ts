@@ -16,16 +16,76 @@ interface TmuxDivergenceRef {
   branch: string;
 }
 
+const TMUX_LIST_TIMEOUT_MS = 8_000;
+const TMUX_DIAGNOSTICS_TIMEOUT_MS = 10_000;
+
+let inflightListTmuxSessions: Promise<TmuxSessionEntry[]> | null = null;
+let inflightTmuxDiagnostics: Promise<TmuxDiagnosticsEntry> | null = null;
+
+function withTimeout<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    operation
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 export async function listTmuxSessions(): Promise<TmuxSessionEntry[]> {
-  return invoke<TmuxSessionEntry[]>("list_tmux_sessions");
+  if (inflightListTmuxSessions) {
+    return inflightListTmuxSessions;
+  }
+
+  const request = withTimeout(
+    invoke<TmuxSessionEntry[]>("list_tmux_sessions"),
+    TMUX_LIST_TIMEOUT_MS,
+    `Timed out listing tmux sessions after ${Math.round(TMUX_LIST_TIMEOUT_MS / 1000)}s.`
+  );
+  inflightListTmuxSessions = request.finally(() => {
+    if (inflightListTmuxSessions === request) {
+      inflightListTmuxSessions = null;
+    }
+  });
+  return inflightListTmuxSessions;
 }
 
 export async function listAllTmuxSessions(): Promise<RawTmuxSessionEntry[]> {
-  return invoke<RawTmuxSessionEntry[]>("list_all_tmux_sessions");
+  return withTimeout(
+    invoke<RawTmuxSessionEntry[]>("list_all_tmux_sessions"),
+    TMUX_LIST_TIMEOUT_MS,
+    `Timed out listing all tmux sessions after ${Math.round(TMUX_LIST_TIMEOUT_MS / 1000)}s.`
+  );
 }
 
 export async function getTmuxDiagnostics(): Promise<TmuxDiagnosticsEntry> {
-  return invoke<TmuxDiagnosticsEntry>("get_tmux_diagnostics");
+  if (inflightTmuxDiagnostics) {
+    return inflightTmuxDiagnostics;
+  }
+
+  const request = withTimeout(
+    invoke<TmuxDiagnosticsEntry>("get_tmux_diagnostics"),
+    TMUX_DIAGNOSTICS_TIMEOUT_MS,
+    `Timed out collecting tmux diagnostics after ${Math.round(TMUX_DIAGNOSTICS_TIMEOUT_MS / 1000)}s.`
+  );
+  inflightTmuxDiagnostics = request.finally(() => {
+    if (inflightTmuxDiagnostics === request) {
+      inflightTmuxDiagnostics = null;
+    }
+  });
+  return inflightTmuxDiagnostics;
 }
 
 export async function killTmuxSession(sessionName: string): Promise<void> {
