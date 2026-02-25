@@ -4,9 +4,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::io::ErrorKind;
+use std::thread;
+use std::time::{Duration, Instant};
 use chrono::{DateTime, Utc};
 
 static DEBUG_LOG: OnceLock<Mutex<Option<fs::File>>> = OnceLock::new();
+const LOGIN_SHELL_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+const TMUX_COMMAND_TIMEOUT: Duration = Duration::from_secs(8);
 
 fn debug_log(msg: &str) {
     eprintln!("{}", msg);
@@ -27,6 +31,48 @@ fn debug_log(msg: &str) {
         if let Some(ref mut file) = *guard {
             let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
             let _ = writeln!(file, "[{}] {}", now, msg);
+        }
+    }
+}
+
+#[derive(Debug)]
+enum CommandOutputError {
+    Io(std::io::Error),
+    Timeout(Duration),
+}
+
+fn run_command_with_timeout(
+    cmd: &mut Command,
+    timeout: Duration,
+    label: &str,
+) -> Result<std::process::Output, CommandOutputError> {
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(CommandOutputError::Io)?;
+    let start = Instant::now();
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => return child.wait_with_output().map_err(CommandOutputError::Io),
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    debug_log(&format!(
+                        "[divergence] command timeout after {}ms for {}",
+                        timeout.as_millis(),
+                        label
+                    ));
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(CommandOutputError::Timeout(timeout));
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(CommandOutputError::Io(error));
+            }
         }
     }
 }
@@ -146,9 +192,13 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let output = command_with_tmux()
-        .args(["kill-session", "-t", session_name])
-        .output();
+    let mut cmd = command_with_tmux();
+    cmd.args(["kill-session", "-t", session_name]);
+    let output = run_command_with_timeout(
+        &mut cmd,
+        TMUX_COMMAND_TIMEOUT,
+        "tmux kill-session",
+    );
 
     match output {
         Ok(result) => {
@@ -166,12 +216,17 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
 
             Err(format!("Failed to kill tmux session: {}", stderr))
         }
-        Err(err) => {
+        Err(CommandOutputError::Io(err)) => {
             if err.kind() == ErrorKind::NotFound {
                 return Ok(());
             }
             Err(format!("Failed to execute tmux: {}", err))
         }
+        Err(CommandOutputError::Timeout(timeout)) => Err(format!(
+            "Timed out killing tmux session '{}' after {}ms",
+            session_name,
+            timeout.as_millis()
+        )),
     }
 }
 
@@ -242,16 +297,30 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
 
     let mut cmd = command_with_tmux();
     cmd.args(["list-sessions", "-F", &fmt]);
-    let output = cmd.output();
+    let output = run_command_with_timeout(
+        &mut cmd,
+        TMUX_COMMAND_TIMEOUT,
+        "tmux list-sessions",
+    );
 
     let result = match output {
         Ok(r) => r,
-        Err(err) => {
+        Err(CommandOutputError::Io(err)) => {
             debug_log(&format!("[divergence] list_tmux_sessions: tmux command FAILED to execute: {} (kind={:?})", err, err.kind()));
             if err.kind() == ErrorKind::NotFound {
                 return Ok(vec![]);
             }
             return Err(format!("Failed to execute tmux: {}", err));
+        }
+        Err(CommandOutputError::Timeout(timeout)) => {
+            debug_log(&format!(
+                "[divergence] list_tmux_sessions: tmux command timed out after {}ms",
+                timeout.as_millis()
+            ));
+            return Err(format!(
+                "Timed out listing tmux sessions after {}ms",
+                timeout.as_millis()
+            ));
         }
     };
 
@@ -319,18 +388,32 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
         "#{{session_name}}{0}#{{socket_path}}{0}#{{session_created}}{0}#{{session_attached}}{0}#{{session_windows}}{0}#{{session_activity}}",
         SEP
     );
-    let output = command_with_tmux()
-        .args(["list-sessions", "-F", &fmt])
-        .output();
+    let mut cmd = command_with_tmux();
+    cmd.args(["list-sessions", "-F", &fmt]);
+    let output = run_command_with_timeout(
+        &mut cmd,
+        TMUX_COMMAND_TIMEOUT,
+        "tmux list-sessions (all)",
+    );
 
     let result = match output {
         Ok(r) => r,
-        Err(err) => {
+        Err(CommandOutputError::Io(err)) => {
             debug_log(&format!("[divergence] list_all_tmux_sessions: tmux command FAILED: {} (kind={:?})", err, err.kind()));
             if err.kind() == ErrorKind::NotFound {
                 return Ok(vec![]);
             }
             return Err(format!("Failed to execute tmux: {}", err));
+        }
+        Err(CommandOutputError::Timeout(timeout)) => {
+            debug_log(&format!(
+                "[divergence] list_all_tmux_sessions: tmux command timed out after {}ms",
+                timeout.as_millis()
+            ));
+            return Err(format!(
+                "Timed out listing tmux sessions after {}ms",
+                timeout.as_millis()
+            ));
         }
     };
 
@@ -543,31 +626,56 @@ fn is_executable(path: &Path) -> bool {
 }
 
 fn run_tmux_command_for_diagnostics(args: &[&str]) -> TmuxCommandDiagnostics {
-    match command_with_tmux().args(args).output() {
+    let mut cmd = command_with_tmux();
+    cmd.args(args);
+    match run_command_with_timeout(&mut cmd, TMUX_COMMAND_TIMEOUT, "tmux diagnostics command") {
         Ok(result) => TmuxCommandDiagnostics {
             status_code: result.status.code(),
             stdout: String::from_utf8_lossy(&result.stdout).to_string(),
             stderr: String::from_utf8_lossy(&result.stderr).to_string(),
             error: None,
         },
-        Err(err) => TmuxCommandDiagnostics {
+        Err(CommandOutputError::Io(err)) => TmuxCommandDiagnostics {
             status_code: None,
             stdout: String::new(),
             stderr: String::new(),
             error: Some(err.to_string()),
+        },
+        Err(CommandOutputError::Timeout(timeout)) => TmuxCommandDiagnostics {
+            status_code: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            error: Some(format!(
+                "Timed out after {}ms",
+                timeout.as_millis()
+            )),
         },
     }
 }
 
 fn resolve_login_shell_path() -> Option<String> {
     for shell in login_shell_candidates() {
-        let output = Command::new(&shell)
-            .args(["-l", "-c", "echo -n $PATH"])
-            .output();
-
-        let Ok(result) = output else {
-            debug_log(&format!("[divergence] login shell PATH probe failed for {:?}: could not execute", shell));
-            continue;
+        let mut cmd = Command::new(&shell);
+        cmd.args(["-l", "-c", "echo -n $PATH"]);
+        let output = run_command_with_timeout(
+            &mut cmd,
+            LOGIN_SHELL_PROBE_TIMEOUT,
+            "login shell PATH probe",
+        );
+        let result = match output {
+            Ok(result) => result,
+            Err(CommandOutputError::Io(_)) => {
+                debug_log(&format!("[divergence] login shell PATH probe failed for {:?}: could not execute", shell));
+                continue;
+            }
+            Err(CommandOutputError::Timeout(timeout)) => {
+                debug_log(&format!(
+                    "[divergence] login shell PATH probe timed out for {:?} after {}ms",
+                    shell,
+                    timeout.as_millis()
+                ));
+                continue;
+            }
         };
         if !result.status.success() {
             debug_log(&format!(
@@ -659,16 +767,30 @@ printf '__DIVERGENCE_TMUX_CTX__TMPDIR=%s\n' "${TMPDIR-}"
 "#;
 
     for shell in login_shell_candidates() {
-        let output = Command::new(&shell)
-            .args(["-l", "-i", "-c", SHELL_PROBE_SCRIPT])
-            .output();
-
-        let Ok(result) = output else {
-            debug_log(&format!(
-                "[divergence] login shell tmux context probe failed for {:?}: could not execute",
-                shell
-            ));
-            continue;
+        let mut cmd = Command::new(&shell);
+        cmd.args(["-l", "-c", SHELL_PROBE_SCRIPT]);
+        let output = run_command_with_timeout(
+            &mut cmd,
+            LOGIN_SHELL_PROBE_TIMEOUT,
+            "login shell tmux context probe",
+        );
+        let result = match output {
+            Ok(result) => result,
+            Err(CommandOutputError::Io(_)) => {
+                debug_log(&format!(
+                    "[divergence] login shell tmux context probe failed for {:?}: could not execute",
+                    shell
+                ));
+                continue;
+            }
+            Err(CommandOutputError::Timeout(timeout)) => {
+                debug_log(&format!(
+                    "[divergence] login shell tmux context probe timed out for {:?} after {}ms",
+                    shell,
+                    timeout.as_millis()
+                ));
+                continue;
+            }
         };
 
         let mut context = LoginShellTmuxContext::default();
