@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTmuxSessions } from "../../../entities/terminal-session";
-import type { Project, Divergence } from "../../../entities";
+import type { Project, Divergence, TerminalSession } from "../../../entities";
 import { Button, EmptyState, ErrorBanner, IconButton } from "../../../shared";
 import {
+  findSessionIdsByTmuxSessionName,
   filterTmuxSessions,
   getTmuxOwnershipBadge,
 } from "../lib/tmuxPanel.pure";
@@ -13,6 +14,8 @@ interface TmuxPanelProps {
   divergencesByProject: Map<number, Divergence[]>;
   projectsLoading: boolean;
   divergencesLoading: boolean;
+  appSessions: TerminalSession[];
+  onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
 }
 
 function TmuxPanel({
@@ -20,12 +23,14 @@ function TmuxPanel({
   divergencesByProject,
   projectsLoading,
   divergencesLoading,
+  appSessions,
+  onCloseSessionAndKillTmux,
 }: TmuxPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const ownershipReady = !projectsLoading && !divergencesLoading;
   const {
-    sessions,
+    sessions: tmuxSessions,
     loading,
     error,
     orphanCount,
@@ -36,8 +41,8 @@ function TmuxPanel({
     killAll,
   } = useTmuxSessions(projects, divergencesByProject, ownershipReady);
   const filteredSessions = useMemo(() => {
-    return filterTmuxSessions(sessions, searchQuery);
-  }, [sessions, searchQuery]);
+    return filterTmuxSessions(tmuxSessions, searchQuery);
+  }, [tmuxSessions, searchQuery]);
   const isFiltering = searchQuery.trim().length > 0;
 
   const handleKillOrphans = useCallback(() => {
@@ -47,9 +52,21 @@ function TmuxPanel({
   }, [orphanCount, killOrphans, ownershipReady]);
 
   const handleKillAll = useCallback(() => {
-    if (!window.confirm(`Kill all ${sessions.length} session(s)?`)) return;
+    if (!window.confirm(`Kill all ${tmuxSessions.length} session(s)?`)) return;
     killAll();
-  }, [sessions.length, killAll]);
+  }, [tmuxSessions.length, killAll]);
+
+  const handleKillSession = useCallback(async (sessionName: string) => {
+    const matchingSessionIds = Array.from(new Set(findSessionIdsByTmuxSessionName(appSessions, sessionName)));
+    if (matchingSessionIds.length > 0) {
+      for (const sessionId of matchingSessionIds) {
+        await onCloseSessionAndKillTmux(sessionId);
+      }
+      await refresh();
+      return;
+    }
+    await killSession(sessionName);
+  }, [appSessions, killSession, onCloseSessionAndKillTmux, refresh]);
 
   return (
     <TmuxPanelPresentational>
@@ -131,14 +148,14 @@ function TmuxPanel({
       </div>
 
       {/* Summary bar */}
-      {sessions.length > 0 && (
+      {tmuxSessions.length > 0 && (
         <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface text-[10px] text-subtext">
           <span>
             {isFiltering
-              ? `${filteredSessions.length} of ${sessions.length} session${
-                  sessions.length !== 1 ? "s" : ""
+              ? `${filteredSessions.length} of ${tmuxSessions.length} session${
+                  tmuxSessions.length !== 1 ? "s" : ""
                 }`
-              : `${sessions.length} session${sessions.length !== 1 ? "s" : ""}`}
+              : `${tmuxSessions.length} session${tmuxSessions.length !== 1 ? "s" : ""}`}
             {!ownershipReady && (
               <span className="text-subtext/70"> · checking ownership…</span>
             )}
@@ -182,13 +199,13 @@ function TmuxPanel({
           <ErrorBanner className="px-2">{error}</ErrorBanner>
         )}
 
-        {!error && loading && sessions.length === 0 && (
+        {!error && loading && tmuxSessions.length === 0 && (
           <EmptyState className="px-2 text-xs">
             Loading...
           </EmptyState>
         )}
 
-        {!error && !loading && sessions.length === 0 && (
+        {!error && !loading && tmuxSessions.length === 0 && (
           <div className="px-2 py-4 text-xs text-subtext space-y-2">
             <div className="py-2 text-center">No tmux sessions running.</div>
             {diagnostics && (
@@ -257,7 +274,7 @@ function TmuxPanel({
           </div>
         )}
 
-        {!error && !loading && sessions.length > 0 && filteredSessions.length === 0 && isFiltering && (
+        {!error && !loading && tmuxSessions.length > 0 && filteredSessions.length === 0 && isFiltering && (
           <EmptyState className="px-2 text-xs">
             No sessions match &quot;{searchQuery}&quot;
           </EmptyState>
@@ -297,7 +314,9 @@ function TmuxPanel({
               <IconButton
                 type="button"
                 className="w-5 h-5 flex items-center justify-center text-subtext hover:text-red opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                onClick={() => killSession(session.name)}
+                onClick={() => {
+                  void handleKillSession(session.name);
+                }}
                 title="Kill session"
                 disabled={loading}
                 variant="ghost"

@@ -17,6 +17,7 @@ function MainAreaPresentational({
   activeSession,
   idleAttentionSessionIds,
   onCloseSession,
+  onCloseSessionAndKillTmux,
   onSelectSession,
   onProjectSettingsSaved,
   onSplitSession,
@@ -443,6 +444,8 @@ function MainAreaPresentational({
                           divergencesByProject={divergencesByProject}
                           projectsLoading={projectsLoading}
                           divergencesLoading={divergencesLoading}
+                          appSessions={sessionList}
+                          onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
                         />
                       </motion.div>
                     )}

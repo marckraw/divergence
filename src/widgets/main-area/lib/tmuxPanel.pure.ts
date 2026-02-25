@@ -1,4 +1,8 @@
-import type { TmuxSessionWithOwnership } from "../../../entities/terminal-session";
+import type { TerminalSession } from "../../../entities";
+import {
+  buildSplitTmuxSessionName,
+  type TmuxSessionWithOwnership,
+} from "../../../entities/terminal-session";
 
 export interface TmuxOwnershipBadge {
   text: string;
@@ -68,4 +72,24 @@ export function filterTmuxSessions(
   return sessions.filter((session) =>
     getTmuxSessionSearchText(session).includes(normalizedQuery)
   );
+}
+
+export function findSessionIdsByTmuxSessionName(
+  sessions: ReadonlyArray<Pick<TerminalSession, "id" | "tmuxSessionName">>,
+  tmuxSessionName: string
+): string[] {
+  const matches: string[] = [];
+
+  for (const session of sessions) {
+    const baseName = session.tmuxSessionName;
+    if (
+      tmuxSessionName === baseName
+      || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-2")
+      || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-3")
+    ) {
+      matches.push(session.id);
+    }
+  }
+
+  return matches;
 }

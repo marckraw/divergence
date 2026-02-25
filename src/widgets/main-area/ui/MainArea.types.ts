@@ -22,6 +22,7 @@ export interface MainAreaProps {
   idleAttentionSessionIds: Set<string>;
   activeSession: TerminalSession | null;
   onCloseSession: (sessionId: string) => void;
+  onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   onSelectSession: (sessionId: string) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
   onRegisterTerminalCommand: (sessionId: string, sendCommand: (command: string) => void) => void;
