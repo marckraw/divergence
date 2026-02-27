@@ -1,7 +1,5 @@
 import {
   Button,
-  EDITOR_THEME_OPTIONS_DARK,
-  EDITOR_THEME_OPTIONS_LIGHT,
   IconButton,
   Kbd,
   ModalFooter,
@@ -14,7 +12,6 @@ import {
   SelectValue,
   TextInput,
   Textarea,
-  type EditorThemeId,
 } from "../../../shared";
 import type {
   SettingsCategoryId,
@@ -36,7 +33,7 @@ const SETTINGS_CATEGORIES: SettingsCategoryItem[] = [
   {
     id: "appearance",
     label: "Appearance",
-    description: "App and editor themes",
+    description: "App light/dark mode",
   },
   {
     id: "agents",
@@ -247,38 +244,6 @@ function SettingsPresentational({
                         Light
                       </Button>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-text mb-2">Editor Theme (Light Mode)</label>
-                    <Select value={settings.editorThemeForLightMode} onValueChange={(val) => onUpdateSetting("editorThemeForLightMode", val as EditorThemeId)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EDITOR_THEME_OPTIONS_LIGHT.map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-text mb-2">Editor Theme (Dark Mode)</label>
-                    <Select value={settings.editorThemeForDarkMode} onValueChange={(val) => onUpdateSetting("editorThemeForDarkMode", val as EditorThemeId)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {EDITOR_THEME_OPTIONS_DARK.map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                 </>
               )}
