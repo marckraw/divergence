@@ -69,3 +69,9 @@ export type {
   CreateAutomationTriggerDispatchInput,
   InsertAutomationTriggerDispatchRow,
 } from "./automation-trigger";
+export type {
+  CreatePromptQueueItemInput,
+  InsertPromptQueueItemRow,
+  PromptQueueItemRow,
+  PromptQueueScopeType,
+} from "./prompt-queue";

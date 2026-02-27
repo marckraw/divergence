@@ -22,6 +22,13 @@ import type {
   SplitSessionState,
   TerminalSession,
 } from "../../../entities";
+import {
+  clearPromptQueueItems,
+  deletePromptQueueItem,
+  enqueuePromptQueueItem,
+  listPromptQueueItems,
+  type PromptQueueItemRow,
+} from "../../../entities/prompt-queue";
 import { buildSplitTmuxSessionName } from "../../../entities/terminal-session";
 import {
   createReviewBriefForDraft,
@@ -34,6 +41,7 @@ import {
   getAggregatedTerminalStatus,
   joinSessionPath,
 } from "../lib/mainArea.pure";
+import { resolvePromptQueueScope } from "../lib/promptQueueScope.pure";
 import { readTextFile, writeTextFile } from "../../../shared/api/fs.api";
 import {
   getBranchDiff,
@@ -57,6 +65,7 @@ function MainAreaContainer({
   onFocusSplitPane,
   onResizeSplitPanes,
   onReconnectSession,
+  onSendPromptToSession,
   ...props
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
@@ -87,6 +96,13 @@ function MainAreaContainer({
   const [reviewRunError, setReviewRunError] = useState<string | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
   const [isDraggingSplitPane, setIsDraggingSplitPane] = useState(false);
+  const [queueItems, setQueueItems] = useState<PromptQueueItemRow[]>([]);
+  const [queueDraft, setQueueDraft] = useState("");
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [queueingPrompt, setQueueingPrompt] = useState(false);
+  const [queueActionItemId, setQueueActionItemId] = useState<number | null>(null);
+  const [queueSendingItemId, setQueueSendingItemId] = useState<number | null>(null);
   const {
     activeDraft,
     addComment,
@@ -108,6 +124,10 @@ function MainAreaContainer({
     }
     return reviewComments.filter((comment) => comment.anchor.filePath === openFilePath);
   }, [openFilePath, reviewComments]);
+  const queueScope = useMemo(
+    () => resolvePromptQueueScope(activeSession),
+    [activeSession],
+  );
 
   useEffect(() => {
     setOpenFilePath(null);
@@ -128,6 +148,45 @@ function MainAreaContainer({
     setReviewRunning(false);
     clearAllDrafts();
   }, [activeSession?.id, clearAllDrafts]);
+
+  useEffect(() => {
+    if (!queueScope) {
+      setQueueItems([]);
+      setQueueDraft("");
+      setQueueLoading(false);
+      setQueueError(null);
+      setQueueingPrompt(false);
+      setQueueActionItemId(null);
+      setQueueSendingItemId(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadQueue = async () => {
+      setQueueLoading(true);
+      try {
+        const items = await listPromptQueueItems(queueScope.scopeType, queueScope.scopeId);
+        if (!cancelled) {
+          setQueueItems(items);
+          setQueueError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setQueueError(error instanceof Error ? error.message : "Failed to load prompt queue.");
+        }
+      } finally {
+        if (!cancelled) {
+          setQueueLoading(false);
+        }
+      }
+    };
+
+    void loadQueue();
+    return () => {
+      cancelled = true;
+    };
+  }, [queueScope]);
 
   const handleOpenFile = useCallback(async (
     path: string,
@@ -322,6 +381,82 @@ function MainAreaContainer({
       setReviewRunning(false);
     }
   }, [activeDraft, activeRootPath, activeSession, clearActiveDraft, onRunReviewAgentRequest]);
+
+  const handleQueuePrompt = useCallback(async () => {
+    if (!queueScope) {
+      return;
+    }
+    const prompt = queueDraft.trim();
+    if (!prompt) {
+      return;
+    }
+
+    setQueueingPrompt(true);
+    try {
+      await enqueuePromptQueueItem({
+        scopeType: queueScope.scopeType,
+        scopeId: queueScope.scopeId,
+        prompt,
+      });
+      const items = await listPromptQueueItems(queueScope.scopeType, queueScope.scopeId);
+      setQueueItems(items);
+      setQueueDraft("");
+      setQueueError(null);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "Failed to queue prompt.");
+    } finally {
+      setQueueingPrompt(false);
+    }
+  }, [queueDraft, queueScope]);
+
+  const handleQueueRemoveItem = useCallback(async (itemId: number) => {
+    setQueueActionItemId(itemId);
+    try {
+      await deletePromptQueueItem(itemId);
+      setQueueItems((prev) => prev.filter((item) => item.id !== itemId));
+      setQueueError(null);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "Failed to remove queued prompt.");
+    } finally {
+      setQueueActionItemId((prev) => (prev === itemId ? null : prev));
+    }
+  }, []);
+
+  const handleQueueClear = useCallback(async () => {
+    if (!queueScope) {
+      return;
+    }
+    setQueueLoading(true);
+    try {
+      await clearPromptQueueItems(queueScope.scopeType, queueScope.scopeId);
+      setQueueItems([]);
+      setQueueError(null);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "Failed to clear prompt queue.");
+    } finally {
+      setQueueLoading(false);
+    }
+  }, [queueScope]);
+
+  const handleQueueSendItem = useCallback(async (itemId: number) => {
+    const activeSessionId = activeSession?.id;
+    const item = queueItems.find((current) => current.id === itemId);
+    if (!activeSessionId || !item) {
+      return;
+    }
+
+    setQueueSendingItemId(itemId);
+    try {
+      await onSendPromptToSession(activeSessionId, item.prompt);
+      await deletePromptQueueItem(itemId);
+      setQueueItems((prev) => prev.filter((current) => current.id !== itemId));
+      setQueueError(null);
+    } catch (error) {
+      setQueueError(error instanceof Error ? error.message : "Failed to send queued prompt.");
+    } finally {
+      setQueueSendingItemId((prev) => (prev === itemId ? null : prev));
+    }
+  }, [activeSession?.id, onSendPromptToSession, queueItems]);
 
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
@@ -518,6 +653,7 @@ function MainAreaContainer({
       onResizeSplitPanes={onResizeSplitPanes}
       reconnectBySessionId={reconnectBySessionId}
       onReconnectSession={onReconnectSession}
+      onSendPromptToSession={onSendPromptToSession}
       sessionList={sessionList}
       activeProject={activeProject}
       activeSplit={activeSplit}
@@ -559,6 +695,18 @@ function MainAreaContainer({
       onClearReviewDraft={clearActiveDraft}
       onAddDiffComment={handleAddDiffComment}
       openFileReviewComments={openFileReviewComments}
+      queueItems={queueItems}
+      queueDraft={queueDraft}
+      queueLoading={queueLoading}
+      queueError={queueError}
+      queueingPrompt={queueingPrompt}
+      queueActionItemId={queueActionItemId}
+      queueSendingItemId={queueSendingItemId}
+      onQueueDraftChange={setQueueDraft}
+      onQueuePrompt={handleQueuePrompt}
+      onQueueSendItem={handleQueueSendItem}
+      onQueueRemoveItem={handleQueueRemoveItem}
+      onQueueClear={handleQueueClear}
       renderSession={renderSession}
     />
   );

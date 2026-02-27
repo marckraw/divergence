@@ -295,6 +295,22 @@ const MIGRATIONS: Migration[] = [
       { sql: "CREATE INDEX IF NOT EXISTS idx_automations_run_mode ON automations(run_mode)" },
     ],
   },
+  {
+    version: 11,
+    description: "Add persisted prompt queue items",
+    statements: [
+      {
+        sql: `CREATE TABLE IF NOT EXISTS prompt_queue_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          scope_type TEXT NOT NULL CHECK(scope_type IN ('project', 'workspace')),
+          scope_id INTEGER NOT NULL,
+          prompt TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL
+        )`,
+      },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_prompt_queue_scope_created ON prompt_queue_items(scope_type, scope_id, created_at_ms, id)" },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────

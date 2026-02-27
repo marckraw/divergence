@@ -12,6 +12,7 @@ function makeSession(partial: Partial<TerminalSession> = {}): TerminalSession {
     type: partial.type ?? "project",
     targetId: partial.targetId ?? 1,
     projectId: partial.projectId ?? 1,
+    workspaceOwnerId: partial.workspaceOwnerId,
     workspaceKey: partial.workspaceKey ?? "project:1",
     sessionRole: partial.sessionRole ?? "default",
     name: partial.name ?? "Project One",
@@ -67,6 +68,7 @@ describe("normalizePersistedTerminalTabsState", () => {
           type: "project",
           targetId: 1,
           projectId: 1,
+          workspaceOwnerId: 7,
           workspaceKey: "project:1",
           sessionRole: "manual",
           name: "Project One",
@@ -93,5 +95,6 @@ describe("normalizePersistedTerminalTabsState", () => {
     expect(session?.status).toBe("active");
     expect(session?.lastActivity?.getTime()).toBe(1700000000000);
     expect(session?.portEnv).toEqual({ PORT: "3000" });
+    expect(session?.workspaceOwnerId).toBe(7);
   });
 });

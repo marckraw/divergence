@@ -155,6 +155,25 @@ export const githubPollState = sqliteTable("github_poll_state", {
 
 export type GithubPollState = typeof githubPollState.$inferSelect;
 
+// ── Prompt Queue Items ─────────────────────────────────────────────────────
+
+export const promptQueueItems = sqliteTable(
+  "prompt_queue_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    scopeType: text("scope_type", { enum: ["project", "workspace"] }).notNull(),
+    scopeId: integer("scope_id").notNull(),
+    prompt: text("prompt").notNull(),
+    createdAtMs: integer("created_at_ms").notNull(),
+  },
+  (table) => [
+    index("idx_prompt_queue_scope_created").on(table.scopeType, table.scopeId, table.createdAtMs, table.id),
+  ],
+);
+
+export type PromptQueueItemRow = typeof promptQueueItems.$inferSelect;
+export type InsertPromptQueueItemRow = typeof promptQueueItems.$inferInsert;
+
 // ── Automation Trigger Dispatches ────────────────────────────────────────────
 
 export const automationTriggerDispatches = sqliteTable(

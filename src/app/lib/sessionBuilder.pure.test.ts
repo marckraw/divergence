@@ -99,6 +99,7 @@ describe("buildWorkspaceTerminalSession", () => {
     expect(session.type).toBe("workspace");
     expect(session.targetId).toBe(5);
     expect(session.projectId).toBe(0);
+    expect(session.workspaceOwnerId).toBe(5);
     expect(session.workspaceKey).toBe("workspace:5");
     expect(session.sessionRole).toBe("default");
     expect(session.path).toBe("/home/.divergence/workspaces/my-workspace");
@@ -126,6 +127,7 @@ describe("buildWorkspaceDivergenceTerminalSession", () => {
     expect(session.type).toBe("workspace_divergence");
     expect(session.targetId).toBe(7);
     expect(session.projectId).toBe(0);
+    expect(session.workspaceOwnerId).toBe(5);
     expect(session.workspaceKey).toBe("workspace_divergence:7");
     expect(session.sessionRole).toBe("default");
     expect(session.path).toBe("/home/.divergence/workspaces/my-workspace--feat-xyz");

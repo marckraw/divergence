@@ -7,6 +7,7 @@ import TmuxPanel from "./TmuxPanel.container";
 import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
+import { PromptQueuePanel } from "../../../features/prompt-queue";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared";
 import { IconButton, Kbd, TabButton, ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
@@ -75,6 +76,18 @@ function MainAreaPresentational({
   onClearReviewDraft,
   onAddDiffComment,
   openFileReviewComments,
+  queueItems,
+  queueDraft,
+  queueLoading,
+  queueError,
+  queueingPrompt,
+  queueActionItemId,
+  queueSendingItemId,
+  onQueueDraftChange,
+  onQueuePrompt,
+  onQueueSendItem,
+  onQueueRemoveItem,
+  onQueueClear,
   renderSession,
 }: MainAreaPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -330,6 +343,12 @@ function MainAreaPresentational({
                       Changes
                     </TabButton>
                     <TabButton
+                      active={rightPanelTab === "queue"}
+                      onClick={() => onRightPanelTabChange("queue")}
+                    >
+                      Queue
+                    </TabButton>
+                    <TabButton
                       active={rightPanelTab === "tmux"}
                       onClick={() => onRightPanelTabChange("tmux")}
                     >
@@ -427,6 +446,31 @@ function MainAreaPresentational({
                           onAgentChange={onReviewAgentChange}
                           onRun={onRunReviewAgent}
                           onClear={onClearReviewDraft}
+                        />
+                      </motion.div>
+                    ) : rightPanelTab === "queue" ? (
+                      <motion.div
+                        key="queue"
+                        className="h-full"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                      >
+                        <PromptQueuePanel
+                          items={queueItems}
+                          draft={queueDraft}
+                          loading={queueLoading}
+                          error={queueError}
+                          queueing={queueingPrompt}
+                          actionItemId={queueActionItemId}
+                          sendingItemId={queueSendingItemId}
+                          onDraftChange={onQueueDraftChange}
+                          onQueuePrompt={onQueuePrompt}
+                          onSendItem={onQueueSendItem}
+                          onRemoveItem={onQueueRemoveItem}
+                          onClear={onQueueClear}
                         />
                       </motion.div>
                     ) : (
