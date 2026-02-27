@@ -3,6 +3,7 @@ export interface TerminalSession {
   type: "project" | "divergence" | "workspace" | "workspace_divergence";
   targetId: number;
   projectId: number;
+  workspaceOwnerId?: number;
   workspaceKey: string;
   sessionRole: "default" | "review-agent" | "manual";
   name: string;

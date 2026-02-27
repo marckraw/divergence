@@ -16,6 +16,7 @@ interface PersistedTerminalSession {
   type: PersistedSessionType;
   targetId: number;
   projectId: number;
+  workspaceOwnerId?: number;
   workspaceKey: string;
   sessionRole: PersistedSessionRole;
   name: string;
@@ -104,6 +105,7 @@ function parseSession(input: unknown): TerminalSession | null {
   const tmuxSessionName = parseString(input.tmuxSessionName);
   const targetId = parseNumber(input.targetId);
   const projectId = parseNumber(input.projectId);
+  const workspaceOwnerId = parseNumber(input.workspaceOwnerId);
 
   if (
     !id
@@ -126,6 +128,7 @@ function parseSession(input: unknown): TerminalSession | null {
     type,
     targetId,
     projectId,
+    workspaceOwnerId: workspaceOwnerId ?? undefined,
     workspaceKey,
     sessionRole: parseSessionRole(input.sessionRole),
     name,
@@ -145,6 +148,7 @@ function serializeSession(session: TerminalSession): PersistedTerminalSession {
     type: session.type,
     targetId: session.targetId,
     projectId: session.projectId,
+    workspaceOwnerId: session.workspaceOwnerId,
     workspaceKey: session.workspaceKey,
     sessionRole: session.sessionRole,
     name: session.name,
