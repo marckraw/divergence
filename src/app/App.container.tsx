@@ -2010,6 +2010,7 @@ function App() {
           idleAttentionSessionIds={idleAttentionSessionIds}
           activeSession={activeSession}
           onCloseSession={handleCloseSession}
+          onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
           onSelectSession={setActiveSessionId}
           onStatusChange={handleSessionStatusChange}
           onRegisterTerminalCommand={handleRegisterTerminalCommand}
