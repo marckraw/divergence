@@ -8,6 +8,7 @@ import type {
   SplitSessionState,
   TerminalSession,
 } from "../../../entities";
+import type { PromptQueueItemRow } from "../../../entities/prompt-queue";
 import type { EditorThemeId } from "../../../shared";
 import type { ProjectSettings } from "../../../entities/project";
 import type {
@@ -52,9 +53,10 @@ export interface MainAreaProps {
   onToggleSidebar: () => void;
   isRightPanelOpen: boolean;
   onToggleRightPanel: () => void;
+  onSendPromptToSession: (sessionId: string, prompt: string) => Promise<void>;
 }
 
-export type RightPanelTab = "settings" | "files" | "changes" | "review" | "tmux";
+export type RightPanelTab = "settings" | "files" | "changes" | "queue" | "review" | "tmux";
 export type DrawerTab = "diff" | "edit";
 
 export interface MainAreaOpenDiff {
@@ -104,5 +106,17 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   onClearReviewDraft: () => void;
   onAddDiffComment: (anchor: DiffReviewAnchor, message: string) => void;
   openFileReviewComments: DiffReviewComment[];
+  queueItems: PromptQueueItemRow[];
+  queueDraft: string;
+  queueLoading: boolean;
+  queueError: string | null;
+  queueingPrompt: boolean;
+  queueActionItemId: number | null;
+  queueSendingItemId: number | null;
+  onQueueDraftChange: (value: string) => void;
+  onQueuePrompt: () => Promise<void>;
+  onQueueSendItem: (itemId: number) => Promise<void>;
+  onQueueRemoveItem: (itemId: number) => Promise<void>;
+  onQueueClear: () => Promise<void>;
   renderSession: (session: TerminalSession) => ReactNode;
 }

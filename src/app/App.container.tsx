@@ -172,7 +172,7 @@ function App() {
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(256);
   const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
   const [sidebarMode, setSidebarMode] = useState<WorkSidebarMode>("projects");
@@ -763,6 +763,16 @@ function App() {
       }
     }
   }, [waitForSessionCommand]);
+
+  const handleSendPromptToSession = useCallback(async (sessionId: string, prompt: string): Promise<void> => {
+    const normalizedPrompt = prompt.trim();
+    if (!normalizedPrompt) {
+      return;
+    }
+    await sendCommandToSession(sessionId, normalizedPrompt, {
+      activateIfNeeded: false,
+    });
+  }, [sendCommandToSession]);
 
   const createReviewAgentSession = useCallback((sourceSession: TerminalSession, agent: DiffReviewAgent): TerminalSession => {
     const entropy = generateSessionEntropy();
@@ -2035,6 +2045,7 @@ function App() {
           onToggleSidebar={toggleSidebar}
           isRightPanelOpen={isRightPanelOpen}
           onToggleRightPanel={toggleRightPanel}
+          onSendPromptToSession={handleSendPromptToSession}
         />
       )}
 
@@ -2070,21 +2081,11 @@ function App() {
       {/* Settings */}
       <AnimatePresence>
         {showSettings && (
-          <Settings onClose={() => {
-            setShowSettings(false);
-          }}
+          <Settings
+            onClose={() => {
+              setShowSettings(false);
+            }}
             updater={updater}
-            projects={projects}
-            automations={automations}
-            latestRunByAutomationId={latestRunByAutomationId}
-            queuedCloudCountByAutomationId={queuedCloudCountByAutomationId}
-            automationsLoading={automationsLoading}
-            automationsError={automationsError}
-            onRefreshAutomations={refreshAutomations}
-            onCreateAutomation={handleCreateAutomation}
-            onUpdateAutomation={handleUpdateAutomation}
-            onDeleteAutomation={handleDeleteAutomation}
-            onRunAutomationNow={handleRunAutomationNow}
           />
         )}
       </AnimatePresence>
