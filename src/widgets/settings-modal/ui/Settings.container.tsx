@@ -11,7 +11,7 @@ import { getUpdaterPresentation } from "../lib/updaterPresentation.pure";
 import { getDivergenceBasePath } from "../api/settings.api";
 import SettingsPresentational from "./Settings.presentational";
 import type {
-  SettingsAutomationFormState,
+  SettingsCategoryId,
   SettingsProps,
   SettingsState,
 } from "./Settings.types";
@@ -26,45 +26,14 @@ const defaultSettings: SettingsState = {
   cloudApiToken: "",
 };
 
-const EMPTY_AUTOMATION_FORM: SettingsAutomationFormState = {
-  id: null,
-  name: "",
-  projectId: null,
-  runMode: "schedule",
-  sourceProjectId: null,
-  targetProjectId: null,
-  baseBranches: "",
-  agent: "claude",
-  prompt: "",
-  intervalHours: 5,
-  enabled: true,
-  keepSessionAlive: false,
-};
-
 function SettingsContainer({
   onClose,
   updater,
-  projects,
-  automations,
-  latestRunByAutomationId,
-  queuedCloudCountByAutomationId,
-  automationsLoading,
-  automationsError,
-  onRefreshAutomations,
-  onCreateAutomation,
-  onUpdateAutomation,
-  onDeleteAutomation,
-  onRunAutomationNow,
 }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [automationForm, setAutomationForm] = useState<SettingsAutomationFormState>(EMPTY_AUTOMATION_FORM);
-  const [automationFormError, setAutomationFormError] = useState<string | null>(null);
-  const [automationActionError, setAutomationActionError] = useState<string | null>(null);
-  const [isSubmittingAutomation, setIsSubmittingAutomation] = useState(false);
-  const [automationActionInFlightId, setAutomationActionInFlightId] = useState<number | null>(null);
+  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
   const [oauthTokenVisible, setOauthTokenVisible] = useState(false);
   const [githubTokenVisible, setGithubTokenVisible] = useState(false);
   const [cloudTokenVisible, setCloudTokenVisible] = useState(false);
@@ -72,9 +41,6 @@ function SettingsContainer({
     () => getUpdaterPresentation(updater.status, updater.version, updater.progress, updater.error),
     [updater.status, updater.version, updater.progress, updater.error]
   );
-  const automationSubmitLabel = useMemo(() => {
-    return automationForm.id === null ? "Create automation" : "Save automation";
-  }, [automationForm.id]);
 
   useEffect(() => {
     async function loadSettings() {
@@ -94,11 +60,11 @@ function SettingsContainer({
       }
     }
 
-    loadSettings();
+    void loadSettings();
   }, []);
 
   useEffect(() => {
-    getAppVersion().then(setAppVersion).catch(() => {});
+    void getAppVersion().then(setAppVersion).catch(() => {});
   }, []);
 
   const handleSave = useCallback(() => {
@@ -118,198 +84,14 @@ function SettingsContainer({
     setSettings((previous) => ({ ...previous, [key]: value }));
   }, []);
 
-  const handleAutomationFormChange = useCallback(<K extends keyof SettingsAutomationFormState>(
-    key: K,
-    value: SettingsAutomationFormState[K]
-  ) => {
-    setAutomationForm((previous) => ({ ...previous, [key]: value }));
-    if (automationFormError) {
-      setAutomationFormError(null);
-    }
-  }, [automationFormError]);
-
-  const resetAutomationForm = useCallback(() => {
-    setAutomationForm(EMPTY_AUTOMATION_FORM);
-    setAutomationFormError(null);
-  }, []);
-
-  const handleOpenCreateAutomation = useCallback(() => {
-    resetAutomationForm();
-    setAutomationActionError(null);
-    setIsEditorOpen(true);
-  }, [resetAutomationForm]);
-
-  const handleCloseAutomationEditor = useCallback(() => {
-    resetAutomationForm();
-    setIsEditorOpen(false);
-  }, [resetAutomationForm]);
-
-  const handleEditAutomation = useCallback((automationId: number) => {
-    const automation = automations.find((item) => item.id === automationId);
-    if (!automation) {
-      return;
-    }
-    setAutomationForm({
-      id: automation.id,
-      name: automation.name,
-      projectId: automation.projectId,
-      runMode: automation.runMode,
-      sourceProjectId: automation.sourceProjectId ?? null,
-      targetProjectId: automation.targetProjectId ?? null,
-      baseBranches: (() => {
-        if (!automation.triggerConfigJson) return "";
-        try {
-          const parsed = JSON.parse(automation.triggerConfigJson) as { baseBranches?: unknown };
-          if (!Array.isArray(parsed.baseBranches)) return "";
-          return parsed.baseBranches.filter((item): item is string => typeof item === "string").join(", ");
-        } catch {
-          return "";
-        }
-      })(),
-      agent: automation.agent,
-      prompt: automation.prompt,
-      intervalHours: automation.intervalHours,
-      enabled: automation.enabled,
-      keepSessionAlive: automation.keepSessionAlive,
-    });
-    setAutomationFormError(null);
-    setAutomationActionError(null);
-    setIsEditorOpen(true);
-  }, [automations]);
-
-  const validateAutomationForm = useCallback((): string | null => {
-    if (!automationForm.name.trim()) {
-      return "Name is required.";
-    }
-    if (automationForm.runMode === "schedule" && !automationForm.projectId) {
-      return "Project is required.";
-    }
-    if (!automationForm.prompt.trim()) {
-      return "Prompt is required.";
-    }
-    if (automationForm.runMode === "schedule" && (!Number.isFinite(automationForm.intervalHours) || automationForm.intervalHours < 1)) {
-      return "Interval must be at least 1 hour.";
-    }
-    if (automationForm.runMode === "event") {
-      if (!automationForm.sourceProjectId) {
-        return "Source project is required.";
-      }
-      if (!automationForm.targetProjectId) {
-        return "Target project is required.";
-      }
-      const baseBranches = automationForm.baseBranches
-        .split(",")
-        .map((branch) => branch.trim())
-        .filter((branch) => branch.length > 0);
-      if (baseBranches.length === 0) {
-        return "At least one base branch is required.";
-      }
-    }
-    return null;
-  }, [automationForm]);
-
-  const handleSubmitAutomationForm = useCallback(async () => {
-    const validationError = validateAutomationForm();
-    if (validationError) {
-      setAutomationFormError(validationError);
-      return;
-    }
-
-    setAutomationActionError(null);
-    setIsSubmittingAutomation(true);
-    try {
-      const baseBranches = automationForm.baseBranches
-        .split(",")
-        .map((branch) => branch.trim())
-        .filter((branch) => branch.length > 0);
-      const triggerConfigJson = automationForm.runMode === "event"
-        ? JSON.stringify({ baseBranches })
-        : null;
-      if (automationForm.id === null) {
-        await onCreateAutomation({
-          name: automationForm.name.trim(),
-          projectId: automationForm.runMode === "event" ? automationForm.targetProjectId! : automationForm.projectId!,
-          agent: automationForm.agent,
-          prompt: automationForm.prompt.trim(),
-          intervalHours: Math.floor(automationForm.intervalHours),
-          runMode: automationForm.runMode,
-          sourceProjectId: automationForm.runMode === "event" ? automationForm.sourceProjectId : null,
-          targetProjectId: automationForm.runMode === "event" ? automationForm.targetProjectId : null,
-          triggerType: automationForm.runMode === "event" ? "github_pr_merged" : null,
-          triggerConfigJson,
-          enabled: automationForm.enabled,
-          keepSessionAlive: automationForm.keepSessionAlive,
-        });
-      } else {
-        await onUpdateAutomation({
-          id: automationForm.id,
-          name: automationForm.name.trim(),
-          projectId: automationForm.runMode === "event" ? automationForm.targetProjectId! : automationForm.projectId!,
-          agent: automationForm.agent,
-          prompt: automationForm.prompt.trim(),
-          intervalHours: Math.floor(automationForm.intervalHours),
-          runMode: automationForm.runMode,
-          sourceProjectId: automationForm.runMode === "event" ? automationForm.sourceProjectId : null,
-          targetProjectId: automationForm.runMode === "event" ? automationForm.targetProjectId : null,
-          triggerType: automationForm.runMode === "event" ? "github_pr_merged" : null,
-          triggerConfigJson,
-          enabled: automationForm.enabled,
-          keepSessionAlive: automationForm.keepSessionAlive,
-        });
-      }
-      handleCloseAutomationEditor();
-    } catch (error) {
-      setAutomationFormError(error instanceof Error ? error.message : "Failed to save automation.");
-    } finally {
-      setIsSubmittingAutomation(false);
-    }
-  }, [
-    automationForm,
-    handleCloseAutomationEditor,
-    onCreateAutomation,
-    onUpdateAutomation,
-    validateAutomationForm,
-  ]);
-
-  const handleRefreshAutomations = useCallback(async () => {
-    setAutomationActionError(null);
-    await onRefreshAutomations();
-  }, [onRefreshAutomations]);
-
-  const handleDeleteAutomation = useCallback(async (automationId: number) => {
-    setAutomationActionError(null);
-    setAutomationActionInFlightId(automationId);
-    try {
-      await onDeleteAutomation(automationId);
-    } catch (error) {
-      setAutomationActionError(
-        error instanceof Error ? error.message : "Failed to delete automation."
-      );
-    } finally {
-      setAutomationActionInFlightId((current) => (current === automationId ? null : current));
-    }
-  }, [onDeleteAutomation]);
-
-  const handleRunAutomationNow = useCallback(async (automationId: number) => {
-    setAutomationActionError(null);
-    setAutomationActionInFlightId(automationId);
-    try {
-      await onRunAutomationNow(automationId);
-    } catch (error) {
-      setAutomationActionError(
-        error instanceof Error ? error.message : "Failed to run automation."
-      );
-    } finally {
-      setAutomationActionInFlightId((current) => (current === automationId ? null : current));
-    }
-  }, [onRunAutomationNow]);
-
   const handleToggleOAuthTokenVisible = useCallback(() => {
     setOauthTokenVisible((prev) => !prev);
   }, []);
+
   const handleToggleGithubTokenVisible = useCallback(() => {
     setGithubTokenVisible((prev) => !prev);
   }, []);
+
   const handleToggleCloudTokenVisible = useCallback(() => {
     setCloudTokenVisible((prev) => !prev);
   }, []);
@@ -321,30 +103,11 @@ function SettingsContainer({
       appVersion={appVersion}
       updater={updater}
       updaterPresentation={updaterPresentation}
-      projects={projects}
-      automations={automations}
-      latestRunByAutomationId={latestRunByAutomationId}
-      queuedCloudCountByAutomationId={queuedCloudCountByAutomationId}
-      automationsLoading={automationsLoading}
-      automationsError={automationsError}
-      automationActionError={automationActionError}
-      automationActionInFlightId={automationActionInFlightId}
-      isEditorOpen={isEditorOpen}
-      automationForm={automationForm}
-      automationFormError={automationFormError}
-      isSubmittingAutomation={isSubmittingAutomation}
-      automationSubmitLabel={automationSubmitLabel}
+      activeCategory={activeCategory}
+      onCategoryChange={setActiveCategory}
       onClose={onClose}
       onSave={handleSave}
       onUpdateSetting={handleUpdateSetting}
-      onRefreshAutomations={handleRefreshAutomations}
-      onOpenCreateAutomation={handleOpenCreateAutomation}
-      onEditAutomation={handleEditAutomation}
-      onDeleteAutomation={handleDeleteAutomation}
-      onRunAutomationNow={handleRunAutomationNow}
-      onAutomationFormChange={handleAutomationFormChange}
-      onSubmitAutomationForm={handleSubmitAutomationForm}
-      onCloseAutomationEditor={handleCloseAutomationEditor}
       oauthTokenVisible={oauthTokenVisible}
       githubTokenVisible={githubTokenVisible}
       cloudTokenVisible={cloudTokenVisible}
