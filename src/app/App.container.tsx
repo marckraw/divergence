@@ -52,6 +52,8 @@ import {
 import {
   ackCloudAutomationEvent,
   Button,
+  DEFAULT_EDITOR_THEME_DARK,
+  DEFAULT_EDITOR_THEME_LIGHT,
   getProjectGithubRepository,
   IconButton,
   nackCloudAutomationEvent,
@@ -1899,8 +1901,8 @@ function App() {
 
   const editorTheme =
     appSettings.theme === "light"
-      ? appSettings.editorThemeForLightMode
-      : appSettings.editorThemeForDarkMode;
+      ? DEFAULT_EDITOR_THEME_LIGHT
+      : DEFAULT_EDITOR_THEME_DARK;
   const activeSession = activeSessionId ? sessions.get(activeSessionId) ?? null : null;
 
   return (
