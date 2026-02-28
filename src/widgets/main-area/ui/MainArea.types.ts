@@ -9,13 +9,15 @@ import type {
   TerminalSession,
 } from "../../../entities";
 import type { PromptQueueItemRow } from "../../../entities/prompt-queue";
-import type { EditorThemeId, LinearProjectIssue } from "../../../shared";
+import type { WorkspaceMember } from "../../../entities/workspace";
+import type { EditorThemeId } from "../../../shared";
 import type { ProjectSettings } from "../../../entities/project";
 import type {
   DiffReviewAgent,
   DiffReviewAnchor,
   DiffReviewComment,
 } from "../../../features/diff-review";
+import type { LinearTaskQueueIssue } from "../../../features/linear-task-queue";
 
 export interface MainAreaProps {
   projects: Project[];
@@ -54,6 +56,7 @@ export interface MainAreaProps {
   isRightPanelOpen: boolean;
   onToggleRightPanel: () => void;
   onSendPromptToSession: (sessionId: string, prompt: string) => Promise<void>;
+  workspaceMembersByWorkspaceId: Map<number, WorkspaceMember[]>;
 }
 
 export type RightPanelTab = "settings" | "files" | "changes" | "queue" | "linear" | "review" | "tmux";
@@ -119,7 +122,7 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   onQueueRemoveItem: (itemId: number) => Promise<void>;
   onQueueClear: () => Promise<void>;
   linearProjectName: string | null;
-  linearIssues: LinearProjectIssue[];
+  linearIssues: LinearTaskQueueIssue[];
   linearLoading: boolean;
   linearRefreshing: boolean;
   linearError: string | null;

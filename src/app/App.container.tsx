@@ -2048,6 +2048,7 @@ function App() {
           isRightPanelOpen={isRightPanelOpen}
           onToggleRightPanel={toggleRightPanel}
           onSendPromptToSession={handleSendPromptToSession}
+          workspaceMembersByWorkspaceId={membersByWorkspaceId}
         />
       )}
 

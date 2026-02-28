@@ -1,14 +1,14 @@
-import type { LinearProjectIssue } from "../../../shared";
 import {
   Button,
   EmptyState,
   ErrorBanner,
 } from "../../../shared";
 import { truncateLinearIssueDescription } from "../lib/linearTaskQueue.pure";
+import type { LinearTaskQueueIssue } from "../lib/linearTaskQueue.pure";
 
 export interface LinearTaskQueuePanelProps {
   projectName: string | null;
-  items: LinearProjectIssue[];
+  items: LinearTaskQueueIssue[];
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -66,6 +66,14 @@ function LinearTaskQueuePanel({
         </div>
 
         {error && <ErrorBanner>{error}</ErrorBanner>}
+        {infoMessage && (
+          <div
+            role="status"
+            className="px-3 py-2 rounded border border-surface bg-main/40 text-xs text-subtext"
+          >
+            {infoMessage}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-3">
@@ -73,7 +81,7 @@ function LinearTaskQueuePanel({
           <p className="text-xs text-subtext">Loading Linear tasks...</p>
         ) : items.length === 0 ? (
           <EmptyState bordered className="bg-main/40">
-            {infoMessage ?? "No tasks available."}
+            No tasks available.
           </EmptyState>
         ) : (
           <div className="space-y-2">
@@ -86,7 +94,19 @@ function LinearTaskQueuePanel({
                   className="rounded-md border border-surface bg-main/40 p-3 space-y-2"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] uppercase tracking-wide text-subtext">{issue.identifier}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[11px] uppercase tracking-wide text-subtext shrink-0">
+                        {issue.identifier}
+                      </span>
+                      {issue.sourceProjectName && (
+                        <span
+                          className="text-[11px] rounded border border-surface px-1.5 py-0.5 text-subtext truncate"
+                          title={issue.sourceProjectPath ?? issue.sourceProjectName}
+                        >
+                          {issue.sourceProjectName}
+                        </span>
+                      )}
+                    </div>
                     {issue.stateName && (
                       <span className="text-[11px] rounded border border-surface px-1.5 py-0.5 text-subtext">
                         {issue.stateName}
