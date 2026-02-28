@@ -126,6 +126,7 @@ describe("normalizeAppSettings", () => {
     const normalized = normalizeAppSettings();
     expect(normalized.githubToken).toBe("");
     expect(normalized.githubWebhookSecret).toBe("");
+    expect(normalized.linearApiToken).toBe("");
     expect(normalized.cloudApiBaseUrl).toBe("https://cloud.divergence.app");
     expect(normalized.cloudApiToken).toBe("");
   });
@@ -134,11 +135,13 @@ describe("normalizeAppSettings", () => {
     const normalized = normalizeAppSettings({
       githubToken: "ghp_test",
       githubWebhookSecret: "webhook-secret",
+      linearApiToken: "lin_api_test",
       cloudApiBaseUrl: "https://cloud.internal",
       cloudApiToken: "cloud-token",
     });
     expect(normalized.githubToken).toBe("ghp_test");
     expect(normalized.githubWebhookSecret).toBe("webhook-secret");
+    expect(normalized.linearApiToken).toBe("lin_api_test");
     expect(normalized.cloudApiBaseUrl).toBe("https://cloud.internal");
     expect(normalized.cloudApiToken).toBe("cloud-token");
   });
@@ -147,11 +150,13 @@ describe("normalizeAppSettings", () => {
     const normalized = normalizeAppSettings({
       githubToken: 42 as never,
       githubWebhookSecret: null as never,
+      linearApiToken: ["token"] as never,
       cloudApiBaseUrl: "" as never,
       cloudApiToken: { bad: true } as never,
     });
     expect(normalized.githubToken).toBe("");
     expect(normalized.githubWebhookSecret).toBe("");
+    expect(normalized.linearApiToken).toBe("");
     expect(normalized.cloudApiBaseUrl).toBe("https://cloud.divergence.app");
     expect(normalized.cloudApiToken).toBe("");
   });

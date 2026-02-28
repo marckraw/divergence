@@ -9,7 +9,7 @@ import type {
   TerminalSession,
 } from "../../../entities";
 import type { PromptQueueItemRow } from "../../../entities/prompt-queue";
-import type { EditorThemeId } from "../../../shared";
+import type { EditorThemeId, LinearProjectIssue } from "../../../shared";
 import type { ProjectSettings } from "../../../entities/project";
 import type {
   DiffReviewAgent,
@@ -56,7 +56,7 @@ export interface MainAreaProps {
   onSendPromptToSession: (sessionId: string, prompt: string) => Promise<void>;
 }
 
-export type RightPanelTab = "settings" | "files" | "changes" | "queue" | "review" | "tmux";
+export type RightPanelTab = "settings" | "files" | "changes" | "queue" | "linear" | "review" | "tmux";
 export type DrawerTab = "diff" | "edit";
 
 export interface MainAreaOpenDiff {
@@ -118,5 +118,14 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   onQueueSendItem: (itemId: number) => Promise<void>;
   onQueueRemoveItem: (itemId: number) => Promise<void>;
   onQueueClear: () => Promise<void>;
+  linearProjectName: string | null;
+  linearIssues: LinearProjectIssue[];
+  linearLoading: boolean;
+  linearRefreshing: boolean;
+  linearError: string | null;
+  linearInfoMessage: string | null;
+  linearSendingIssueId: string | null;
+  onLinearRefresh: () => Promise<void>;
+  onLinearSendIssue: (issueId: string) => Promise<void>;
   renderSession: (session: TerminalSession) => ReactNode;
 }

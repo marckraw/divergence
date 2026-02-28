@@ -281,8 +281,8 @@ pub async fn fetch_github_pull_requests(
 
     let mut events = Vec::with_capacity(items.len());
     for item in items {
-        let created_at_ms = parse_rfc3339_millis(&item.created_at)?;
-        let updated_at_ms = parse_rfc3339_millis(&item.updated_at)?;
+        let created_at_ms = parse_rfc3339_millis(&item.created_at, "GitHub timestamp")?;
+        let updated_at_ms = parse_rfc3339_millis(&item.updated_at, "GitHub timestamp")?;
         events.push(GithubPullRequestEvent {
             id: item.id,
             number: item.number,
@@ -358,10 +358,300 @@ pub struct GithubPullRequestEvent {
     pub updated_at_ms: i64,
 }
 
-fn parse_rfc3339_millis(value: &str) -> Result<i64, String> {
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearProjectIssue {
+    pub id: String,
+    pub identifier: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub state_name: Option<String>,
+    pub state_type: Option<String>,
+    pub assignee_name: Option<String>,
+    pub url: Option<String>,
+    pub updated_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearGraphqlResponse {
+    data: Option<LinearGraphqlData>,
+    errors: Option<Vec<LinearGraphqlError>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearGraphqlError {
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearGraphqlData {
+    project: Option<LinearProjectNode>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinearProjectNode {
+    issues: LinearIssueConnection,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinearIssueConnection {
+    nodes: Vec<LinearIssueNode>,
+    page_info: LinearPageInfo,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinearPageInfo {
+    has_next_page: bool,
+    end_cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinearIssueNode {
+    id: String,
+    identifier: String,
+    title: String,
+    description: Option<String>,
+    url: Option<String>,
+    updated_at: Option<String>,
+    state: Option<LinearIssueStateNode>,
+    assignee: Option<LinearIssueAssigneeNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearIssueStateNode {
+    name: Option<String>,
+    #[serde(rename = "type")]
+    issue_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinearIssueAssigneeNode {
+    name: Option<String>,
+    display_name: Option<String>,
+}
+
+const LINEAR_GRAPHQL_URL: &str = "https://api.linear.app/graphql";
+const LINEAR_GRAPHQL_QUERY: &str = r#"
+query ProjectIssues($projectId: String!, $first: Int!, $after: String) {
+  project(id: $projectId) {
+    issues(first: $first, after: $after) {
+      nodes {
+        id
+        identifier
+        title
+        description
+        url
+        updatedAt
+        state {
+          name
+          type
+        }
+        assignee {
+          name
+          displayName
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
+"#;
+const LINEAR_PAGE_SIZE: usize = 100;
+const LINEAR_MAX_PAGES: usize = 30;
+
+#[tauri::command]
+pub async fn fetch_linear_project_issues(
+    token: String,
+    project_id: String,
+) -> Result<Vec<LinearProjectIssue>, String> {
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("Linear API token is required.".to_string());
+    }
+
+    let project_id = project_id.trim();
+    if project_id.is_empty() {
+        return Err("Linear project ID is required.".to_string());
+    }
+
+    let token = token
+        .strip_prefix("Bearer ")
+        .or_else(|| token.strip_prefix("bearer "))
+        .unwrap_or(token);
+
+    let client = reqwest::Client::new();
+    let mut issues: Vec<LinearProjectIssue> = Vec::new();
+    let mut after: Option<String> = None;
+    let mut reached_end = false;
+
+    for _ in 0..LINEAR_MAX_PAGES {
+        let payload = serde_json::json!({
+            "query": LINEAR_GRAPHQL_QUERY,
+            "variables": {
+                "projectId": project_id,
+                "first": LINEAR_PAGE_SIZE,
+                "after": after,
+            }
+        });
+        let request_body = payload.to_string();
+
+        let response = client
+            .post(LINEAR_GRAPHQL_URL)
+            .header(reqwest::header::AUTHORIZATION, token)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(reqwest::header::ACCEPT, "application/json")
+            .body(request_body)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to query Linear: {}", error))?;
+
+        let status = response.status();
+        let response_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new());
+
+        if !status.is_success() {
+            let linear_message = extract_linear_error_message(&response_body)
+                .unwrap_or_else(|| response_body.chars().take(400).collect::<String>());
+            return Err(format!(
+                "Linear API request failed with status {}: {}",
+                status.as_u16(),
+                linear_message
+            ));
+        }
+
+        let payload = serde_json::from_str::<LinearGraphqlResponse>(&response_body)
+            .map_err(|error| format!("Failed to parse Linear response: {}", error))?;
+
+        if let Some(errors) = payload.errors {
+            if !errors.is_empty() {
+                let message = errors
+                    .into_iter()
+                    .map(|error| error.message)
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                return Err(format!("Linear API returned errors: {}", message));
+            }
+        }
+
+        let data = payload
+            .data
+            .ok_or_else(|| "Linear response did not include data.".to_string())?;
+        let project = data.project.ok_or_else(|| {
+            format!("Linear project '{}' was not found or is not accessible.", project_id)
+        })?;
+        let LinearIssueConnection { nodes, page_info } = project.issues;
+
+        for issue in nodes {
+            let assignee_name = issue
+                .assignee
+                .and_then(|assignee| {
+                    let display_name = assignee.display_name.and_then(|value| {
+                        let trimmed = value.trim();
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed.to_string())
+                        }
+                    });
+                    if display_name.is_some() {
+                        return display_name;
+                    }
+                    assignee.name.and_then(|value| {
+                        let trimmed = value.trim();
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed.to_string())
+                        }
+                    })
+                });
+
+            let updated_at_ms = issue
+                .updated_at
+                .as_deref()
+                .and_then(|value| parse_rfc3339_millis(value, "Linear timestamp").ok());
+
+            issues.push(LinearProjectIssue {
+                id: issue.id,
+                identifier: issue.identifier,
+                title: issue.title,
+                description: issue.description,
+                state_name: issue.state.as_ref().and_then(|state| state.name.clone()),
+                state_type: issue.state.as_ref().and_then(|state| state.issue_type.clone()),
+                assignee_name,
+                url: issue.url,
+                updated_at_ms,
+            });
+        }
+
+        if !page_info.has_next_page {
+            reached_end = true;
+            break;
+        }
+
+        after = page_info.end_cursor;
+        if after.is_none() {
+            reached_end = true;
+            break;
+        }
+    }
+
+    if !reached_end {
+        return Err(format!(
+            "Linear project has too many issues to fetch at once (limit: {}).",
+            LINEAR_PAGE_SIZE * LINEAR_MAX_PAGES
+        ));
+    }
+
+    issues.sort_by(|left, right| {
+        (right.updated_at_ms.unwrap_or(0))
+            .cmp(&left.updated_at_ms.unwrap_or(0))
+            .then_with(|| left.identifier.cmp(&right.identifier))
+    });
+
+    Ok(issues)
+}
+
+fn extract_linear_error_message(response_body: &str) -> Option<String> {
+    let parsed = serde_json::from_str::<Value>(response_body).ok()?;
+
+    if let Some(errors) = parsed.get("errors").and_then(|value| value.as_array()) {
+        let mut messages: Vec<String> = Vec::new();
+        for error in errors {
+            if let Some(message) = error.get("message").and_then(|value| value.as_str()) {
+                let trimmed = message.trim();
+                if !trimmed.is_empty() {
+                    messages.push(trimmed.to_string());
+                }
+            }
+        }
+
+        if !messages.is_empty() {
+            return Some(messages.join("; "));
+        }
+    }
+
+    parsed.get("message")
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+}
+
+fn parse_rfc3339_millis(value: &str, context: &str) -> Result<i64, String> {
     chrono::DateTime::parse_from_rfc3339(value)
         .map(|date| date.timestamp_millis())
-        .map_err(|error| format!("Failed to parse GitHub timestamp '{}': {}", value, error))
+        .map_err(|error| format!("Failed to parse {} '{}': {}", context, value, error))
 }
 
 fn value_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {

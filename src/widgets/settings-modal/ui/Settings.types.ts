@@ -29,6 +29,7 @@ export interface SettingsState {
   claudeOAuthToken: string;
   githubToken: string;
   githubWebhookSecret: string;
+  linearApiToken: string;
   cloudApiBaseUrl: string;
   cloudApiToken: string;
 }
@@ -59,8 +60,10 @@ export interface SettingsPresentationalProps {
   onUpdateSetting: UpdateSettingHandler;
   oauthTokenVisible: boolean;
   githubTokenVisible: boolean;
+  linearTokenVisible: boolean;
   cloudTokenVisible: boolean;
   onToggleOAuthTokenVisible: () => void;
   onToggleGithubTokenVisible: () => void;
+  onToggleLinearTokenVisible: () => void;
   onToggleCloudTokenVisible: () => void;
 }

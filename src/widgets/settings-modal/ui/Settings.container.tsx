@@ -22,6 +22,7 @@ const defaultSettings: SettingsState = {
   claudeOAuthToken: "",
   githubToken: "",
   githubWebhookSecret: "",
+  linearApiToken: "",
   cloudApiBaseUrl: DEFAULT_APP_SETTINGS.cloudApiBaseUrl ?? "https://cloud.divergence.app",
   cloudApiToken: "",
 };
@@ -36,6 +37,7 @@ function SettingsContainer({
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
   const [oauthTokenVisible, setOauthTokenVisible] = useState(false);
   const [githubTokenVisible, setGithubTokenVisible] = useState(false);
+  const [linearTokenVisible, setLinearTokenVisible] = useState(false);
   const [cloudTokenVisible, setCloudTokenVisible] = useState(false);
   const updaterPresentation = useMemo(
     () => getUpdaterPresentation(updater.status, updater.version, updater.progress, updater.error),
@@ -96,6 +98,10 @@ function SettingsContainer({
     setCloudTokenVisible((prev) => !prev);
   }, []);
 
+  const handleToggleLinearTokenVisible = useCallback(() => {
+    setLinearTokenVisible((prev) => !prev);
+  }, []);
+
   return (
     <SettingsPresentational
       loading={loading}
@@ -110,9 +116,11 @@ function SettingsContainer({
       onUpdateSetting={handleUpdateSetting}
       oauthTokenVisible={oauthTokenVisible}
       githubTokenVisible={githubTokenVisible}
+      linearTokenVisible={linearTokenVisible}
       cloudTokenVisible={cloudTokenVisible}
       onToggleOAuthTokenVisible={handleToggleOAuthTokenVisible}
       onToggleGithubTokenVisible={handleToggleGithubTokenVisible}
+      onToggleLinearTokenVisible={handleToggleLinearTokenVisible}
       onToggleCloudTokenVisible={handleToggleCloudTokenVisible}
     />
   );
