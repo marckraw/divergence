@@ -8,6 +8,7 @@ import QuickEditDrawer from "./QuickEditDrawer.container";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
 import { PromptQueuePanel } from "../../../features/prompt-queue";
+import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
 import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared";
 import { IconButton, Kbd, TabButton, ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
@@ -88,6 +89,15 @@ function MainAreaPresentational({
   onQueueSendItem,
   onQueueRemoveItem,
   onQueueClear,
+  linearProjectName,
+  linearIssues,
+  linearLoading,
+  linearRefreshing,
+  linearError,
+  linearInfoMessage,
+  linearSendingIssueId,
+  onLinearRefresh,
+  onLinearSendIssue,
   renderSession,
 }: MainAreaPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -349,6 +359,12 @@ function MainAreaPresentational({
                       Queue
                     </TabButton>
                     <TabButton
+                      active={rightPanelTab === "linear"}
+                      onClick={() => onRightPanelTabChange("linear")}
+                    >
+                      Linear
+                    </TabButton>
+                    <TabButton
                       active={rightPanelTab === "tmux"}
                       onClick={() => onRightPanelTabChange("tmux")}
                     >
@@ -471,6 +487,28 @@ function MainAreaPresentational({
                           onSendItem={onQueueSendItem}
                           onRemoveItem={onQueueRemoveItem}
                           onClear={onQueueClear}
+                        />
+                      </motion.div>
+                    ) : rightPanelTab === "linear" ? (
+                      <motion.div
+                        key="linear"
+                        className="h-full"
+                        variants={panelVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        transition={panelTransition}
+                      >
+                        <LinearTaskQueuePanel
+                          projectName={linearProjectName}
+                          items={linearIssues}
+                          loading={linearLoading}
+                          refreshing={linearRefreshing}
+                          error={linearError}
+                          infoMessage={linearInfoMessage}
+                          sendingItemId={linearSendingIssueId}
+                          onRefresh={onLinearRefresh}
+                          onSendItem={onLinearSendIssue}
                         />
                       </motion.div>
                     ) : (

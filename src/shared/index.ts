@@ -80,6 +80,7 @@ export {
 } from "./lib/motion.pure";
 export { getLanguageKind, type LanguageKind } from "./lib/languageDetection.pure";
 export { getImportPathMatchFromPrefix, type ImportPathMatch } from "./lib/importPathMatch.pure";
+export { getErrorMessage } from "./lib/errors.pure";
 export { renderTemplateCommand } from "./lib/templateRendering.pure";
 export { notifyCommandFinished } from "./service/notifications.service";
 export {
@@ -149,6 +150,12 @@ export {
   normalizeGithubRepoKey,
   type GithubRepositoryRef,
 } from "./api/github.api";
+export {
+  fetchLinearProjectIssues,
+  getProjectLinearRef,
+  type LinearProjectIssue,
+  type LinearProjectRef,
+} from "./api/linear.api";
 export {
   ackCloudAutomationEvent,
   nackCloudAutomationEvent,

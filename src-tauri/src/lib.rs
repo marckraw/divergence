@@ -102,6 +102,7 @@ pub fn run() {
             commands::delete_divergence,
             commands::get_ralphy_config_summary,
             commands::fetch_github_pull_requests,
+            commands::fetch_linear_project_issues,
             commands::check_branch_status,
             commands::list_git_changes,
             commands::get_git_diff,

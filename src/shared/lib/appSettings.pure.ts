@@ -25,6 +25,7 @@ export interface AppSettings {
   claudeOAuthToken?: string;
   githubToken?: string;
   githubWebhookSecret?: string;
+  linearApiToken?: string;
   cloudApiBaseUrl?: string;
   cloudApiToken?: string;
 }
@@ -45,6 +46,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   claudeOAuthToken: "",
   githubToken: "",
   githubWebhookSecret: "",
+  linearApiToken: "",
   cloudApiBaseUrl: "https://cloud.divergence.app",
   cloudApiToken: "",
 };
@@ -139,6 +141,9 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
   const githubWebhookSecret = typeof input?.githubWebhookSecret === "string"
     ? input.githubWebhookSecret
     : "";
+  const linearApiToken = typeof input?.linearApiToken === "string"
+    ? input.linearApiToken
+    : "";
   const cloudApiBaseUrl = typeof input?.cloudApiBaseUrl === "string" && input.cloudApiBaseUrl.trim().length > 0
     ? input.cloudApiBaseUrl
     : DEFAULT_APP_SETTINGS.cloudApiBaseUrl;
@@ -159,6 +164,7 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     claudeOAuthToken,
     githubToken,
     githubWebhookSecret,
+    linearApiToken,
     cloudApiBaseUrl,
     cloudApiToken,
   };

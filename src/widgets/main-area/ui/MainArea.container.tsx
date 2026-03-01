@@ -37,10 +37,25 @@ import {
   type DiffReviewComment,
 } from "../../../features/diff-review";
 import {
+  buildLinearIssuePrompt,
+  enrichLinearIssuesWithProject,
+  formatLinearLoadFailureDetails,
+  isLinearIssueOpen,
+  mergeLinearTaskQueueIssues,
+  resolveLinearIssueProjects,
+  type LinearTaskQueueIssue,
+} from "../../../features/linear-task-queue";
+import {
   formatBytes,
   getAggregatedTerminalStatus,
   joinSessionPath,
 } from "../lib/mainArea.pure";
+import {
+  fetchLinearProjectIssues,
+  getProjectLinearRef,
+  getErrorMessage,
+  useAppSettings,
+} from "../../../shared";
 import { resolvePromptQueueScope } from "../lib/promptQueueScope.pure";
 import { readTextFile, writeTextFile } from "../../../shared/api/fs.api";
 import {
@@ -66,6 +81,7 @@ function MainAreaContainer({
   onResizeSplitPanes,
   onReconnectSession,
   onSendPromptToSession,
+  workspaceMembersByWorkspaceId,
   ...props
 }: MainAreaProps) {
   const sessionList = Array.from(sessions.values());
@@ -103,6 +119,14 @@ function MainAreaContainer({
   const [queueingPrompt, setQueueingPrompt] = useState(false);
   const [queueActionItemId, setQueueActionItemId] = useState<number | null>(null);
   const [queueSendingItemId, setQueueSendingItemId] = useState<number | null>(null);
+  const [linearProjectName, setLinearProjectName] = useState<string | null>(null);
+  const [linearIssues, setLinearIssues] = useState<LinearTaskQueueIssue[]>([]);
+  const [linearLoading, setLinearLoading] = useState(false);
+  const [linearRefreshing, setLinearRefreshing] = useState(false);
+  const [linearError, setLinearError] = useState<string | null>(null);
+  const [linearInfoMessage, setLinearInfoMessage] = useState<string | null>(null);
+  const [linearSendingIssueId, setLinearSendingIssueId] = useState<string | null>(null);
+  const { settings: appSettings } = useAppSettings();
   const {
     activeDraft,
     addComment,
@@ -147,6 +171,13 @@ function MainAreaContainer({
     setReviewRunError(null);
     setReviewRunning(false);
     clearAllDrafts();
+    setLinearProjectName(null);
+    setLinearIssues([]);
+    setLinearLoading(false);
+    setLinearRefreshing(false);
+    setLinearError(null);
+    setLinearInfoMessage(null);
+    setLinearSendingIssueId(null);
   }, [activeSession?.id, clearAllDrafts]);
 
   useEffect(() => {
@@ -187,6 +218,188 @@ function MainAreaContainer({
       cancelled = true;
     };
   }, [queueScope]);
+
+  const handleLoadLinearIssues = useCallback(async (refresh = false) => {
+    if (!activeSession) {
+      setLinearProjectName(null);
+      setLinearIssues([]);
+      setLinearError(null);
+      setLinearInfoMessage("Open a project, divergence, or workspace session to load Linear tasks.");
+      return;
+    }
+
+    const token = appSettings.linearApiToken?.trim() ?? "";
+    if (!token) {
+      setLinearProjectName(null);
+      setLinearIssues([]);
+      setLinearError(null);
+      setLinearInfoMessage("Add a Linear API token in Settings > Integrations to load tasks.");
+      return;
+    }
+
+    const isWorkspaceSession = activeSession.type === "workspace" || activeSession.type === "workspace_divergence";
+    const candidateProjects = resolveLinearIssueProjects(
+      activeSession,
+      projects,
+      workspaceMembersByWorkspaceId,
+    );
+
+    if (candidateProjects.length === 0) {
+      setLinearProjectName(null);
+      setLinearIssues([]);
+      setLinearError(null);
+      setLinearInfoMessage(
+        isWorkspaceSession
+          ? "This workspace has no member projects to load from."
+          : "Unable to resolve the active project for this session.",
+      );
+      return;
+    }
+
+    if (refresh) {
+      setLinearRefreshing(true);
+    } else {
+      setLinearLoading(true);
+    }
+
+    try {
+      const settledResults = await Promise.allSettled(
+        candidateProjects.map(async (project) => {
+          const projectRef = await getProjectLinearRef(project.path);
+          if (!projectRef?.projectId) {
+            return {
+              kind: "skipped" as const,
+              project,
+            };
+          }
+
+          const issues = await fetchLinearProjectIssues(token, projectRef.projectId);
+          return {
+            kind: "success" as const,
+            project,
+            projectRef,
+            issues,
+          };
+        }),
+      );
+
+      const successfulLoads: Array<{
+        project: (typeof candidateProjects)[number];
+        projectRef: { projectId: string; projectName: string | null };
+        issues: Awaited<ReturnType<typeof fetchLinearProjectIssues>>;
+      }> = [];
+      const skippedProjects: Array<(typeof candidateProjects)[number]> = [];
+      const failedProjects: Array<{ projectName: string; message: string }> = [];
+
+      for (const [index, result] of settledResults.entries()) {
+        const project = candidateProjects[index];
+        if (!project) {
+          continue;
+        }
+
+        if (result.status === "rejected") {
+          failedProjects.push({
+            projectName: project.name,
+            message: getErrorMessage(result.reason, "Failed to fetch Linear issues."),
+          });
+          continue;
+        }
+
+        if (result.value.kind === "skipped") {
+          skippedProjects.push(project);
+          continue;
+        }
+
+        successfulLoads.push(result.value);
+      }
+
+      const mergedIssues = mergeLinearTaskQueueIssues(
+        successfulLoads.map((load) => enrichLinearIssuesWithProject(load.issues, load.project)),
+      );
+      const visibleIssues = isWorkspaceSession
+        ? mergedIssues.filter(isLinearIssueOpen)
+        : mergedIssues;
+
+      setLinearIssues(visibleIssues);
+
+      if (isWorkspaceSession) {
+        const loadedCount = successfulLoads.length;
+        setLinearProjectName(
+          loadedCount === candidateProjects.length
+            ? `Workspace (${loadedCount} projects)`
+            : `Workspace (${loadedCount}/${candidateProjects.length} projects loaded)`,
+        );
+      } else {
+        const firstLoad = successfulLoads[0];
+        setLinearProjectName(
+          firstLoad?.projectRef.projectName
+          ?? firstLoad?.project.name
+          ?? null,
+        );
+      }
+
+      let nextError: string | null = null;
+      let nextInfoMessage: string | null = null;
+
+      if (successfulLoads.length === 0) {
+        if (skippedProjects.length === candidateProjects.length) {
+          nextInfoMessage = isWorkspaceSession
+            ? "No Linear project mappings were found in .ralphy/config.json for workspace member projects."
+            : "No Linear project mapping found in .ralphy/config.json for this project.";
+        } else if (failedProjects.length > 0) {
+          nextError = `Failed to load Linear tasks. ${formatLinearLoadFailureDetails(failedProjects)}`;
+          if (skippedProjects.length > 0) {
+            nextInfoMessage = `Skipped ${skippedProjects.length} project${
+              skippedProjects.length === 1 ? "" : "s"
+            } without Linear mapping.`;
+          }
+        }
+      } else {
+        const messageParts: string[] = [];
+        if (visibleIssues.length === 0) {
+          messageParts.push(
+            isWorkspaceSession
+              ? "No open issues found across mapped workspace projects."
+              : "No issues found in this Linear project.",
+          );
+        }
+        if (skippedProjects.length > 0) {
+          messageParts.push(
+            `Skipped ${skippedProjects.length} project${
+              skippedProjects.length === 1 ? "" : "s"
+            } without Linear mapping.`,
+          );
+        }
+        if (failedProjects.length > 0) {
+          messageParts.push(
+            `Failed to load ${failedProjects.length} project${
+              failedProjects.length === 1 ? "" : "s"
+            }: ${formatLinearLoadFailureDetails(failedProjects)}`,
+          );
+        }
+        nextInfoMessage = messageParts.length > 0 ? messageParts.join(" ") : null;
+      }
+
+      setLinearError(nextError);
+      setLinearInfoMessage(nextInfoMessage);
+    } catch (error) {
+      setLinearError(getErrorMessage(error, "Failed to load Linear tasks."));
+      setLinearInfoMessage(null);
+    } finally {
+      if (refresh) {
+        setLinearRefreshing(false);
+      } else {
+        setLinearLoading(false);
+      }
+    }
+  }, [activeSession, appSettings.linearApiToken, projects, workspaceMembersByWorkspaceId]);
+
+  useEffect(() => {
+    if (rightPanelTab !== "linear") {
+      return;
+    }
+    void handleLoadLinearIssues(false);
+  }, [handleLoadLinearIssues, rightPanelTab]);
 
   const handleOpenFile = useCallback(async (
     path: string,
@@ -458,6 +671,28 @@ function MainAreaContainer({
     }
   }, [activeSession?.id, onSendPromptToSession, queueItems]);
 
+  const handleLinearRefresh = useCallback(async () => {
+    await handleLoadLinearIssues(true);
+  }, [handleLoadLinearIssues]);
+
+  const handleLinearSendIssue = useCallback(async (issueId: string) => {
+    const activeSessionId = activeSession?.id;
+    const issue = linearIssues.find((current) => current.id === issueId);
+    if (!activeSessionId || !issue) {
+      return;
+    }
+
+    setLinearSendingIssueId(issueId);
+    try {
+      await onSendPromptToSession(activeSessionId, buildLinearIssuePrompt(issue));
+      setLinearError(null);
+    } catch (error) {
+      setLinearError(getErrorMessage(error, "Failed to send Linear task."));
+    } finally {
+      setLinearSendingIssueId((prev) => (prev === issueId ? null : prev));
+    }
+  }, [activeSession?.id, linearIssues, onSendPromptToSession]);
+
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
       onStatusChange(sessionId, status);
@@ -654,6 +889,7 @@ function MainAreaContainer({
       reconnectBySessionId={reconnectBySessionId}
       onReconnectSession={onReconnectSession}
       onSendPromptToSession={onSendPromptToSession}
+      workspaceMembersByWorkspaceId={workspaceMembersByWorkspaceId}
       sessionList={sessionList}
       activeProject={activeProject}
       activeSplit={activeSplit}
@@ -707,6 +943,15 @@ function MainAreaContainer({
       onQueueSendItem={handleQueueSendItem}
       onQueueRemoveItem={handleQueueRemoveItem}
       onQueueClear={handleQueueClear}
+      linearProjectName={linearProjectName}
+      linearIssues={linearIssues}
+      linearLoading={linearLoading}
+      linearRefreshing={linearRefreshing}
+      linearError={linearError}
+      linearInfoMessage={linearInfoMessage}
+      linearSendingIssueId={linearSendingIssueId}
+      onLinearRefresh={handleLinearRefresh}
+      onLinearSendIssue={handleLinearSendIssue}
       renderSession={renderSession}
     />
   );
