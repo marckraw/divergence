@@ -2,19 +2,38 @@ import {
   Button,
   EmptyState,
   ErrorBanner,
+  TextInput,
 } from "../../../shared";
-import { truncateLinearIssueDescription } from "../lib/linearTaskQueue.pure";
-import type { LinearTaskQueueIssue } from "../lib/linearTaskQueue.pure";
+import {
+  getLinearIssueStatusToneClass,
+  truncateLinearIssueDescription,
+} from "../lib/linearTaskQueue.pure";
+import type { LinearIssueStatusFilter, LinearTaskQueueIssue } from "../lib/linearTaskQueue.pure";
+
+const STATUS_FILTER_OPTIONS: Array<{ id: LinearIssueStatusFilter; label: string }> = [
+  { id: "open", label: "Open" },
+  { id: "all", label: "All" },
+  { id: "todo_in_progress", label: "Todo + In Progress" },
+  { id: "todo", label: "Todo" },
+  { id: "in_progress", label: "In Progress" },
+  { id: "completed", label: "Completed" },
+  { id: "canceled", label: "Canceled" },
+];
 
 export interface LinearTaskQueuePanelProps {
   projectName: string | null;
   items: LinearTaskQueueIssue[];
+  totalCount: number;
   loading: boolean;
   refreshing: boolean;
   error: string | null;
   infoMessage: string | null;
   sendingItemId: string | null;
+  statusFilter: LinearIssueStatusFilter;
+  searchQuery: string;
   onRefresh: () => Promise<void>;
+  onStatusFilterChange: (filter: LinearIssueStatusFilter) => void;
+  onSearchQueryChange: (query: string) => void;
   onSendItem: (issueId: string) => Promise<void>;
 }
 
@@ -29,14 +48,21 @@ function formatUpdatedAt(updatedAtMs: number | null): string {
 function LinearTaskQueuePanel({
   projectName,
   items,
+  totalCount,
   loading,
   refreshing,
   error,
   infoMessage,
   sendingItemId,
+  statusFilter,
+  searchQuery,
   onRefresh,
+  onStatusFilterChange,
+  onSearchQueryChange,
   onSendItem,
 }: LinearTaskQueuePanelProps) {
+  const hasFilterOrSearch = statusFilter !== "open" || searchQuery.trim().length > 0;
+
   return (
     <div className="h-full flex flex-col bg-sidebar">
       <div className="p-3 border-b border-surface space-y-2">
@@ -62,7 +88,37 @@ function LinearTaskQueuePanel({
         </div>
 
         <div className="flex items-center justify-between">
-          <span className="text-xs text-subtext">{items.length} tasks</span>
+          <span className="text-xs text-subtext">
+            {hasFilterOrSearch
+              ? `${items.length} of ${totalCount} tasks`
+              : `${totalCount} tasks`}
+          </span>
+        </div>
+
+        <TextInput
+          type="text"
+          value={searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+          placeholder="Search identifier, title, description, assignee, state..."
+          className="text-xs"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          {STATUS_FILTER_OPTIONS.map((option) => (
+            <Button
+              key={option.id}
+              type="button"
+              onClick={() => onStatusFilterChange(option.id)}
+              variant={statusFilter === option.id ? "primary" : "subtle"}
+              size="xs"
+              className={`px-2.5 py-1 text-xs rounded border ${
+                statusFilter === option.id
+                  ? "border-accent bg-accent/15 text-accent"
+                  : "border-surface text-subtext hover:text-text hover:bg-surface"
+              }`}
+            >
+              {option.label}
+            </Button>
+          ))}
         </div>
 
         {error && <ErrorBanner>{error}</ErrorBanner>}
@@ -108,7 +164,7 @@ function LinearTaskQueuePanel({
                       )}
                     </div>
                     {issue.stateName && (
-                      <span className="text-[11px] rounded border border-surface px-1.5 py-0.5 text-subtext">
+                      <span className={`text-[11px] rounded border px-1.5 py-0.5 ${getLinearIssueStatusToneClass(issue)}`}>
                         {issue.stateName}
                       </span>
                     )}

@@ -3,7 +3,10 @@ import type { WorkspaceMember } from "../../../entities/workspace";
 import type { LinearProjectIssue } from "../../../shared";
 
 const DEFAULT_DESCRIPTION_MAX_CHARS = 320;
-const COMPLETED_LINEAR_STATE_TYPES = new Set(["completed", "canceled"]);
+const TODO_LINEAR_STATE_TYPES = new Set(["unstarted", "backlog", "triage"]);
+const IN_PROGRESS_LINEAR_STATE_TYPES = new Set(["started"]);
+const COMPLETED_LINEAR_STATE_TYPES = new Set(["completed"]);
+const CANCELED_LINEAR_STATE_TYPES = new Set(["canceled", "cancelled"]);
 
 export type LinearTaskQueueSession = Pick<
   TerminalSession,
@@ -22,6 +25,15 @@ export interface LinearTaskProjectLoadFailure {
   projectName: string;
   message: string;
 }
+
+export type LinearIssueStatusFilter =
+  | "open"
+  | "all"
+  | "todo_in_progress"
+  | "todo"
+  | "in_progress"
+  | "completed"
+  | "canceled";
 
 export function truncateLinearIssueDescription(
   description: string | null,
@@ -124,11 +136,111 @@ export function mergeLinearTaskQueueIssues(
 export function isLinearIssueOpen(
   issue: Pick<LinearProjectIssue, "stateType">,
 ): boolean {
-  const normalizedStateType = issue.stateType?.trim().toLowerCase();
+  const normalizedStateType = normalizeLinearIssueStateType(issue.stateType);
   if (!normalizedStateType) {
     return true;
   }
-  return !COMPLETED_LINEAR_STATE_TYPES.has(normalizedStateType);
+  return !COMPLETED_LINEAR_STATE_TYPES.has(normalizedStateType)
+    && !CANCELED_LINEAR_STATE_TYPES.has(normalizedStateType);
+}
+
+export function matchesLinearIssueStatusFilter(
+  issue: Pick<LinearProjectIssue, "stateType">,
+  filter: LinearIssueStatusFilter,
+): boolean {
+  const normalizedStateType = normalizeLinearIssueStateType(issue.stateType);
+
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "open") {
+    return isLinearIssueOpen(issue);
+  }
+
+  if (!normalizedStateType) {
+    return false;
+  }
+
+  if (filter === "todo_in_progress") {
+    return TODO_LINEAR_STATE_TYPES.has(normalizedStateType)
+      || IN_PROGRESS_LINEAR_STATE_TYPES.has(normalizedStateType);
+  }
+
+  if (filter === "todo") {
+    return TODO_LINEAR_STATE_TYPES.has(normalizedStateType);
+  }
+
+  if (filter === "in_progress") {
+    return IN_PROGRESS_LINEAR_STATE_TYPES.has(normalizedStateType);
+  }
+
+  if (filter === "completed") {
+    return COMPLETED_LINEAR_STATE_TYPES.has(normalizedStateType);
+  }
+
+  return CANCELED_LINEAR_STATE_TYPES.has(normalizedStateType);
+}
+
+export function matchesLinearIssueSearch(
+  issue: Pick<
+    LinearTaskQueueIssue,
+    "identifier" | "title" | "description" | "assigneeName" | "stateName"
+  >,
+  query: string,
+): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const searchableFields = [
+    issue.identifier,
+    issue.title,
+    issue.description,
+    issue.assigneeName,
+    issue.stateName,
+  ];
+
+  return searchableFields.some((value) => value?.toLowerCase().includes(normalizedQuery));
+}
+
+export function filterLinearTaskQueueIssues(
+  issues: LinearTaskQueueIssue[],
+  statusFilter: LinearIssueStatusFilter,
+  query: string,
+): LinearTaskQueueIssue[] {
+  return issues.filter((issue) => (
+    matchesLinearIssueStatusFilter(issue, statusFilter)
+    && matchesLinearIssueSearch(issue, query)
+  ));
+}
+
+export function getLinearIssueStatusToneClass(
+  issue: Pick<LinearProjectIssue, "stateType">,
+): string {
+  const normalizedStateType = normalizeLinearIssueStateType(issue.stateType);
+  if (!normalizedStateType) {
+    return "border-surface text-subtext bg-main/30";
+  }
+
+  if (CANCELED_LINEAR_STATE_TYPES.has(normalizedStateType)) {
+    return "border-red/30 bg-red/10 text-red";
+  }
+
+  if (COMPLETED_LINEAR_STATE_TYPES.has(normalizedStateType)) {
+    return "border-green/30 bg-green/10 text-green";
+  }
+
+  if (IN_PROGRESS_LINEAR_STATE_TYPES.has(normalizedStateType)) {
+    return "border-accent/30 bg-accent/10 text-accent";
+  }
+
+  if (TODO_LINEAR_STATE_TYPES.has(normalizedStateType)) {
+    return "border-yellow/40 bg-yellow/15 text-yellow";
+  }
+
+  return "border-surface text-subtext bg-main/30";
 }
 
 export function buildLinearIssuePrompt(
@@ -196,4 +308,9 @@ export function formatLinearLoadFailureDetails(
   }
 
   return details.join(" | ");
+}
+
+function normalizeLinearIssueStateType(stateType: string | null | undefined): string | null {
+  const normalized = stateType?.trim().toLowerCase();
+  return normalized || null;
 }

@@ -91,12 +91,17 @@ function MainAreaPresentational({
   onQueueClear,
   linearProjectName,
   linearIssues,
+  linearTotalIssueCount,
   linearLoading,
   linearRefreshing,
   linearError,
   linearInfoMessage,
   linearSendingIssueId,
+  linearStatusFilter,
+  linearSearchQuery,
   onLinearRefresh,
+  onLinearStatusFilterChange,
+  onLinearSearchQueryChange,
   onLinearSendIssue,
   renderSession,
 }: MainAreaPresentationalProps) {
@@ -502,12 +507,17 @@ function MainAreaPresentational({
                         <LinearTaskQueuePanel
                           projectName={linearProjectName}
                           items={linearIssues}
+                          totalCount={linearTotalIssueCount}
                           loading={linearLoading}
                           refreshing={linearRefreshing}
                           error={linearError}
                           infoMessage={linearInfoMessage}
                           sendingItemId={linearSendingIssueId}
+                          statusFilter={linearStatusFilter}
+                          searchQuery={linearSearchQuery}
                           onRefresh={onLinearRefresh}
+                          onStatusFilterChange={onLinearStatusFilterChange}
+                          onSearchQueryChange={onLinearSearchQueryChange}
                           onSendItem={onLinearSendIssue}
                         />
                       </motion.div>

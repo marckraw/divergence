@@ -3,13 +3,18 @@ export type { LinearTaskQueuePanelProps } from "./ui/LinearTaskQueuePanel.presen
 export {
   buildLinearIssuePrompt,
   enrichLinearIssuesWithProject,
+  filterLinearTaskQueueIssues,
   formatLinearLoadFailureDetails,
+  getLinearIssueStatusToneClass,
   isLinearIssueOpen,
+  matchesLinearIssueSearch,
+  matchesLinearIssueStatusFilter,
   mergeLinearTaskQueueIssues,
   resolveLinearIssueProjects,
   truncateLinearIssueDescription,
 } from "./lib/linearTaskQueue.pure";
 export type {
+  LinearIssueStatusFilter,
   LinearTaskProjectLoadFailure,
   LinearTaskQueueIssue,
   LinearTaskQueueProject,
