@@ -6,6 +6,7 @@ export {
   filterLinearTaskQueueIssues,
   formatLinearLoadFailureDetails,
   getLinearIssueStatusToneClass,
+  getLinearWorkflowStateToneClass,
   isLinearIssueOpen,
   matchesLinearIssueSearch,
   matchesLinearIssueStatusFilter,

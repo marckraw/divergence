@@ -53,10 +53,13 @@ import {
 } from "../lib/mainArea.pure";
 import {
   fetchLinearProjectIssues,
+  fetchLinearWorkflowStates,
   getProjectLinearRef,
   getErrorMessage,
+  updateLinearIssueState,
   useAppSettings,
 } from "../../../shared";
+import type { LinearWorkflowState } from "../../../shared";
 import { resolvePromptQueueScope } from "../lib/promptQueueScope.pure";
 import { readTextFile, writeTextFile } from "../../../shared/api/fs.api";
 import {
@@ -129,6 +132,9 @@ function MainAreaContainer({
   const [linearSendingIssueId, setLinearSendingIssueId] = useState<string | null>(null);
   const [linearStatusFilter, setLinearStatusFilter] = useState<LinearIssueStatusFilter>("open");
   const [linearSearchQuery, setLinearSearchQuery] = useState("");
+  const [linearWorkflowStates, setLinearWorkflowStates] = useState<LinearWorkflowState[]>([]);
+  const [linearUpdatingIssueId, setLinearUpdatingIssueId] = useState<string | null>(null);
+  const [linearStatePickerOpenIssueId, setLinearStatePickerOpenIssueId] = useState<string | null>(null);
   const lastAutoLoadedLinearContextKeyRef = useRef<string | null>(null);
   const linearContextKeyRef = useRef<string | null>(null);
   const { settings: appSettings } = useAppSettings();
@@ -225,6 +231,9 @@ function MainAreaContainer({
     setLinearError(null);
     setLinearInfoMessage(null);
     setLinearSendingIssueId(null);
+    setLinearWorkflowStates([]);
+    setLinearUpdatingIssueId(null);
+    setLinearStatePickerOpenIssueId(null);
   }, [activeSession?.id, clearAllDrafts]);
 
   useEffect(() => {
@@ -335,7 +344,7 @@ function MainAreaContainer({
 
       const successfulLoads: Array<{
         project: (typeof candidateProjects)[number];
-        projectRef: { projectId: string; projectName: string | null };
+        projectRef: { projectId: string; projectName: string | null; teamId: string | null };
         issues: Awaited<ReturnType<typeof fetchLinearProjectIssues>>;
       }> = [];
       const skippedProjects: Array<(typeof candidateProjects)[number]> = [];
@@ -371,6 +380,25 @@ function MainAreaContainer({
       }
 
       setLinearIssues(mergedIssues);
+
+      const firstTeamId = successfulLoads
+        .map((load) => load.projectRef.teamId)
+        .find((id): id is string => Boolean(id?.trim()));
+
+      if (firstTeamId) {
+        try {
+          const states = await fetchLinearWorkflowStates(token, firstTeamId);
+          if (linearContextKeyRef.current === requestContextKey) {
+            setLinearWorkflowStates(states);
+          }
+        } catch {
+          if (linearContextKeyRef.current === requestContextKey) {
+            setLinearWorkflowStates([]);
+          }
+        }
+      } else {
+        setLinearWorkflowStates([]);
+      }
 
       if (isWorkspaceSession) {
         const loadedCount = successfulLoads.length;
@@ -770,6 +798,38 @@ function MainAreaContainer({
     }
   }, [activeSession?.id, linearIssues, onSendPromptToSession]);
 
+  const handleLinearUpdateIssueState = useCallback(async (issueId: string, stateId: string) => {
+    const token = appSettings.linearApiToken?.trim() ?? "";
+    if (!token) {
+      setLinearError("Linear API token is required to update issue state.");
+      return;
+    }
+
+    setLinearUpdatingIssueId(issueId);
+    try {
+      const result = await updateLinearIssueState(token, issueId, stateId);
+      if (result.success) {
+        setLinearIssues((prev) => prev.map((issue) => {
+          if (issue.id !== issueId) {
+            return issue;
+          }
+          return {
+            ...issue,
+            stateName: result.stateName ?? issue.stateName,
+            stateType: result.stateType ?? issue.stateType,
+          };
+        }));
+        setLinearError(null);
+      } else {
+        setLinearError("Linear API reported the state update was not successful.");
+      }
+    } catch (error) {
+      setLinearError(getErrorMessage(error, "Failed to update issue state."));
+    } finally {
+      setLinearUpdatingIssueId((prev) => (prev === issueId ? null : prev));
+    }
+  }, [appSettings.linearApiToken]);
+
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
       onStatusChange(sessionId, status);
@@ -1034,6 +1094,11 @@ function MainAreaContainer({
       onLinearStatusFilterChange={setLinearStatusFilter}
       onLinearSearchQueryChange={setLinearSearchQuery}
       onLinearSendIssue={handleLinearSendIssue}
+      linearWorkflowStates={linearWorkflowStates}
+      linearUpdatingIssueId={linearUpdatingIssueId}
+      linearStatePickerOpenIssueId={linearStatePickerOpenIssueId}
+      onLinearToggleStatePicker={setLinearStatePickerOpenIssueId}
+      onLinearUpdateIssueState={handleLinearUpdateIssueState}
       renderSession={renderSession}
     />
   );

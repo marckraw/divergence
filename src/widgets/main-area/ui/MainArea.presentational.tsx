@@ -103,6 +103,11 @@ function MainAreaPresentational({
   onLinearStatusFilterChange,
   onLinearSearchQueryChange,
   onLinearSendIssue,
+  linearWorkflowStates,
+  linearUpdatingIssueId,
+  linearStatePickerOpenIssueId,
+  onLinearToggleStatePicker,
+  onLinearUpdateIssueState,
   renderSession,
 }: MainAreaPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -515,10 +520,15 @@ function MainAreaPresentational({
                           sendingItemId={linearSendingIssueId}
                           statusFilter={linearStatusFilter}
                           searchQuery={linearSearchQuery}
+                          workflowStates={linearWorkflowStates}
+                          updatingIssueId={linearUpdatingIssueId}
+                          statePickerOpenIssueId={linearStatePickerOpenIssueId}
+                          onToggleStatePicker={onLinearToggleStatePicker}
                           onRefresh={onLinearRefresh}
                           onStatusFilterChange={onLinearStatusFilterChange}
                           onSearchQueryChange={onLinearSearchQueryChange}
                           onSendItem={onLinearSendIssue}
+                          onUpdateIssueState={onLinearUpdateIssueState}
                         />
                       </motion.div>
                     ) : (

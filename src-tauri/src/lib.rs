@@ -112,6 +112,8 @@ pub fn run() {
             commands::get_ralphy_config_summary,
             commands::fetch_github_pull_requests,
             commands::fetch_linear_project_issues,
+            commands::fetch_linear_workflow_states,
+            commands::update_linear_issue_state,
             commands::check_branch_status,
             commands::list_git_changes,
             commands::get_git_diff,

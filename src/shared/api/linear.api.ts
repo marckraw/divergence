@@ -42,6 +42,20 @@ export async function getProjectLinearRef(projectPath: string): Promise<LinearPr
   };
 }
 
+export interface LinearWorkflowState {
+  id: string;
+  name: string;
+  stateType: string;
+  color: string;
+  position: number;
+}
+
+export interface LinearIssueStateUpdate {
+  success: boolean;
+  stateName: string | null;
+  stateType: string | null;
+}
+
 export async function fetchLinearProjectIssues(
   token: string,
   projectId: string,
@@ -49,5 +63,27 @@ export async function fetchLinearProjectIssues(
   return invoke<LinearProjectIssue[]>("fetch_linear_project_issues", {
     token,
     projectId,
+  });
+}
+
+export async function fetchLinearWorkflowStates(
+  token: string,
+  teamId: string,
+): Promise<LinearWorkflowState[]> {
+  return invoke<LinearWorkflowState[]>("fetch_linear_workflow_states", {
+    token,
+    teamId,
+  });
+}
+
+export async function updateLinearIssueState(
+  token: string,
+  issueId: string,
+  stateId: string,
+): Promise<LinearIssueStateUpdate> {
+  return invoke<LinearIssueStateUpdate>("update_linear_issue_state", {
+    token,
+    issueId,
+    stateId,
   });
 }

@@ -622,6 +622,303 @@ pub async fn fetch_linear_project_issues(
     Ok(issues)
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearWorkflowState {
+    pub id: String,
+    pub name: String,
+    pub state_type: String,
+    pub color: String,
+    pub position: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearWorkflowStatesResponse {
+    data: Option<LinearWorkflowStatesData>,
+    errors: Option<Vec<LinearGraphqlError>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearWorkflowStatesData {
+    team: Option<LinearTeamNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearTeamNode {
+    states: LinearWorkflowStatesConnection,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearWorkflowStatesConnection {
+    nodes: Vec<LinearWorkflowStateNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearWorkflowStateNode {
+    id: String,
+    name: String,
+    #[serde(rename = "type")]
+    state_type: String,
+    color: String,
+    position: f64,
+}
+
+const LINEAR_WORKFLOW_STATES_QUERY: &str = r#"
+query WorkflowStates($teamId: String!) {
+  team(id: $teamId) {
+    states {
+      nodes {
+        id
+        name
+        type
+        color
+        position
+      }
+    }
+  }
+}
+"#;
+
+#[tauri::command]
+pub async fn fetch_linear_workflow_states(
+    token: String,
+    team_id: String,
+) -> Result<Vec<LinearWorkflowState>, String> {
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("Linear API token is required.".to_string());
+    }
+
+    let team_id = team_id.trim();
+    if team_id.is_empty() {
+        return Err("Linear team ID is required.".to_string());
+    }
+
+    let token = token
+        .strip_prefix("Bearer ")
+        .or_else(|| token.strip_prefix("bearer "))
+        .unwrap_or(token);
+
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "query": LINEAR_WORKFLOW_STATES_QUERY,
+        "variables": {
+            "teamId": team_id,
+        }
+    });
+
+    let response = client
+        .post(LINEAR_GRAPHQL_URL)
+        .header(reqwest::header::AUTHORIZATION, token)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header(reqwest::header::ACCEPT, "application/json")
+        .body(payload.to_string())
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query Linear: {}", error))?;
+
+    let status = response.status();
+    let response_body = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::new());
+
+    if !status.is_success() {
+        let linear_message = extract_linear_error_message(&response_body)
+            .unwrap_or_else(|| response_body.chars().take(400).collect::<String>());
+        return Err(format!(
+            "Linear API request failed with status {}: {}",
+            status.as_u16(),
+            linear_message
+        ));
+    }
+
+    let parsed = serde_json::from_str::<LinearWorkflowStatesResponse>(&response_body)
+        .map_err(|error| format!("Failed to parse Linear response: {}", error))?;
+
+    if let Some(errors) = parsed.errors {
+        if !errors.is_empty() {
+            let message = errors
+                .into_iter()
+                .map(|error| error.message)
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Err(format!("Linear API returned errors: {}", message));
+        }
+    }
+
+    let data = parsed
+        .data
+        .ok_or_else(|| "Linear response did not include data.".to_string())?;
+    let team = data.team.ok_or_else(|| {
+        format!("Linear team '{}' was not found or is not accessible.", team_id)
+    })?;
+
+    let mut states: Vec<LinearWorkflowState> = team
+        .states
+        .nodes
+        .into_iter()
+        .map(|node| LinearWorkflowState {
+            id: node.id,
+            name: node.name,
+            state_type: node.state_type,
+            color: node.color,
+            position: node.position,
+        })
+        .collect();
+
+    states.sort_by(|left, right| left.position.partial_cmp(&right.position).unwrap_or(std::cmp::Ordering::Equal));
+
+    Ok(states)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearIssueStateUpdate {
+    pub success: bool,
+    pub state_name: Option<String>,
+    pub state_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearIssueUpdateResponse {
+    data: Option<LinearIssueUpdateData>,
+    errors: Option<Vec<LinearGraphqlError>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LinearIssueUpdateData {
+    issue_update: Option<LinearIssueUpdatePayload>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearIssueUpdatePayload {
+    success: bool,
+    issue: Option<LinearIssueUpdateIssueNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearIssueUpdateIssueNode {
+    state: Option<LinearIssueUpdateStateNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LinearIssueUpdateStateNode {
+    name: Option<String>,
+    #[serde(rename = "type")]
+    state_type: Option<String>,
+}
+
+const LINEAR_UPDATE_ISSUE_STATE_MUTATION: &str = r#"
+mutation IssueUpdate($issueId: String!, $stateId: String!) {
+  issueUpdate(id: $issueId, input: { stateId: $stateId }) {
+    success
+    issue {
+      id
+      state {
+        id
+        name
+        type
+      }
+    }
+  }
+}
+"#;
+
+#[tauri::command]
+pub async fn update_linear_issue_state(
+    token: String,
+    issue_id: String,
+    state_id: String,
+) -> Result<LinearIssueStateUpdate, String> {
+    let token = token.trim();
+    if token.is_empty() {
+        return Err("Linear API token is required.".to_string());
+    }
+
+    let issue_id = issue_id.trim();
+    if issue_id.is_empty() {
+        return Err("Linear issue ID is required.".to_string());
+    }
+
+    let state_id = state_id.trim();
+    if state_id.is_empty() {
+        return Err("Linear state ID is required.".to_string());
+    }
+
+    let token = token
+        .strip_prefix("Bearer ")
+        .or_else(|| token.strip_prefix("bearer "))
+        .unwrap_or(token);
+
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "query": LINEAR_UPDATE_ISSUE_STATE_MUTATION,
+        "variables": {
+            "issueId": issue_id,
+            "stateId": state_id,
+        }
+    });
+
+    let response = client
+        .post(LINEAR_GRAPHQL_URL)
+        .header(reqwest::header::AUTHORIZATION, token)
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .header(reqwest::header::ACCEPT, "application/json")
+        .body(payload.to_string())
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query Linear: {}", error))?;
+
+    let status = response.status();
+    let response_body = response
+        .text()
+        .await
+        .unwrap_or_else(|_| String::new());
+
+    if !status.is_success() {
+        let linear_message = extract_linear_error_message(&response_body)
+            .unwrap_or_else(|| response_body.chars().take(400).collect::<String>());
+        return Err(format!(
+            "Linear API request failed with status {}: {}",
+            status.as_u16(),
+            linear_message
+        ));
+    }
+
+    let parsed = serde_json::from_str::<LinearIssueUpdateResponse>(&response_body)
+        .map_err(|error| format!("Failed to parse Linear response: {}", error))?;
+
+    if let Some(errors) = parsed.errors {
+        if !errors.is_empty() {
+            let message = errors
+                .into_iter()
+                .map(|error| error.message)
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Err(format!("Linear API returned errors: {}", message));
+        }
+    }
+
+    let data = parsed
+        .data
+        .ok_or_else(|| "Linear response did not include data.".to_string())?;
+    let update = data
+        .issue_update
+        .ok_or_else(|| "Linear response did not include issueUpdate.".to_string())?;
+
+    Ok(LinearIssueStateUpdate {
+        success: update.success,
+        state_name: update.issue.as_ref().and_then(|issue| {
+            issue.state.as_ref().and_then(|state| state.name.clone())
+        }),
+        state_type: update.issue.as_ref().and_then(|issue| {
+            issue.state.as_ref().and_then(|state| state.state_type.clone())
+        }),
+    })
+}
+
 fn extract_linear_error_message(response_body: &str) -> Option<String> {
     let parsed = serde_json::from_str::<Value>(response_body).ok()?;
 

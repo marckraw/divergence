@@ -21,6 +21,7 @@ import type {
   LinearIssueStatusFilter,
   LinearTaskQueueIssue,
 } from "../../../features/linear-task-queue";
+import type { LinearWorkflowState } from "../../../shared";
 
 export interface MainAreaProps {
   projects: Project[];
@@ -138,5 +139,10 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   onLinearStatusFilterChange: (filter: LinearIssueStatusFilter) => void;
   onLinearSearchQueryChange: (query: string) => void;
   onLinearSendIssue: (issueId: string) => Promise<void>;
+  linearWorkflowStates: LinearWorkflowState[];
+  linearUpdatingIssueId: string | null;
+  linearStatePickerOpenIssueId: string | null;
+  onLinearToggleStatePicker: (issueId: string | null) => void;
+  onLinearUpdateIssueState: (issueId: string, stateId: string) => Promise<void>;
   renderSession: (session: TerminalSession) => ReactNode;
 }

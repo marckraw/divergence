@@ -310,6 +310,31 @@ export function formatLinearLoadFailureDetails(
   return details.join(" | ");
 }
 
+export function getLinearWorkflowStateToneClass(stateType: string): string {
+  const normalized = stateType.trim().toLowerCase() || null;
+  if (!normalized) {
+    return "border-surface text-subtext bg-main/30";
+  }
+
+  if (CANCELED_LINEAR_STATE_TYPES.has(normalized)) {
+    return "border-red/30 bg-red/10 text-red";
+  }
+
+  if (COMPLETED_LINEAR_STATE_TYPES.has(normalized)) {
+    return "border-green/30 bg-green/10 text-green";
+  }
+
+  if (IN_PROGRESS_LINEAR_STATE_TYPES.has(normalized)) {
+    return "border-accent/30 bg-accent/10 text-accent";
+  }
+
+  if (TODO_LINEAR_STATE_TYPES.has(normalized)) {
+    return "border-yellow/40 bg-yellow/15 text-yellow";
+  }
+
+  return "border-surface text-subtext bg-main/30";
+}
+
 function normalizeLinearIssueStateType(stateType: string | null | undefined): string | null {
   const normalized = stateType?.trim().toLowerCase();
   return normalized || null;
