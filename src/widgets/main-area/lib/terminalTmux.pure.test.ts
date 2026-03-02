@@ -15,9 +15,13 @@ describe("terminal tmux utils", () => {
 
   it("includes required bootstrap command parts", () => {
     const command = buildTmuxBootstrapCommand();
-    expect(command).toContain("tmux has-session");
+    expect(command).toContain("TMUX_BIN");
+    expect(command).toContain("\"$TMUX_BIN\" has-session");
+    expect(command).toContain("SESSION_EXISTS");
     expect(command).toContain("history-limit");
-    expect(command).toContain("exec tmux attach");
+    expect(command).toContain("if [ \"$SESSION_EXISTS\" -eq 0 ]; then");
+    expect(command).toContain("@divergence_bootstrap_initialized");
+    expect(command).toContain("exec \"$TMUX_BIN\" attach-session");
     expect(command).toContain("tmux not found, starting zsh");
   });
 
