@@ -50,7 +50,8 @@ export function spawnInteractiveShellPty(options: SpawnPtyBaseOptions): IPty {
 }
 
 export function spawnTmuxPty(options: SpawnTmuxPtyOptions): IPty {
-  return spawn("/bin/zsh", ["-l", "-i", "-c", options.tmuxCommand], {
+  // Tmux bootstrap does not need an interactive shell; skipping `-i` avoids slow plugin startup.
+  return spawn("/bin/zsh", ["-l", "-c", options.tmuxCommand], {
     cols: options.cols,
     rows: options.rows,
     cwd: options.cwd,

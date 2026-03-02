@@ -15,8 +15,19 @@ export function sanitizeTmuxSessionNameForShell(
 
 export function buildTmuxBootstrapCommand(): string {
   return `
-if command -v tmux >/dev/null 2>&1; then
+TMUX_BIN="$(command -v tmux 2>/dev/null || true)"
+if [ -z "$TMUX_BIN" ]; then
+  for CANDIDATE in /opt/homebrew/bin/tmux /usr/local/bin/tmux /opt/local/bin/tmux /usr/bin/tmux /bin/tmux; do
+    if [ -x "$CANDIDATE" ]; then
+      TMUX_BIN="$CANDIDATE"
+      break
+    fi
+  done
+fi
+
+if [ -n "$TMUX_BIN" ]; then
   COPY_CMD=""
+  SESSION_EXISTS=1
   if command -v pbcopy >/dev/null 2>&1; then
     COPY_CMD="pbcopy"
   elif command -v wl-copy >/dev/null 2>&1; then
@@ -27,25 +38,30 @@ if command -v tmux >/dev/null 2>&1; then
     COPY_CMD="xsel --clipboard --input"
   fi
 
-  if tmux has-session -t "$DIVERGENCE_TMUX_SESSION" 2>/dev/null; then
-    tmux set -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
-  else
-    tmux new-session -d -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD"
-    tmux set -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
+  if ! "$TMUX_BIN" has-session -t "$DIVERGENCE_TMUX_SESSION" 2>/dev/null; then
+    SESSION_EXISTS=0
+    "$TMUX_BIN" new-session -d -s "$DIVERGENCE_TMUX_SESSION" -c "$DIVERGENCE_TMUX_CWD"
   fi
 
-  tmux set-environment -t "$DIVERGENCE_TMUX_SESSION" DIVERGENCE_APP 1
-  tmux set -g mouse on
-
-  if [ -n "$COPY_CMD" ]; then
-    tmux set -g set-clipboard on
-    tmux bind -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "$COPY_CMD"
-    tmux bind -T copy-mode MouseDragEnd1Pane send -X copy-pipe-and-cancel "$COPY_CMD"
-    tmux bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel "$COPY_CMD"
-    tmux bind -T copy-mode Enter send -X copy-pipe-and-cancel "$COPY_CMD"
+  if [ "$SESSION_EXISTS" -eq 0 ]; then
+    "$TMUX_BIN" set-option -q -t "$DIVERGENCE_TMUX_SESSION" history-limit "$DIVERGENCE_TMUX_HISTORY_LIMIT"
   fi
 
-  exec tmux attach -t "$DIVERGENCE_TMUX_SESSION"
+  "$TMUX_BIN" set-environment -t "$DIVERGENCE_TMUX_SESSION" DIVERGENCE_APP 1
+
+  if [ "$("$TMUX_BIN" show-options -gqv @divergence_bootstrap_initialized)" != "1" ]; then
+    "$TMUX_BIN" set-option -gq mouse on
+    if [ -n "$COPY_CMD" ]; then
+      "$TMUX_BIN" set-option -gq set-clipboard on
+      "$TMUX_BIN" bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "$COPY_CMD"
+      "$TMUX_BIN" bind-key -T copy-mode MouseDragEnd1Pane send -X copy-pipe-and-cancel "$COPY_CMD"
+      "$TMUX_BIN" bind-key -T copy-mode-vi Enter send -X copy-pipe-and-cancel "$COPY_CMD"
+      "$TMUX_BIN" bind-key -T copy-mode Enter send -X copy-pipe-and-cancel "$COPY_CMD"
+    fi
+    "$TMUX_BIN" set-option -gq @divergence_bootstrap_initialized 1
+  fi
+
+  exec "$TMUX_BIN" attach-session -t "$DIVERGENCE_TMUX_SESSION"
 else
   echo "tmux not found, starting zsh"
   exec /bin/zsh -l -i
