@@ -157,3 +157,12 @@ export async function executeCreateWorkspaceDivergences({
     },
   });
 }
+
+export function queueCreateWorkspaceDivergences(
+  params: ExecuteCreateWorkspaceDivergencesParams,
+): Promise<void> {
+  void executeCreateWorkspaceDivergences(params).catch((error) => {
+    console.error("Create workspace divergences task failed:", error);
+  });
+  return Promise.resolve();
+}

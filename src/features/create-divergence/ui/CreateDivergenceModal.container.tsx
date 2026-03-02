@@ -12,7 +12,6 @@ function CreateDivergenceModalContainer({
   project,
   onClose,
   onCreate,
-  onCreated,
 }: CreateDivergenceModalProps) {
   const [branchName, setBranchName] = useState("");
   const [useExistingBranch, setUseExistingBranch] = useState(false);
@@ -49,15 +48,14 @@ function CreateDivergenceModalContainer({
     setError(null);
 
     try {
-      const divergence = await onCreate(normalizedBranchName, useExistingBranch);
-      onCreated(divergence);
+      await onCreate(normalizedBranchName, useExistingBranch);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsCreating(false);
     }
-  }, [branchName, onClose, onCreate, onCreated, useExistingBranch]);
+  }, [branchName, onClose, onCreate, useExistingBranch]);
 
   const handleUseExistingBranchChange = useCallback((next: boolean) => {
     setUseExistingBranch(next);

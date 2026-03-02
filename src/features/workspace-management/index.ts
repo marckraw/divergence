@@ -16,6 +16,7 @@ export { default as CreateWorkspaceModal } from "./ui/CreateWorkspaceModal.conta
 export { default as CreateWorkspaceDivergenceModal } from "./ui/CreateWorkspaceDivergenceModal.container";
 export {
   executeCreateWorkspaceDivergences,
+  queueCreateWorkspaceDivergences,
   type ExecuteCreateWorkspaceDivergencesParams,
 } from "./service/createWorkspaceDivergences.service";
 export {

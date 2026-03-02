@@ -79,3 +79,10 @@ export async function executeCreateDivergence({
     },
   });
 }
+
+export function queueCreateDivergence(params: ExecuteCreateDivergenceParams): Promise<void> {
+  void executeCreateDivergence(params).catch((error) => {
+    console.error("Create divergence task failed:", error);
+  });
+  return Promise.resolve();
+}
