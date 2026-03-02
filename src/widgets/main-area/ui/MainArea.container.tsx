@@ -39,10 +39,11 @@ import {
 import {
   buildLinearIssuePrompt,
   enrichLinearIssuesWithProject,
+  filterLinearTaskQueueIssues,
   formatLinearLoadFailureDetails,
-  isLinearIssueOpen,
   mergeLinearTaskQueueIssues,
   resolveLinearIssueProjects,
+  type LinearIssueStatusFilter,
   type LinearTaskQueueIssue,
 } from "../../../features/linear-task-queue";
 import {
@@ -126,6 +127,10 @@ function MainAreaContainer({
   const [linearError, setLinearError] = useState<string | null>(null);
   const [linearInfoMessage, setLinearInfoMessage] = useState<string | null>(null);
   const [linearSendingIssueId, setLinearSendingIssueId] = useState<string | null>(null);
+  const [linearStatusFilter, setLinearStatusFilter] = useState<LinearIssueStatusFilter>("open");
+  const [linearSearchQuery, setLinearSearchQuery] = useState("");
+  const lastAutoLoadedLinearContextKeyRef = useRef<string | null>(null);
+  const linearContextKeyRef = useRef<string | null>(null);
   const { settings: appSettings } = useAppSettings();
   const {
     activeDraft,
@@ -152,6 +157,48 @@ function MainAreaContainer({
     () => resolvePromptQueueScope(activeSession),
     [activeSession],
   );
+  const activeSessionId = activeSession?.id ?? null;
+  const activeSessionType = activeSession?.type ?? null;
+  const activeSessionProjectId = activeSession?.projectId ?? null;
+  const activeSessionTargetId = activeSession?.targetId ?? null;
+  const activeSessionWorkspaceOwnerId = activeSession?.workspaceOwnerId ?? null;
+  const linearSessionContext = useMemo(() => {
+    if (!activeSessionType || activeSessionProjectId === null || activeSessionTargetId === null) {
+      return null;
+    }
+
+    return {
+      type: activeSessionType,
+      projectId: activeSessionProjectId,
+      targetId: activeSessionTargetId,
+      workspaceOwnerId: activeSessionWorkspaceOwnerId ?? undefined,
+    };
+  }, [
+    activeSessionProjectId,
+    activeSessionTargetId,
+    activeSessionType,
+    activeSessionWorkspaceOwnerId,
+  ]);
+  const linearContextKey = useMemo(() => {
+    if (!activeSessionId || !linearSessionContext) {
+      return null;
+    }
+
+    return [
+      activeSessionId,
+      linearSessionContext.type,
+      linearSessionContext.projectId,
+      linearSessionContext.targetId,
+      linearSessionContext.workspaceOwnerId ?? "none",
+    ].join(":");
+  }, [activeSessionId, linearSessionContext]);
+  const visibleLinearIssues = useMemo(() => (
+    filterLinearTaskQueueIssues(linearIssues, linearStatusFilter, linearSearchQuery)
+  ), [linearIssues, linearSearchQuery, linearStatusFilter]);
+
+  useEffect(() => {
+    linearContextKeyRef.current = linearContextKey;
+  }, [linearContextKey]);
 
   useEffect(() => {
     setOpenFilePath(null);
@@ -219,13 +266,15 @@ function MainAreaContainer({
     };
   }, [queueScope]);
 
-  const handleLoadLinearIssues = useCallback(async (refresh = false) => {
-    if (!activeSession) {
+  const handleLoadLinearIssues = useCallback(async (refresh = false): Promise<boolean> => {
+    const requestContextKey = linearContextKeyRef.current;
+
+    if (!linearSessionContext || !requestContextKey) {
       setLinearProjectName(null);
       setLinearIssues([]);
       setLinearError(null);
       setLinearInfoMessage("Open a project, divergence, or workspace session to load Linear tasks.");
-      return;
+      return false;
     }
 
     const token = appSettings.linearApiToken?.trim() ?? "";
@@ -234,12 +283,13 @@ function MainAreaContainer({
       setLinearIssues([]);
       setLinearError(null);
       setLinearInfoMessage("Add a Linear API token in Settings > Integrations to load tasks.");
-      return;
+      return false;
     }
 
-    const isWorkspaceSession = activeSession.type === "workspace" || activeSession.type === "workspace_divergence";
+    const isWorkspaceSession = linearSessionContext.type === "workspace"
+      || linearSessionContext.type === "workspace_divergence";
     const candidateProjects = resolveLinearIssueProjects(
-      activeSession,
+      linearSessionContext,
       projects,
       workspaceMembersByWorkspaceId,
     );
@@ -253,7 +303,7 @@ function MainAreaContainer({
           ? "This workspace has no member projects to load from."
           : "Unable to resolve the active project for this session.",
       );
-      return;
+      return false;
     }
 
     if (refresh) {
@@ -316,11 +366,11 @@ function MainAreaContainer({
       const mergedIssues = mergeLinearTaskQueueIssues(
         successfulLoads.map((load) => enrichLinearIssuesWithProject(load.issues, load.project)),
       );
-      const visibleIssues = isWorkspaceSession
-        ? mergedIssues.filter(isLinearIssueOpen)
-        : mergedIssues;
+      if (linearContextKeyRef.current !== requestContextKey) {
+        return true;
+      }
 
-      setLinearIssues(visibleIssues);
+      setLinearIssues(mergedIssues);
 
       if (isWorkspaceSession) {
         const loadedCount = successfulLoads.length;
@@ -356,10 +406,10 @@ function MainAreaContainer({
         }
       } else {
         const messageParts: string[] = [];
-        if (visibleIssues.length === 0) {
+        if (mergedIssues.length === 0) {
           messageParts.push(
             isWorkspaceSession
-              ? "No open issues found across mapped workspace projects."
+              ? "No issues found across mapped workspace projects."
               : "No issues found in this Linear project.",
           );
         }
@@ -382,24 +432,48 @@ function MainAreaContainer({
 
       setLinearError(nextError);
       setLinearInfoMessage(nextInfoMessage);
+      return true;
     } catch (error) {
+      if (linearContextKeyRef.current !== requestContextKey) {
+        return true;
+      }
       setLinearError(getErrorMessage(error, "Failed to load Linear tasks."));
       setLinearInfoMessage(null);
+      return true;
     } finally {
-      if (refresh) {
-        setLinearRefreshing(false);
-      } else {
-        setLinearLoading(false);
+      if (linearContextKeyRef.current === requestContextKey) {
+        if (refresh) {
+          setLinearRefreshing(false);
+        } else {
+          setLinearLoading(false);
+        }
       }
     }
-  }, [activeSession, appSettings.linearApiToken, projects, workspaceMembersByWorkspaceId]);
+  }, [appSettings.linearApiToken, linearSessionContext, projects, workspaceMembersByWorkspaceId]);
 
   useEffect(() => {
-    if (rightPanelTab !== "linear") {
+    if (rightPanelTab !== "linear" || !linearContextKey) {
       return;
     }
-    void handleLoadLinearIssues(false);
-  }, [handleLoadLinearIssues, rightPanelTab]);
+
+    if (lastAutoLoadedLinearContextKeyRef.current === linearContextKey) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadLinearIssues = async () => {
+      const attempted = await handleLoadLinearIssues(false);
+      if (!cancelled && attempted) {
+        lastAutoLoadedLinearContextKeyRef.current = linearContextKey;
+      }
+    };
+
+    void loadLinearIssues();
+    return () => {
+      cancelled = true;
+    };
+  }, [handleLoadLinearIssues, linearContextKey, rightPanelTab]);
 
   const handleOpenFile = useCallback(async (
     path: string,
@@ -672,8 +746,11 @@ function MainAreaContainer({
   }, [activeSession?.id, onSendPromptToSession, queueItems]);
 
   const handleLinearRefresh = useCallback(async () => {
-    await handleLoadLinearIssues(true);
-  }, [handleLoadLinearIssues]);
+    const attempted = await handleLoadLinearIssues(true);
+    if (attempted && linearContextKey) {
+      lastAutoLoadedLinearContextKeyRef.current = linearContextKey;
+    }
+  }, [handleLoadLinearIssues, linearContextKey]);
 
   const handleLinearSendIssue = useCallback(async (issueId: string) => {
     const activeSessionId = activeSession?.id;
@@ -944,13 +1021,18 @@ function MainAreaContainer({
       onQueueRemoveItem={handleQueueRemoveItem}
       onQueueClear={handleQueueClear}
       linearProjectName={linearProjectName}
-      linearIssues={linearIssues}
+      linearIssues={visibleLinearIssues}
+      linearTotalIssueCount={linearIssues.length}
       linearLoading={linearLoading}
       linearRefreshing={linearRefreshing}
       linearError={linearError}
       linearInfoMessage={linearInfoMessage}
       linearSendingIssueId={linearSendingIssueId}
+      linearStatusFilter={linearStatusFilter}
+      linearSearchQuery={linearSearchQuery}
       onLinearRefresh={handleLinearRefresh}
+      onLinearStatusFilterChange={setLinearStatusFilter}
+      onLinearSearchQueryChange={setLinearSearchQuery}
       onLinearSendIssue={handleLinearSendIssue}
       renderSession={renderSession}
     />

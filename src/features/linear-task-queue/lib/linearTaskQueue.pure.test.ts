@@ -2,11 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   buildLinearIssuePrompt,
   enrichLinearIssuesWithProject,
+  filterLinearTaskQueueIssues,
   formatLinearLoadFailureDetails,
+  getLinearIssueStatusToneClass,
   isLinearIssueOpen,
+  matchesLinearIssueSearch,
+  matchesLinearIssueStatusFilter,
   mergeLinearTaskQueueIssues,
   resolveLinearIssueProjects,
   truncateLinearIssueDescription,
+  type LinearIssueStatusFilter,
   type LinearTaskQueueIssue,
   type LinearTaskQueueProject,
   type LinearTaskQueueSession,
@@ -174,11 +179,121 @@ describe("isLinearIssueOpen", () => {
   it("filters out completed and canceled states", () => {
     expect(isLinearIssueOpen({ stateType: "completed" })).toBe(false);
     expect(isLinearIssueOpen({ stateType: "canceled" })).toBe(false);
+    expect(isLinearIssueOpen({ stateType: "cancelled" })).toBe(false);
   });
 
   it("keeps active or unknown states", () => {
     expect(isLinearIssueOpen({ stateType: "started" })).toBe(true);
     expect(isLinearIssueOpen({ stateType: null })).toBe(true);
+  });
+});
+
+describe("matchesLinearIssueStatusFilter", () => {
+  const activeIssue = makeIssue({
+    id: "active-1",
+    identifier: "ABC-10",
+    title: "In progress issue",
+    stateType: "started",
+  });
+  const todoIssue = makeIssue({
+    id: "todo-1",
+    identifier: "ABC-11",
+    title: "Todo issue",
+    stateType: "unstarted",
+  });
+  const completedIssue = makeIssue({
+    id: "done-1",
+    identifier: "ABC-12",
+    title: "Completed issue",
+    stateType: "completed",
+  });
+  const canceledIssue = makeIssue({
+    id: "canceled-1",
+    identifier: "ABC-13",
+    title: "Canceled issue",
+    stateType: "canceled",
+  });
+
+  const cases: Array<{ filter: LinearIssueStatusFilter; expected: LinearTaskQueueIssue[] }> = [
+    { filter: "all", expected: [activeIssue, todoIssue, completedIssue, canceledIssue] },
+    { filter: "open", expected: [activeIssue, todoIssue] },
+    { filter: "todo_in_progress", expected: [activeIssue, todoIssue] },
+    { filter: "todo", expected: [todoIssue] },
+    { filter: "in_progress", expected: [activeIssue] },
+    { filter: "completed", expected: [completedIssue] },
+    { filter: "canceled", expected: [canceledIssue] },
+  ];
+
+  it("matches expected state buckets", () => {
+    for (const testCase of cases) {
+      const filtered = [activeIssue, todoIssue, completedIssue, canceledIssue]
+        .filter((issue) => matchesLinearIssueStatusFilter(issue, testCase.filter));
+      expect(filtered).toEqual(testCase.expected);
+    }
+  });
+});
+
+describe("matchesLinearIssueSearch", () => {
+  const issue = makeIssue({
+    id: "search-1",
+    identifier: "MAR-123",
+    title: "Improve sidebar linear loading",
+    description: "Avoid reloading on focus changes.",
+    assigneeName: "Marc Krawczyk",
+    stateName: "In Progress",
+  });
+
+  it("matches all configured searchable fields", () => {
+    expect(matchesLinearIssueSearch(issue, "MAR-123")).toBe(true);
+    expect(matchesLinearIssueSearch(issue, "sidebar")).toBe(true);
+    expect(matchesLinearIssueSearch(issue, "focus")).toBe(true);
+    expect(matchesLinearIssueSearch(issue, "Marc Krawczyk")).toBe(true);
+    expect(matchesLinearIssueSearch(issue, "progress")).toBe(true);
+  });
+
+  it("returns false for non-matching terms", () => {
+    expect(matchesLinearIssueSearch(issue, "not present")).toBe(false);
+  });
+});
+
+describe("filterLinearTaskQueueIssues", () => {
+  const issues = [
+    makeIssue({
+      id: "issue-1",
+      identifier: "MAR-1",
+      title: "Todo card",
+      description: "New task",
+      stateType: "unstarted",
+    }),
+    makeIssue({
+      id: "issue-2",
+      identifier: "MAR-2",
+      title: "Started card",
+      description: "In progress",
+      stateType: "started",
+    }),
+    makeIssue({
+      id: "issue-3",
+      identifier: "MAR-3",
+      title: "Done card",
+      description: "Shipped",
+      stateType: "completed",
+    }),
+  ];
+
+  it("applies status and search filters together", () => {
+    const filtered = filterLinearTaskQueueIssues(issues, "todo_in_progress", "started");
+    expect(filtered.map((issue) => issue.id)).toEqual(["issue-2"]);
+  });
+});
+
+describe("getLinearIssueStatusToneClass", () => {
+  it("returns tone classes by status type", () => {
+    expect(getLinearIssueStatusToneClass({ stateType: "unstarted" })).toContain("text-yellow");
+    expect(getLinearIssueStatusToneClass({ stateType: "started" })).toContain("text-accent");
+    expect(getLinearIssueStatusToneClass({ stateType: "completed" })).toContain("text-green");
+    expect(getLinearIssueStatusToneClass({ stateType: "canceled" })).toContain("text-red");
+    expect(getLinearIssueStatusToneClass({ stateType: null })).toContain("text-subtext");
   });
 });
 

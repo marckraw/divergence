@@ -17,7 +17,10 @@ import type {
   DiffReviewAnchor,
   DiffReviewComment,
 } from "../../../features/diff-review";
-import type { LinearTaskQueueIssue } from "../../../features/linear-task-queue";
+import type {
+  LinearIssueStatusFilter,
+  LinearTaskQueueIssue,
+} from "../../../features/linear-task-queue";
 
 export interface MainAreaProps {
   projects: Project[];
@@ -123,12 +126,17 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   onQueueClear: () => Promise<void>;
   linearProjectName: string | null;
   linearIssues: LinearTaskQueueIssue[];
+  linearTotalIssueCount: number;
   linearLoading: boolean;
   linearRefreshing: boolean;
   linearError: string | null;
   linearInfoMessage: string | null;
   linearSendingIssueId: string | null;
+  linearStatusFilter: LinearIssueStatusFilter;
+  linearSearchQuery: string;
   onLinearRefresh: () => Promise<void>;
+  onLinearStatusFilterChange: (filter: LinearIssueStatusFilter) => void;
+  onLinearSearchQueryChange: (query: string) => void;
   onLinearSendIssue: (issueId: string) => Promise<void>;
   renderSession: (session: TerminalSession) => ReactNode;
 }
