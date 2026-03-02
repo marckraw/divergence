@@ -13,6 +13,7 @@ import {
   TextInput,
   Textarea,
 } from "../../../shared";
+import { RemoteAccessSettings } from "../../../features/remote-access";
 import type {
   SettingsCategoryId,
   SettingsPresentationalProps,
@@ -44,6 +45,11 @@ const SETTINGS_CATEGORIES: SettingsCategoryItem[] = [
     id: "integrations",
     label: "Integrations",
     description: "GitHub, Linear, and cloud relay",
+  },
+  {
+    id: "remote-access",
+    label: "Remote Access",
+    description: "Mobile pairing and devices",
   },
   {
     id: "shortcuts",
@@ -104,6 +110,7 @@ function SettingsPresentational({
   onToggleGithubTokenVisible,
   onToggleLinearTokenVisible,
   onToggleCloudTokenVisible,
+  autoGenerateCode,
 }: SettingsPresentationalProps) {
   if (loading) {
     return (
@@ -420,6 +427,10 @@ function SettingsPresentational({
                     </div>
                   </div>
                 </>
+              )}
+
+              {activeCategory === "remote-access" && (
+                <RemoteAccessSettings autoGenerateCode={autoGenerateCode} />
               )}
 
               {activeCategory === "shortcuts" && (

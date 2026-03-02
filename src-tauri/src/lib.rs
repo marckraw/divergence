@@ -2,6 +2,9 @@ mod commands;
 mod db;
 mod git;
 mod usage_limits;
+mod ws_auth;
+mod ws_mdns;
+mod ws_server;
 
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -30,6 +33,12 @@ pub fn run() {
                 if let Err(e) = db::init_database(&app_handle).await {
                     eprintln!("Failed to initialize database: {}", e);
                 }
+            });
+
+            // Start WebSocket server for remote mobile access
+            let ws_app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                ws_server::start_ws_server(ws_app_handle).await;
             });
 
             #[cfg(desktop)]

@@ -14,6 +14,7 @@ export interface UpdaterProp {
 export interface SettingsProps {
   onClose: () => void;
   updater: UpdaterProp;
+  initialCategory?: SettingsCategoryId;
 }
 
 export interface SettingsState {
@@ -39,6 +40,7 @@ export type SettingsCategoryId =
   | "appearance"
   | "agents"
   | "integrations"
+  | "remote-access"
   | "shortcuts"
   | "updates";
 
@@ -66,4 +68,5 @@ export interface SettingsPresentationalProps {
   onToggleGithubTokenVisible: () => void;
   onToggleLinearTokenVisible: () => void;
   onToggleCloudTokenVisible: () => void;
+  autoGenerateCode: boolean;
 }

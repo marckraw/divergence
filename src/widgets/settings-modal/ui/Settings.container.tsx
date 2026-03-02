@@ -30,11 +30,12 @@ const defaultSettings: SettingsState = {
 function SettingsContainer({
   onClose,
   updater,
+  initialCategory,
 }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>("general");
+  const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>(initialCategory ?? "general");
   const [oauthTokenVisible, setOauthTokenVisible] = useState(false);
   const [githubTokenVisible, setGithubTokenVisible] = useState(false);
   const [linearTokenVisible, setLinearTokenVisible] = useState(false);
@@ -122,6 +123,7 @@ function SettingsContainer({
       onToggleGithubTokenVisible={handleToggleGithubTokenVisible}
       onToggleLinearTokenVisible={handleToggleLinearTokenVisible}
       onToggleCloudTokenVisible={handleToggleCloudTokenVisible}
+      autoGenerateCode={initialCategory === "remote-access"}
     />
   );
 }

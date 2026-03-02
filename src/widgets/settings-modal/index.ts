@@ -1,2 +1,2 @@
-export type { SettingsProps } from "./ui/Settings.types";
+export type { SettingsProps, SettingsCategoryId } from "./ui/Settings.types";
 export { default } from "./ui/Settings.container";

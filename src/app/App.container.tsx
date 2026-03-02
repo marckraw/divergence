@@ -9,6 +9,7 @@ import {
   reconcileAutomationRuns,
   useAutomationRunPoller,
   useAutomationScheduler,
+  notifyAutomationCompletion,
 } from "../features/automations";
 import {
   dispatchTriggeredAutomations,
@@ -19,7 +20,9 @@ import {
 } from "../features/automation-triggers";
 import type { AutomationRunTriggerSource } from "../entities/automation";
 import QuickSwitcher from "../features/quick-switcher";
+import { listen } from "@tauri-apps/api/event";
 import Settings from "../widgets/settings-modal";
+import type { SettingsCategoryId } from "../widgets/settings-modal";
 import {
   executeCreateDivergence,
 } from "../features/create-divergence";
@@ -167,6 +170,7 @@ function App() {
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialCategory, setSettingsInitialCategory] = useState<SettingsCategoryId>("general");
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
   const [activeWorkspaceSettingsId, setActiveWorkspaceSettingsId] = useState<number | null>(null);
@@ -265,7 +269,13 @@ function App() {
       });
       console.log(`Automation run ${runId} completed successfully.`);
       void refreshAutomations();
-    }, [refreshAutomations]),
+      void notifyAutomationCompletion({
+        cloudApiBaseUrl: appSettings.cloudApiBaseUrl,
+        cloudApiToken: appSettings.cloudApiToken,
+        runId,
+        status: "success",
+      });
+    }, [refreshAutomations, appSettings.cloudApiBaseUrl, appSettings.cloudApiToken]),
     onRunFailed: useCallback((runId: number, error: string) => {
       recordDebugEvent({
         level: "warn",
@@ -276,7 +286,14 @@ function App() {
       });
       console.warn(`Automation run ${runId} failed: ${error}`);
       void refreshAutomations();
-    }, [refreshAutomations]),
+      void notifyAutomationCompletion({
+        cloudApiBaseUrl: appSettings.cloudApiBaseUrl,
+        cloudApiToken: appSettings.cloudApiToken,
+        runId,
+        status: "error",
+        errorMessage: error,
+      });
+    }, [refreshAutomations, appSettings.cloudApiBaseUrl, appSettings.cloudApiToken]),
     onOutputUpdate: useCallback(() => {
       // Output updates are available but not displayed in this phase
     }, []),
@@ -288,6 +305,17 @@ function App() {
       void refreshAutomations();
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Listen for mobile handshake events — auto-open Settings to Remote Access tab
+  useEffect(() => {
+    const unlisten = listen("mobile-handshake", () => {
+      setSettingsInitialCategory("remote-access");
+      setShowSettings(true);
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
   }, []);
 
   useEffect(() => {
@@ -2087,8 +2115,10 @@ function App() {
           <Settings
             onClose={() => {
               setShowSettings(false);
+              setSettingsInitialCategory("general");
             }}
             updater={updater}
+            initialCategory={settingsInitialCategory}
           />
         )}
       </AnimatePresence>
