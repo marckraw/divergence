@@ -1595,6 +1595,83 @@ pub fn query_tmux_pane_status(session_name: &str) -> Result<TmuxPaneStatus, Stri
     })
 }
 
+/// Captures the terminal output of a tmux pane by running `tmux capture-pane`.
+/// Returns the raw text content of the pane (last `lines` lines of scrollback).
+pub fn tmux_capture_pane(session_name: &str, lines: u32) -> Result<String, String> {
+    let scroll_back = format!("-{}", lines);
+    let output = command_with_tmux()
+        .env_remove("TMUX")
+        .args([
+            "capture-pane",
+            "-t",
+            session_name,
+            "-p",          // print to stdout
+            "-S",          // start line (negative = scrollback)
+            &scroll_back,
+        ])
+        .output();
+
+    let result = match output {
+        Ok(r) => r,
+        Err(err) => {
+            if err.kind() == ErrorKind::NotFound {
+                return Err("tmux not found".to_string());
+            }
+            return Err(format!("Failed to execute tmux: {}", err));
+        }
+    };
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        if stderr.contains("can't find session")
+            || stderr.contains("no server running")
+            || stderr.contains("session not found")
+        {
+            return Err("session_not_found".to_string());
+        }
+        return Err(format!("Failed to capture tmux pane: {}", stderr));
+    }
+
+    Ok(String::from_utf8_lossy(&result.stdout).to_string())
+}
+
+/// Sends keys to a tmux session via `tmux send-keys`.
+pub fn tmux_send_keys(session_name: &str, keys: &str) -> Result<(), String> {
+    let output = command_with_tmux()
+        .env_remove("TMUX")
+        .args([
+            "send-keys",
+            "-t",
+            session_name,
+            keys,
+            "Enter",
+        ])
+        .output();
+
+    let result = match output {
+        Ok(r) => r,
+        Err(err) => {
+            if err.kind() == ErrorKind::NotFound {
+                return Err("tmux not found".to_string());
+            }
+            return Err(format!("Failed to execute tmux: {}", err));
+        }
+    };
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        if stderr.contains("can't find session")
+            || stderr.contains("no server running")
+            || stderr.contains("session not found")
+        {
+            return Err("session_not_found".to_string());
+        }
+        return Err(format!("Failed to send keys to tmux: {}", stderr));
+    }
+
+    Ok(())
+}
+
 pub fn read_file_tail(path: &str, max_bytes: u64) -> Result<Option<String>, String> {
     let file_path = Path::new(path);
     if !file_path.exists() {

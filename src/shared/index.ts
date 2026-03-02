@@ -164,3 +164,9 @@ export {
   type CloudAutomationEventQueueCount,
   type GithubPrMergedAutomationEvent,
 } from "./api/cloudAutomationEvents.api";
+export {
+  postCloudNotification,
+  mintCloudDeviceToken,
+  type PostNotificationInput,
+  type PostNotificationResult,
+} from "./api/cloudNotifications.api";

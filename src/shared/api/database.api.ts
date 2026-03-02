@@ -311,6 +311,34 @@ const MIGRATIONS: Migration[] = [
       { sql: "CREATE INDEX IF NOT EXISTS idx_prompt_queue_scope_created ON prompt_queue_items(scope_type, scope_id, created_at_ms, id)" },
     ],
   },
+  {
+    version: 12,
+    description: "Add remote access settings and sessions tables",
+    statements: [
+      {
+        sql: `CREATE TABLE IF NOT EXISTS remote_access_settings (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          enabled INTEGER NOT NULL DEFAULT 0,
+          port INTEGER NOT NULL DEFAULT 9347,
+          master_token_hash TEXT,
+          pairing_code TEXT,
+          pairing_code_expires_ms INTEGER,
+          pairing_attempts INTEGER NOT NULL DEFAULT 0,
+          created_at_ms INTEGER NOT NULL
+        )`,
+      },
+      {
+        sql: `CREATE TABLE IF NOT EXISTS remote_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          device_name TEXT NOT NULL,
+          session_token_hash TEXT NOT NULL UNIQUE,
+          paired_at_ms INTEGER NOT NULL,
+          last_seen_ms INTEGER NOT NULL,
+          revoked INTEGER NOT NULL DEFAULT 0
+        )`,
+      },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────

@@ -294,3 +294,30 @@ export const workspaceMembers = sqliteTable(
     index("idx_workspace_members_project_id").on(table.projectId),
   ],
 );
+
+// ── Remote Access Settings ──────────────────────────────────────────────
+
+export const remoteAccessSettings = sqliteTable("remote_access_settings", {
+  id: integer("id").primaryKey(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  port: integer("port").notNull().default(9347),
+  masterTokenHash: text("master_token_hash"),
+  pairingCode: text("pairing_code"),
+  pairingCodeExpiresMs: integer("pairing_code_expires_ms"),
+  pairingAttempts: integer("pairing_attempts").notNull().default(0),
+  createdAtMs: integer("created_at_ms").notNull(),
+});
+
+export type RemoteAccessSettingsRow = typeof remoteAccessSettings.$inferSelect;
+export type InsertRemoteAccessSettingsRow = typeof remoteAccessSettings.$inferInsert;
+
+// ── Remote Sessions ─────────────────────────────────────────────────────
+
+export const remoteSessions = sqliteTable("remote_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  deviceName: text("device_name").notNull(),
+  sessionTokenHash: text("session_token_hash").notNull().unique(),
+  pairedAtMs: integer("paired_at_ms").notNull(),
+  lastSeenMs: integer("last_seen_ms").notNull(),
+  revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
+});

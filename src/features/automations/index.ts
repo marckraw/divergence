@@ -14,6 +14,7 @@ export { cancelAutomationRun } from "./service/cancelAutomationRun.service";
 export { reconcileAutomationRuns } from "./service/reconcileAutomationRuns.service";
 export { useAutomationRunPoller } from "./model/useAutomationRunPoller";
 export { useAutomationScheduler } from "./model/useAutomationScheduler";
+export { notifyAutomationCompletion } from "./service/notifyAutomationCompletion.service";
 export {
   isAutomationDue,
   computeAutomationNextRunAtMs,
