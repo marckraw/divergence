@@ -24,7 +24,7 @@ import { onMobileHandshake } from "./api/mobileHandshake.api";
 import Settings from "../widgets/settings-modal";
 import type { SettingsCategoryId } from "../widgets/settings-modal";
 import {
-  executeCreateDivergence,
+  queueCreateDivergence,
 } from "../features/create-divergence";
 import { MergeNotification, useMergeDetection, type MergeNotificationData } from "../features/merge-detection";
 import { executeDeleteDivergence } from "../features/delete-divergence";
@@ -34,7 +34,7 @@ import {
   CreateWorkspaceDivergenceModal,
   executeCreateWorkspace,
   executeDeleteWorkspace,
-  executeCreateWorkspaceDivergences,
+  queueCreateWorkspaceDivergences,
   executeDeleteWorkspaceDivergence,
 } from "../features/workspace-management";
 import { WorkspaceSettings } from "../features/workspace-settings";
@@ -1052,8 +1052,8 @@ function App() {
     project: Project,
     branchName: string,
     useExistingBranch: boolean
-  ): Promise<Divergence> => {
-    return executeCreateDivergence({
+  ): Promise<void> => {
+    return queueCreateDivergence({
       project,
       branchName,
       useExistingBranch,
@@ -1191,7 +1191,7 @@ function App() {
     branchName: string,
     useExistingBranch: boolean,
   ): Promise<void> => {
-    await executeCreateWorkspaceDivergences({
+    await queueCreateWorkspaceDivergences({
       workspace,
       memberProjects,
       branchName,

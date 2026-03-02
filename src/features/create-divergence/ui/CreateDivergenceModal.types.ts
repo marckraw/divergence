@@ -1,11 +1,10 @@
 import type { KeyboardEvent } from "react";
-import type { Divergence, Project } from "../../../entities";
+import type { Project } from "../../../entities";
 
 export interface CreateDivergenceModalProps {
   project: Project;
   onClose: () => void;
-  onCreate: (branchName: string, useExistingBranch: boolean) => Promise<Divergence>;
-  onCreated: (divergence: Divergence) => void;
+  onCreate: (branchName: string, useExistingBranch: boolean) => Promise<void>;
 }
 
 export interface CreateDivergenceModalPresentationalProps {

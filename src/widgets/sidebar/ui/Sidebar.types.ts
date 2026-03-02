@@ -21,7 +21,7 @@ export interface SidebarProps {
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   onAddProject: (name: string, path: string) => Promise<void>;
   onRemoveProject: (id: number) => Promise<void>;
-  onCreateDivergence: (project: Project, branchName: string, useExistingBranch: boolean) => Promise<Divergence>;
+  onCreateDivergence: (project: Project, branchName: string, useExistingBranch: boolean) => Promise<void>;
   onCreateAdditionalSession: (
     type: "project" | "divergence",
     item: Project | Divergence

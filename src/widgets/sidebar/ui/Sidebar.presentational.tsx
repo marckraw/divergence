@@ -665,9 +665,6 @@ function SidebarPresentational({
             onCreate={(branchName, useExistingBranch) =>
               onCreateDivergence(createDivergenceFor, branchName, useExistingBranch)
             }
-            onCreated={(divergence) => {
-              onSelectDivergence(divergence);
-            }}
           />
         )}
       </AnimatePresence>
