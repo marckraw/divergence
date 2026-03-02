@@ -20,7 +20,7 @@ import {
 } from "../features/automation-triggers";
 import type { AutomationRunTriggerSource } from "../entities/automation";
 import QuickSwitcher from "../features/quick-switcher";
-import { listen } from "@tauri-apps/api/event";
+import { onMobileHandshake } from "./api/mobileHandshake.api";
 import Settings from "../widgets/settings-modal";
 import type { SettingsCategoryId } from "../widgets/settings-modal";
 import {
@@ -309,7 +309,7 @@ function App() {
 
   // Listen for mobile handshake events — auto-open Settings to Remote Access tab
   useEffect(() => {
-    const unlisten = listen("mobile-handshake", () => {
+    const unlisten = onMobileHandshake(() => {
       setSettingsInitialCategory("remote-access");
       setShowSettings(true);
     });
