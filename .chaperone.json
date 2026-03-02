@@ -302,9 +302,12 @@
         "type": "regex",
         "id": "no-raw-sql-strings",
         "severity": "error",
-        "files": "src/{entities,features}/**/*.{ts,tsx}",
+        "files": "src/**/*.{ts,tsx}",
+        "exclude": [
+          "src/shared/api/database.api.ts"
+        ],
         "pattern": "\\b(INSERT\\s+INTO|DELETE\\s+FROM|UPDATE\\s+\\w+\\s+SET|SELECT\\s+.*\\s+FROM|ALTER\\s+TABLE|CREATE\\s+TABLE)\\b",
-        "message": "Raw SQL strings are forbidden in entity/feature files. Use Drizzle ORM query builder."
+        "message": "Raw SQL strings are forbidden in TypeScript runtime code. Use Drizzle ORM query builder; schema bootstrap SQL is allowed only in src/shared/api/database.api.ts."
       }
     ]
   },
