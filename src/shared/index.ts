@@ -152,9 +152,13 @@ export {
 } from "./api/github.api";
 export {
   fetchLinearProjectIssues,
+  fetchLinearWorkflowStates,
   getProjectLinearRef,
+  updateLinearIssueState,
+  type LinearIssueStateUpdate,
   type LinearProjectIssue,
   type LinearProjectRef,
+  type LinearWorkflowState,
 } from "./api/linear.api";
 export {
   ackCloudAutomationEvent,

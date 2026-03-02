@@ -20,4 +20,14 @@ describe("changes utils", () => {
 
     expect(sortGitChangesByPath(entries).map((entry) => entry.path)).toEqual(["a.txt", "z.txt"]);
   });
+
+  it("sorts deterministically without locale-dependent collation", () => {
+    const entries: GitChangeEntry[] = [
+      { path: "ä.txt", status: "M", staged: false, unstaged: true, untracked: false },
+      { path: "z.txt", status: "M", staged: false, unstaged: true, untracked: false },
+      { path: "a.txt", status: "A", staged: true, unstaged: false, untracked: false },
+    ];
+
+    expect(sortGitChangesByPath(entries).map((entry) => entry.path)).toEqual(["a.txt", "z.txt", "ä.txt"]);
+  });
 });

@@ -5,6 +5,7 @@ import {
   filterLinearTaskQueueIssues,
   formatLinearLoadFailureDetails,
   getLinearIssueStatusToneClass,
+  getLinearWorkflowStateToneClass,
   isLinearIssueOpen,
   matchesLinearIssueSearch,
   matchesLinearIssueStatusFilter,
@@ -294,6 +295,24 @@ describe("getLinearIssueStatusToneClass", () => {
     expect(getLinearIssueStatusToneClass({ stateType: "completed" })).toContain("text-green");
     expect(getLinearIssueStatusToneClass({ stateType: "canceled" })).toContain("text-red");
     expect(getLinearIssueStatusToneClass({ stateType: null })).toContain("text-subtext");
+  });
+});
+
+describe("getLinearWorkflowStateToneClass", () => {
+  it("returns tone classes by workflow state type", () => {
+    expect(getLinearWorkflowStateToneClass("unstarted")).toContain("text-yellow");
+    expect(getLinearWorkflowStateToneClass("backlog")).toContain("text-yellow");
+    expect(getLinearWorkflowStateToneClass("triage")).toContain("text-yellow");
+    expect(getLinearWorkflowStateToneClass("started")).toContain("text-accent");
+    expect(getLinearWorkflowStateToneClass("completed")).toContain("text-green");
+    expect(getLinearWorkflowStateToneClass("canceled")).toContain("text-red");
+    expect(getLinearWorkflowStateToneClass("cancelled")).toContain("text-red");
+  });
+
+  it("returns default tone for unknown state types", () => {
+    expect(getLinearWorkflowStateToneClass("")).toContain("text-subtext");
+    expect(getLinearWorkflowStateToneClass("   ")).toContain("text-subtext");
+    expect(getLinearWorkflowStateToneClass("unknown")).toContain("text-subtext");
   });
 });
 

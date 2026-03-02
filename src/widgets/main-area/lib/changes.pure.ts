@@ -12,5 +12,9 @@ export function getRelativePathFromRoot(rootPath: string, absolutePath: string):
 }
 
 export function sortGitChangesByPath(entries: GitChangeEntry[]): GitChangeEntry[] {
-  return [...entries].sort((a, b) => a.path.localeCompare(b.path));
+  return [...entries].sort((a, b) => {
+    if (a.path < b.path) return -1;
+    if (a.path > b.path) return 1;
+    return 0;
+  });
 }

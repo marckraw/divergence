@@ -2,10 +2,13 @@ import {
   Button,
   EmptyState,
   ErrorBanner,
+  LoadingSpinner,
   TextInput,
 } from "../../../shared";
+import type { LinearWorkflowState } from "../../../shared";
 import {
   getLinearIssueStatusToneClass,
+  getLinearWorkflowStateToneClass,
   truncateLinearIssueDescription,
 } from "../lib/linearTaskQueue.pure";
 import type { LinearIssueStatusFilter, LinearTaskQueueIssue } from "../lib/linearTaskQueue.pure";
@@ -31,10 +34,109 @@ export interface LinearTaskQueuePanelProps {
   sendingItemId: string | null;
   statusFilter: LinearIssueStatusFilter;
   searchQuery: string;
+  workflowStates: LinearWorkflowState[];
+  updatingIssueId: string | null;
+  statePickerOpenIssueId: string | null;
+  onToggleStatePicker: (issueId: string | null) => void;
   onRefresh: () => Promise<void>;
   onStatusFilterChange: (filter: LinearIssueStatusFilter) => void;
   onSearchQueryChange: (query: string) => void;
   onSendItem: (issueId: string) => Promise<void>;
+  onUpdateIssueState: (issueId: string, stateId: string) => Promise<void>;
+}
+
+function StatePickerDropdown({
+  issueId,
+  currentStateName,
+  currentStateType,
+  workflowStates,
+  updating,
+  isOpen,
+  onToggle,
+  onUpdateIssueState,
+}: {
+  issueId: string;
+  currentStateName: string | null;
+  currentStateType: string | null;
+  workflowStates: LinearWorkflowState[];
+  updating: boolean;
+  isOpen: boolean;
+  onToggle: (issueId: string | null) => void;
+  onUpdateIssueState: (issueId: string, stateId: string) => Promise<void>;
+}) {
+  const toneClass = currentStateType
+    ? getLinearIssueStatusToneClass({ stateType: currentStateType })
+    : "border-surface text-subtext bg-main/30";
+
+  return (
+    <div className="relative">
+      <Button
+        type="button"
+        variant="subtle"
+        size="xs"
+        className={`text-[11px] rounded border px-1.5 py-0.5 cursor-pointer hover:brightness-110 transition-all ${toneClass}`}
+        onClick={() => {
+          if (!updating) {
+            onToggle(isOpen ? null : issueId);
+          }
+        }}
+        disabled={updating}
+      >
+        {updating ? (
+          <span className="flex items-center gap-1">
+            <LoadingSpinner className="w-3 h-3" />
+            {currentStateName ?? "Unknown"}
+          </span>
+        ) : (
+          currentStateName ?? "Unknown"
+        )}
+      </Button>
+      {isOpen && workflowStates.length > 0 && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => onToggle(null)}
+          />
+          <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] max-h-[240px] overflow-y-auto rounded-md border border-surface bg-sidebar shadow-lg py-1">
+            {workflowStates.map((state) => {
+              const isCurrentState = state.name === currentStateName;
+              const optionToneClass = getLinearWorkflowStateToneClass(state.stateType);
+              return (
+                <Button
+                  key={state.id}
+                  type="button"
+                  variant="subtle"
+                  size="xs"
+                  className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 hover:bg-surface/60 transition-colors ${
+                    isCurrentState ? "font-semibold" : ""
+                  }`}
+                  onClick={() => {
+                    onToggle(null);
+                    if (!isCurrentState) {
+                      void onUpdateIssueState(issueId, state.id);
+                    }
+                  }}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: state.color }}
+                  />
+                  <span className={`rounded border px-1.5 py-0.5 ${optionToneClass}`}>
+                    {state.name}
+                  </span>
+                  {isCurrentState && (
+                    <svg className="w-3 h-3 ml-auto text-accent shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function formatUpdatedAt(updatedAtMs: number | null): string {
@@ -56,10 +158,15 @@ function LinearTaskQueuePanel({
   sendingItemId,
   statusFilter,
   searchQuery,
+  workflowStates,
+  updatingIssueId,
+  statePickerOpenIssueId,
+  onToggleStatePicker,
   onRefresh,
   onStatusFilterChange,
   onSearchQueryChange,
   onSendItem,
+  onUpdateIssueState,
 }: LinearTaskQueuePanelProps) {
   const hasFilterOrSearch = statusFilter !== "open" || searchQuery.trim().length > 0;
 
@@ -164,9 +271,16 @@ function LinearTaskQueuePanel({
                       )}
                     </div>
                     {issue.stateName && (
-                      <span className={`text-[11px] rounded border px-1.5 py-0.5 ${getLinearIssueStatusToneClass(issue)}`}>
-                        {issue.stateName}
-                      </span>
+                      <StatePickerDropdown
+                        issueId={issue.id}
+                        currentStateName={issue.stateName}
+                        currentStateType={issue.stateType}
+                        workflowStates={workflowStates}
+                        updating={updatingIssueId === issue.id}
+                        isOpen={statePickerOpenIssueId === issue.id}
+                        onToggle={onToggleStatePicker}
+                        onUpdateIssueState={onUpdateIssueState}
+                      />
                     )}
                   </div>
 
