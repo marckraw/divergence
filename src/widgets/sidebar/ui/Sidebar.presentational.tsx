@@ -30,6 +30,7 @@ import type { WorkSidebarTab } from "../../../features/work-sidebar";
 
 const WORK_NAV_ITEMS: Array<{ id: WorkSidebarTab; label: string }> = [
   { id: "inbox", label: "Inbox" },
+  { id: "pull_requests", label: "Pull Requests" },
   { id: "task_center", label: "Task Center" },
   { id: "automations", label: "Automations" },
   { id: "ports", label: "Ports" },

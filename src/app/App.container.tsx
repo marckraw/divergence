@@ -121,6 +121,7 @@ import {
 } from "./api/sessionPersistence.api";
 import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
+import { GithubPrHub } from "../features/github-pr-hub";
 
 const NOTIFY_MIN_BUSY_MS = 5000;
 const NOTIFY_IDLE_DELAY_MS = 1500;
@@ -2007,6 +2008,12 @@ function App() {
               onRefresh={refreshInbox}
               onMarkRead={markInboxRead}
               onMarkAllRead={markAllInboxRead}
+            />
+          )}
+          {workTab === "pull_requests" && (
+            <GithubPrHub
+              projects={projects}
+              githubToken={appSettings.githubToken ?? ""}
             />
           )}
           {workTab === "task_center" && (
