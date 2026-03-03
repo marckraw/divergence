@@ -427,7 +427,12 @@ const createImportPathCompletionSource = (
     }
 
     const { value, from } = match;
-    const isRelative = value.startsWith(".") || value.startsWith("/");
+    const isRelative = value.startsWith(".");
+    const isAbsoluteLike = value.startsWith("/");
+
+    if (isAbsoluteLike) {
+      return null;
+    }
 
     if (isRelative) {
       const options = await getRelativePathCompletions(filePath, value);
@@ -745,13 +750,15 @@ function DiffViewer({
               ? "hover:bg-accent/10"
               : "hover:bg-surface/35";
 
+        const renderedLineText = line.text === "" ? " " : line.text;
+
         return (
-          <div key={`${line.index}-${line.text}`}>
+          <div key={line.index}>
             <div className={`group/line flex w-full items-start gap-2 px-2 rounded transition-colors ${rowHighlightClass}`}>
               <div
                 className={`flex-1 px-1 whitespace-pre ${getDiffLineClass(line.text)}`}
               >
-                {line.text}
+                {renderedLineText}
               </div>
               {canComment && (
                 <div
@@ -906,8 +913,9 @@ function QuickEditDrawer({
 }: QuickEditDrawerProps) {
   const shouldReduceMotion = useReducedMotion();
   const [activeTab, setActiveTab] = useState<"diff" | "edit">(defaultTab);
-  const showTabs = diff !== null || diffLoading || diffError !== null;
   const canEdit = allowEdit && !isReadOnly;
+  const hasDiffState = diff !== null || diffLoading || diffError !== null;
+  const showTabBar = canEdit && hasDiffState;
 
   useEffect(() => {
     if (!allowEdit && defaultTab === "edit") {
@@ -975,7 +983,7 @@ function QuickEditDrawer({
                 </ToolbarButton>
               </div>
             </div>
-            {showTabs && (
+            {showTabBar && (
               <div className="flex items-center border-b border-surface text-xs">
                 <TabButton
                   active={activeTab === "diff"}
@@ -1010,7 +1018,7 @@ function QuickEditDrawer({
             )}
             <div className="flex-1 min-h-0">
               <AnimatePresence mode="wait" initial={false}>
-                {activeTab === "diff" && showTabs ? (
+                {activeTab === "diff" && hasDiffState ? (
                   <motion.div
                     key="diff"
                     className="h-full w-full"
