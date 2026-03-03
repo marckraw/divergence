@@ -1,5 +1,11 @@
 # divergence
 
+## 0.26.2
+
+### Patch Changes
+
+- 5f1fcc8: Add a "Talk to your PR" AI sidebar in PR details with local-agent execution, PR-aware context generation, and `Cmd+Enter`/`Ctrl+Enter` send support in the chat composer.
+
 ## 0.26.1
 
 ### Patch Changes
