@@ -1,5 +1,11 @@
 # divergence
 
+## 0.26.1
+
+### Patch Changes
+
+- efc137b: Add a centralized Pull Requests hub in Work view to review and merge GitHub PRs across configured projects, including PR detail, changed files, diff preview, and merge actions.
+
 ## 0.26.0
 
 ### Minor Changes
