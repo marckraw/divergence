@@ -98,7 +98,10 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   reviewAgent: DiffReviewAgent;
   reviewRunning: boolean;
   reviewError: string | null;
-  onOpenFile: (path: string, options?: { resetDiff?: boolean }) => Promise<void>;
+  onOpenFile: (
+    path: string,
+    options?: { resetDiff?: boolean; throwOnError?: boolean }
+  ) => Promise<void>;
   onRemoveFile: (path: string) => void;
   onOpenChange: (entry: GitChangeEntry) => Promise<void>;
   onCloseDrawer: () => void;

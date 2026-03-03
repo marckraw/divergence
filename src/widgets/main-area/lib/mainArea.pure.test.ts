@@ -10,7 +10,8 @@ describe("main area utils", () => {
     expect(joinSessionPath("/root", "src/file.ts")).toBe("/root/src/file.ts");
     expect(joinSessionPath("/root/", "src/file.ts")).toBe("/root/src/file.ts");
     expect(joinSessionPath("C:\\root", "src\\file.ts")).toBe("C:\\root\\src\\file.ts");
-    expect(joinSessionPath("/root", "/absolute/file.ts")).toBe("/absolute/file.ts");
+    expect(joinSessionPath("/root", "/absolute/file.ts")).toBe("/root/absolute/file.ts");
+    expect(joinSessionPath("C:\\root", "\\absolute\\file.ts")).toBe("C:\\root\\absolute\\file.ts");
   });
 
   it("formats byte sizes", () => {

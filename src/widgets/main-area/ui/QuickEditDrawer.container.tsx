@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   autocompletion,
   completeAnyWord,
@@ -912,10 +912,15 @@ function QuickEditDrawer({
   onAddDiffComment,
 }: QuickEditDrawerProps) {
   const shouldReduceMotion = useReducedMotion();
+  const tabIdPrefix = useId();
   const [activeTab, setActiveTab] = useState<"diff" | "edit">(defaultTab);
   const canEdit = allowEdit && !isReadOnly;
   const hasDiffState = diff !== null || diffLoading || diffError !== null;
   const showTabBar = canEdit && hasDiffState;
+  const diffTabId = `${tabIdPrefix}-diff-tab`;
+  const editTabId = `${tabIdPrefix}-edit-tab`;
+  const diffPanelId = `${tabIdPrefix}-diff-panel`;
+  const editPanelId = `${tabIdPrefix}-edit-panel`;
 
   useEffect(() => {
     if (!allowEdit && defaultTab === "edit") {
@@ -923,7 +928,7 @@ function QuickEditDrawer({
       return;
     }
     setActiveTab(defaultTab);
-  }, [defaultTab, filePath, isOpen, allowEdit]);
+  }, [defaultTab, filePath, allowEdit]);
   const drawerVariants = useMemo(
     () => getSlideUpVariants(shouldReduceMotion),
     [shouldReduceMotion]
@@ -984,9 +989,18 @@ function QuickEditDrawer({
               </div>
             </div>
             {showTabBar && (
-              <div className="flex items-center border-b border-surface text-xs">
+              <div
+                className="flex items-center border-b border-surface text-xs"
+                role="tablist"
+                aria-label="Quick edit tabs"
+              >
                 <TabButton
                   active={activeTab === "diff"}
+                  role="tab"
+                  id={diffTabId}
+                  aria-selected={activeTab === "diff"}
+                  aria-controls={diffPanelId}
+                  tabIndex={activeTab === "diff" ? 0 : -1}
                   onClick={() => setActiveTab("diff")}
                 >
                   Diff
@@ -994,6 +1008,11 @@ function QuickEditDrawer({
                 {allowEdit && (
                   <TabButton
                     active={activeTab === "edit"}
+                    role="tab"
+                    id={editTabId}
+                    aria-selected={activeTab === "edit"}
+                    aria-controls={editPanelId}
+                    tabIndex={activeTab === "edit" ? 0 : -1}
                     onClick={() => setActiveTab("edit")}
                   >
                     Edit
@@ -1022,6 +1041,9 @@ function QuickEditDrawer({
                   <motion.div
                     key="diff"
                     className="h-full w-full"
+                    role={showTabBar ? "tabpanel" : undefined}
+                    id={showTabBar ? diffPanelId : undefined}
+                    aria-labelledby={showTabBar ? diffTabId : undefined}
                     variants={contentVariants}
                     initial="hidden"
                     animate="visible"
@@ -1043,6 +1065,9 @@ function QuickEditDrawer({
                   <motion.div
                     key="loading"
                     className="h-full flex items-center justify-center text-sm text-subtext"
+                    role={showTabBar ? "tabpanel" : undefined}
+                    id={showTabBar ? editPanelId : undefined}
+                    aria-labelledby={showTabBar ? editTabId : undefined}
                     variants={contentVariants}
                     initial="hidden"
                     animate="visible"
@@ -1055,6 +1080,9 @@ function QuickEditDrawer({
                   <motion.div
                     key={contentVariantKey}
                     className="h-full w-full"
+                    role={showTabBar ? "tabpanel" : undefined}
+                    id={showTabBar ? editPanelId : undefined}
+                    aria-labelledby={showTabBar ? editTabId : undefined}
                     variants={contentVariants}
                     initial="hidden"
                     animate="visible"
