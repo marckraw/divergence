@@ -2014,6 +2014,9 @@ function App() {
             <GithubPrHub
               projects={projects}
               githubToken={appSettings.githubToken ?? ""}
+              agentCommandClaude={appSettings.agentCommandClaude}
+              agentCommandCodex={appSettings.agentCommandCodex}
+              claudeOAuthToken={appSettings.claudeOAuthToken ?? ""}
             />
           )}
           {workTab === "task_center" && (

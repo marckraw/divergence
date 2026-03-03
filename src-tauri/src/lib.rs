@@ -134,6 +134,7 @@ pub fn run() {
             commands::query_tmux_pane_status,
             commands::read_file_tail,
             commands::read_file_if_exists,
+            commands::run_local_agent_prompt,
             commands::create_workspace_folder,
             commands::update_workspace_folder,
             commands::delete_workspace_folder,
