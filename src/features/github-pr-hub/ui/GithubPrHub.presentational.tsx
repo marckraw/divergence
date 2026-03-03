@@ -10,6 +10,7 @@ import {
   formatRelativeTime,
   getChecksToneClass,
   getGithubFileStatusToneClass,
+  hasGithubMergeConflicts,
 } from "../lib/githubPrHub.pure";
 import type {
   GithubPrProjectTarget,
@@ -173,38 +174,52 @@ function GithubPrHubPresentational({
             </EmptyState>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-              {pullRequests.map((pullRequest) => (
-                <Button
-                  key={`${pullRequest.repoKey}#${pullRequest.number}`}
-                  type="button"
-                  onClick={() => { void onOpenPullRequest(pullRequest); }}
-                  variant="ghost"
-                  size="sm"
-                  className="aspect-square h-auto p-3 border border-surface rounded-md bg-sidebar/70 hover:bg-sidebar text-left flex flex-col gap-2"
-                >
-                  <div className="flex items-center justify-between gap-2 text-[11px] text-subtext">
-                    <span className="truncate">{pullRequest.repoKey}</span>
-                    <span>#{pullRequest.number}</span>
-                  </div>
+              {pullRequests.map((pullRequest) => {
+                const hasConflicts = hasGithubMergeConflicts(
+                  pullRequest.mergeable,
+                  pullRequest.mergeableState,
+                );
 
-                  <p className="text-sm font-medium text-text line-clamp-3">{pullRequest.title}</p>
+                return (
+                  <Button
+                    key={`${pullRequest.repoKey}#${pullRequest.number}`}
+                    type="button"
+                    onClick={() => { void onOpenPullRequest(pullRequest); }}
+                    variant="ghost"
+                    size="sm"
+                    className="aspect-square h-auto p-3 border border-surface rounded-md bg-sidebar/70 hover:bg-sidebar text-left flex flex-col gap-2"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-subtext">
+                      <span className="truncate">{pullRequest.repoKey}</span>
+                      <span>#{pullRequest.number}</span>
+                    </div>
 
-                  <div className="text-xs text-subtext line-clamp-1">
-                    {pullRequest.userLogin ? `@${pullRequest.userLogin}` : "unknown author"}
-                  </div>
+                    <p className="text-sm font-medium text-text line-clamp-3">{pullRequest.title}</p>
 
-                  <div className="text-[11px] text-subtext line-clamp-1">
-                    {pullRequest.baseRef || "base"} ← {pullRequest.headRef || "head"}
-                  </div>
+                    <div className="text-xs text-subtext line-clamp-1">
+                      {pullRequest.userLogin ? `@${pullRequest.userLogin}` : "unknown author"}
+                    </div>
 
-                  <div className="mt-auto flex items-center justify-between gap-2 text-[11px]">
-                    <span className="text-subtext">{formatRelativeTime(pullRequest.updatedAtMs)}</span>
-                    {pullRequest.draft && (
-                      <span className="px-1.5 py-0.5 rounded border border-surface text-subtext">draft</span>
-                    )}
-                  </div>
-                </Button>
-              ))}
+                    <div className="text-[11px] text-subtext line-clamp-1">
+                      {pullRequest.baseRef || "base"} ← {pullRequest.headRef || "head"}
+                    </div>
+
+                    <div className="mt-auto flex items-center justify-between gap-2 text-[11px]">
+                      <span className="text-subtext">{formatRelativeTime(pullRequest.updatedAtMs)}</span>
+                      <div className="flex items-center gap-1">
+                        {hasConflicts && (
+                          <span className="px-1.5 py-0.5 rounded border border-red/30 bg-red/10 text-red">
+                            conflicts
+                          </span>
+                        )}
+                        {pullRequest.draft && (
+                          <span className="px-1.5 py-0.5 rounded border border-surface text-subtext">draft</span>
+                        )}
+                      </div>
+                    </div>
+                  </Button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -218,13 +233,19 @@ function GithubPrHubPresentational({
     && detail.mergeable === true
     && !detail.draft,
   );
+  const detailHasConflicts = hasGithubMergeConflicts(
+    detail?.mergeable ?? null,
+    detail?.mergeableState ?? null,
+  );
   const mergeDisabledReason = !detail
     ? "PR details are loading."
     : detail.state.toLowerCase() !== "open"
       ? "Only open pull requests can be merged."
       : detail.draft
         ? "Draft pull requests cannot be merged."
-        : detail.mergeable === false
+        : detailHasConflicts
+          ? "This PR has merge conflicts that must be resolved before merging."
+          : detail.mergeable === false
           ? `GitHub reports this PR is not mergeable (${detail.mergeableState ?? "unknown"}).`
           : null;
 
@@ -293,6 +314,11 @@ function GithubPrHubPresentational({
                   </span>
                   {detail.draft && (
                     <span className="px-2 py-0.5 rounded border border-surface text-subtext">draft</span>
+                  )}
+                  {detailHasConflicts && (
+                    <span className="px-2 py-0.5 rounded border border-red/30 bg-red/10 text-red">
+                      conflicts
+                    </span>
                   )}
                   <span className="px-2 py-0.5 rounded border border-surface text-subtext">
                     {detail.state}

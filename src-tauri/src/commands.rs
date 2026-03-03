@@ -303,6 +303,8 @@ pub async fn fetch_github_pull_requests(
                 .map(|branch| branch.sha.clone())
                 .unwrap_or_else(String::new),
             draft: item.draft.unwrap_or(false),
+            mergeable: item.mergeable,
+            mergeable_state: item.mergeable_state,
         });
     }
 
@@ -628,6 +630,8 @@ struct GithubPullRequestApiItem {
     base: Option<GithubPullRequestApiBranch>,
     head: Option<GithubPullRequestApiBranch>,
     draft: Option<bool>,
+    mergeable: Option<bool>,
+    mergeable_state: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -646,6 +650,8 @@ pub struct GithubPullRequestEvent {
     pub head_ref: String,
     pub head_sha: String,
     pub draft: bool,
+    pub mergeable: Option<bool>,
+    pub mergeable_state: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

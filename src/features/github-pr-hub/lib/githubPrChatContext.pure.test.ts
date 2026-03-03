@@ -22,6 +22,8 @@ function makeInput(partial?: Partial<GithubPrChatContextInput>): GithubPrChatCon
       headRef: "feature/pr-hub",
       headSha: "abc123",
       draft: false,
+      mergeable: true,
+      mergeableState: "clean",
     },
     detail: {
       id: 1,

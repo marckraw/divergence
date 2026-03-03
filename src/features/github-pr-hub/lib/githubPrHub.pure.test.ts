@@ -6,6 +6,7 @@ import {
   getChecksToneClass,
   getDiffLineClass,
   getGithubFileStatusToneClass,
+  hasGithubMergeConflicts,
   parseUnifiedDiffLines,
 } from "./githubPrHub.pure";
 
@@ -28,6 +29,8 @@ function makePullRequest(partial: Partial<GithubPullRequestSummary>): GithubPull
     headRef: partial.headRef ?? "feature/pr-hub",
     headSha: partial.headSha ?? "abc123",
     draft: partial.draft ?? false,
+    mergeable: partial.mergeable ?? null,
+    mergeableState: partial.mergeableState ?? null,
   };
 }
 
@@ -94,6 +97,14 @@ describe("githubPrHub.pure", () => {
     expect(getGithubFileStatusToneClass("removed")).toContain("text-red");
     expect(getGithubFileStatusToneClass("renamed")).toContain("text-accent");
     expect(getGithubFileStatusToneClass("copied")).toContain("text-subtext");
+  });
+
+  it("detects merge conflicts from mergeable metadata", () => {
+    expect(hasGithubMergeConflicts(true, "clean")).toBe(false);
+    expect(hasGithubMergeConflicts(false, "blocked")).toBe(false);
+    expect(hasGithubMergeConflicts(false, "dirty")).toBe(true);
+    expect(hasGithubMergeConflicts(false, "has_conflicts")).toBe(true);
+    expect(hasGithubMergeConflicts(false, null)).toBe(true);
   });
 
   it("parses unified diff lines and maps line classes", () => {
