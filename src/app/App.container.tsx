@@ -121,6 +121,7 @@ import {
 } from "./api/sessionPersistence.api";
 import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
+import { GithubPrHub } from "../features/github-pr-hub";
 
 const NOTIFY_MIN_BUSY_MS = 5000;
 const NOTIFY_IDLE_DELAY_MS = 1500;
@@ -1664,6 +1665,16 @@ function App() {
       return;
     }
 
+    const githubToken = appSettings.githubToken?.trim() ?? "";
+    if (!githubToken) {
+      if (!githubTokenWarningShownRef.current) {
+        githubTokenWarningShownRef.current = true;
+        console.warn("GitHub polling is disabled because no GitHub token is configured in Settings.");
+      }
+      return;
+    }
+    githubTokenWarningShownRef.current = false;
+
     const repoTargets = githubRepoTargetsRef.current;
     if (repoTargets.length === 0) {
       return;
@@ -1682,16 +1693,8 @@ function App() {
 
         let pullRequests;
         try {
-          pullRequests = await fetchGithubPullRequests(repoTarget.owner, repoTarget.repo);
+          pullRequests = await fetchGithubPullRequests(githubToken, repoTarget.owner, repoTarget.repo);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (message.toLowerCase().includes("github_token")) {
-            if (!githubTokenWarningShownRef.current) {
-              githubTokenWarningShownRef.current = true;
-              console.warn("GitHub polling is disabled because GITHUB_TOKEN is missing.");
-            }
-            return;
-          }
           console.warn(`GitHub polling failed for ${repoTarget.repoKey}:`, error);
           continue;
         }
@@ -1742,7 +1745,7 @@ function App() {
     } finally {
       githubPollingInFlightRef.current = false;
     }
-  }, [refreshInbox]);
+  }, [appSettings.githubToken, refreshInbox]);
 
   useEffect(() => {
     const initialTimerId = window.setTimeout(() => {
@@ -2005,6 +2008,12 @@ function App() {
               onRefresh={refreshInbox}
               onMarkRead={markInboxRead}
               onMarkAllRead={markAllInboxRead}
+            />
+          )}
+          {workTab === "pull_requests" && (
+            <GithubPrHub
+              projects={projects}
+              githubToken={appSettings.githubToken ?? ""}
             />
           )}
           {workTab === "task_center" && (

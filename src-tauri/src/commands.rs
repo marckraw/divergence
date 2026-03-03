@@ -224,27 +224,22 @@ pub async fn get_ralphy_config_summary(project_path: String) -> Result<RalphyCon
 
 #[tauri::command]
 pub async fn fetch_github_pull_requests(
+    token: String,
     owner: String,
     repo: String,
 ) -> Result<Vec<GithubPullRequestEvent>, String> {
+    let token = normalize_bearer_token(&token)?;
     let owner = owner.trim();
     let repo = repo.trim();
     if owner.is_empty() || repo.is_empty() {
         return Err("owner and repo are required".to_string());
     }
 
-    let token = std::env::var("GITHUB_TOKEN")
-        .or_else(|_| std::env::var("github_token"))
-        .map_err(|_| "GITHUB_TOKEN environment variable is not set.".to_string())?;
-    if token.trim().is_empty() {
-        return Err("GITHUB_TOKEN environment variable is not set.".to_string());
-    }
-
     let client = reqwest::Client::new();
     let url = format!("https://api.github.com/repos/{}/{}/pulls", owner, repo);
     let response = client
         .get(url)
-        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token.trim()))
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
         .header(reqwest::header::USER_AGENT, "divergence-app")
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
@@ -291,10 +286,280 @@ pub async fn fetch_github_pull_requests(
             user_login: item.user.and_then(|user| user.login),
             created_at_ms,
             updated_at_ms,
+            base_ref: item
+                .base
+                .as_ref()
+                .map(|branch| branch.branch_ref.clone())
+                .unwrap_or_else(String::new),
+            head_ref: item
+                .head
+                .as_ref()
+                .map(|branch| branch.branch_ref.clone())
+                .unwrap_or_else(String::new),
+            head_sha: item
+                .head
+                .as_ref()
+                .map(|branch| branch.sha.clone())
+                .unwrap_or_else(String::new),
+            draft: item.draft.unwrap_or(false),
         });
     }
 
     Ok(events)
+}
+
+#[tauri::command]
+pub async fn fetch_github_pull_request_detail(
+    token: String,
+    owner: String,
+    repo: String,
+    number: i64,
+) -> Result<GithubPullRequestDetail, String> {
+    let token = normalize_bearer_token(&token)?;
+    let owner = owner.trim();
+    let repo = repo.trim();
+
+    if owner.is_empty() || repo.is_empty() {
+        return Err("owner and repo are required".to_string());
+    }
+    if number <= 0 {
+        return Err("pull request number must be greater than 0".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}", owner, repo, number);
+    let response = client
+        .get(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(reqwest::header::USER_AGENT, "divergence-app")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let response_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new())
+            .chars()
+            .take(400)
+            .collect::<String>();
+        return Err(format!(
+            "GitHub API request failed with status {}: {}",
+            status.as_u16(),
+            response_body
+        ));
+    }
+
+    let item = response
+        .json::<GithubPullRequestDetailApiItem>()
+        .await
+        .map_err(|error| format!("Failed to parse GitHub response: {}", error))?;
+
+    let created_at_ms = parse_rfc3339_millis(&item.created_at, "GitHub timestamp")?;
+    let updated_at_ms = parse_rfc3339_millis(&item.updated_at, "GitHub timestamp")?;
+    let head_sha = item.head.sha.clone();
+
+    let checks_state = fetch_commit_status_state(&client, &token, owner, repo, &head_sha).await;
+
+    Ok(GithubPullRequestDetail {
+        id: item.id,
+        number: item.number,
+        title: item.title,
+        html_url: item.html_url,
+        body: item.body.unwrap_or_else(String::new),
+        state: item.state,
+        user_login: item.user.and_then(|user| user.login),
+        created_at_ms,
+        updated_at_ms,
+        base_ref: item.base.branch_ref,
+        head_ref: item.head.branch_ref,
+        head_sha,
+        draft: item.draft.unwrap_or(false),
+        mergeable: item.mergeable,
+        mergeable_state: item.mergeable_state,
+        additions: item.additions.unwrap_or(0),
+        deletions: item.deletions.unwrap_or(0),
+        changed_files: item.changed_files.unwrap_or(0),
+        commits: item.commits.unwrap_or(0),
+        checks_state,
+    })
+}
+
+#[tauri::command]
+pub async fn fetch_github_pull_request_files(
+    token: String,
+    owner: String,
+    repo: String,
+    number: i64,
+    page: Option<i64>,
+    per_page: Option<i64>,
+) -> Result<Vec<GithubPullRequestFile>, String> {
+    let token = normalize_bearer_token(&token)?;
+    let owner = owner.trim();
+    let repo = repo.trim();
+
+    if owner.is_empty() || repo.is_empty() {
+        return Err("owner and repo are required".to_string());
+    }
+    if number <= 0 {
+        return Err("pull request number must be greater than 0".to_string());
+    }
+
+    let page = page.unwrap_or(1).max(1);
+    let per_page = per_page.unwrap_or(100).clamp(1, 100);
+
+    let client = reqwest::Client::new();
+    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}/files", owner, repo, number);
+    let response = client
+        .get(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(reqwest::header::USER_AGENT, "divergence-app")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .query(&[
+            ("page", page.to_string()),
+            ("per_page", per_page.to_string()),
+        ])
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let response_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new())
+            .chars()
+            .take(400)
+            .collect::<String>();
+        return Err(format!(
+            "GitHub API request failed with status {}: {}",
+            status.as_u16(),
+            response_body
+        ));
+    }
+
+    let items = response
+        .json::<Vec<GithubPullRequestFileApiItem>>()
+        .await
+        .map_err(|error| format!("Failed to parse GitHub response: {}", error))?;
+
+    Ok(items
+        .into_iter()
+        .map(|item| GithubPullRequestFile {
+            sha: item.sha,
+            filename: item.filename,
+            status: item.status,
+            patch: item.patch,
+            previous_filename: item.previous_filename,
+            additions: item.additions.unwrap_or(0),
+            deletions: item.deletions.unwrap_or(0),
+            changes: item.changes.unwrap_or(0),
+        })
+        .collect())
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn merge_github_pull_request(
+    token: String,
+    owner: String,
+    repo: String,
+    number: i64,
+    method: String,
+    expected_head_sha: Option<String>,
+    commit_title: Option<String>,
+    commit_message: Option<String>,
+) -> Result<GithubPullRequestMergeResult, String> {
+    let token = normalize_bearer_token(&token)?;
+    let owner = owner.trim();
+    let repo = repo.trim();
+
+    if owner.is_empty() || repo.is_empty() {
+        return Err("owner and repo are required".to_string());
+    }
+    if number <= 0 {
+        return Err("pull request number must be greater than 0".to_string());
+    }
+
+    let method = method.trim().to_ascii_lowercase();
+    if method != "merge" && method != "squash" {
+        return Err("merge method must be either 'merge' or 'squash'".to_string());
+    }
+
+    let mut payload = serde_json::Map::new();
+    payload.insert("merge_method".to_string(), Value::String(method.clone()));
+
+    let expected_head_sha = expected_head_sha
+        .as_deref()
+        .map(str::trim)
+        .filter(|sha| !sha.is_empty());
+    if let Some(sha) = expected_head_sha {
+        payload.insert("sha".to_string(), Value::String(sha.to_string()));
+    }
+
+    let commit_title = commit_title
+        .as_deref()
+        .map(str::trim)
+        .filter(|title| !title.is_empty());
+    if let Some(title) = commit_title {
+        payload.insert("commit_title".to_string(), Value::String(title.to_string()));
+    }
+
+    let commit_message = commit_message
+        .as_deref()
+        .map(str::trim)
+        .filter(|message| !message.is_empty());
+    if let Some(message) = commit_message {
+        payload.insert("commit_message".to_string(), Value::String(message.to_string()));
+    }
+
+    let client = reqwest::Client::new();
+    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}/merge", owner, repo, number);
+    let response = client
+        .put(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(reqwest::header::USER_AGENT, "divergence-app")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let response_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new())
+            .chars()
+            .take(400)
+            .collect::<String>();
+        return Err(format!(
+            "GitHub API request failed with status {}: {}",
+            status.as_u16(),
+            response_body
+        ));
+    }
+
+    let result = response
+        .json::<GithubPullRequestMergeApiResponse>()
+        .await
+        .map_err(|error| format!("Failed to parse GitHub response: {}", error))?;
+
+    Ok(GithubPullRequestMergeResult {
+        merged: result.merged,
+        sha: result.sha,
+        message: result.message,
+        method,
+        merged_at_ms: if result.merged { Some(chrono::Utc::now().timestamp_millis()) } else { None },
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -336,12 +601,22 @@ struct GithubPullRequestApiUser {
 }
 
 #[derive(Debug, Deserialize)]
+struct GithubPullRequestApiBranch {
+    #[serde(rename = "ref")]
+    branch_ref: String,
+    sha: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct GithubPullRequestApiItem {
     id: i64,
     number: i64,
     title: String,
     html_url: String,
     user: Option<GithubPullRequestApiUser>,
+    base: Option<GithubPullRequestApiBranch>,
+    head: Option<GithubPullRequestApiBranch>,
+    draft: Option<bool>,
     created_at: String,
     updated_at: String,
 }
@@ -356,6 +631,104 @@ pub struct GithubPullRequestEvent {
     pub user_login: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    pub base_ref: String,
+    pub head_ref: String,
+    pub head_sha: String,
+    pub draft: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubPullRequestDetailApiItem {
+    id: i64,
+    number: i64,
+    title: String,
+    body: Option<String>,
+    state: String,
+    html_url: String,
+    user: Option<GithubPullRequestApiUser>,
+    base: GithubPullRequestApiBranch,
+    head: GithubPullRequestApiBranch,
+    draft: Option<bool>,
+    mergeable: Option<bool>,
+    mergeable_state: Option<String>,
+    additions: Option<i64>,
+    deletions: Option<i64>,
+    changed_files: Option<i64>,
+    commits: Option<i64>,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubPullRequestDetail {
+    pub id: i64,
+    pub number: i64,
+    pub title: String,
+    pub body: String,
+    pub state: String,
+    pub html_url: String,
+    pub user_login: Option<String>,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub base_ref: String,
+    pub head_ref: String,
+    pub head_sha: String,
+    pub draft: bool,
+    pub mergeable: Option<bool>,
+    pub mergeable_state: Option<String>,
+    pub additions: i64,
+    pub deletions: i64,
+    pub changed_files: i64,
+    pub commits: i64,
+    pub checks_state: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubPullRequestFileApiItem {
+    sha: String,
+    filename: String,
+    status: String,
+    patch: Option<String>,
+    previous_filename: Option<String>,
+    additions: Option<i64>,
+    deletions: Option<i64>,
+    changes: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubPullRequestFile {
+    pub sha: String,
+    pub filename: String,
+    pub status: String,
+    pub patch: Option<String>,
+    pub previous_filename: Option<String>,
+    pub additions: i64,
+    pub deletions: i64,
+    pub changes: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubPullRequestMergeApiResponse {
+    sha: Option<String>,
+    merged: bool,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubPullRequestMergeResult {
+    pub merged: bool,
+    pub sha: Option<String>,
+    pub message: String,
+    pub method: String,
+    pub merged_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GithubCommitStatusApiResponse {
+    state: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -949,6 +1322,67 @@ fn parse_rfc3339_millis(value: &str, context: &str) -> Result<i64, String> {
     chrono::DateTime::parse_from_rfc3339(value)
         .map(|date| date.timestamp_millis())
         .map_err(|error| format!("Failed to parse {} '{}': {}", context, value, error))
+}
+
+fn normalize_bearer_token(raw_token: &str) -> Result<String, String> {
+    let trimmed = raw_token.trim();
+    if trimmed.is_empty() {
+        return Err("GitHub token is required.".to_string());
+    }
+
+    let normalized = trimmed
+        .strip_prefix("Bearer ")
+        .or_else(|| trimmed.strip_prefix("bearer "))
+        .unwrap_or(trimmed)
+        .trim();
+
+    if normalized.is_empty() {
+        return Err("GitHub token is required.".to_string());
+    }
+
+    Ok(normalized.to_string())
+}
+
+async fn fetch_commit_status_state(
+    client: &reqwest::Client,
+    token: &str,
+    owner: &str,
+    repo: &str,
+    sha: &str,
+) -> Option<String> {
+    if sha.trim().is_empty() {
+        return None;
+    }
+
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/commits/{}/status",
+        owner, repo, sha
+    );
+
+    let response = client
+        .get(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(reqwest::header::USER_AGENT, "divergence-app")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let payload = response
+        .json::<GithubCommitStatusApiResponse>()
+        .await
+        .ok()?;
+
+    payload
+        .state
+        .as_deref()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
 }
 
 fn value_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
