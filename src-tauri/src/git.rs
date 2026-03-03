@@ -1317,7 +1317,10 @@ fn parse_porcelain_renamed_entry(parts: &[&[u8]], index: usize, part: &str) -> O
 
 fn parse_porcelain_unmerged_entry(part: &str) -> Option<GitChange> {
     let fields: Vec<&str> = part.splitn(11, ' ').collect();
-    let path = fields.last().copied()?;
+    if fields.len() < 11 {
+        return None;
+    }
+    let path = fields[10];
     Some(GitChange {
         path: path.to_string(),
         old_path: None,
@@ -1397,7 +1400,16 @@ fn run_diff(repo_path: &Path, rel_path: &str, mode: DiffMode) -> Result<String, 
 }
 
 fn run_untracked_diff(repo_path: &Path, rel_path: &str) -> Result<String, String> {
-    let args = ["diff", "--no-color", "--patch", "--no-index", "--", "/dev/null", rel_path];
+    let null_device = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    let args = [
+        "diff",
+        "--no-color",
+        "--patch",
+        "--no-index",
+        "--",
+        null_device,
+        rel_path,
+    ];
     run_git_diff(repo_path, &args)
 }
 
