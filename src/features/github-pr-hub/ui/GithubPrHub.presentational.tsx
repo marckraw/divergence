@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   Button,
   EmptyState,
@@ -37,12 +38,15 @@ interface GithubPrHubPresentationalProps {
   selectedFilePath: string | null;
   mergeMethod: GithubPullRequestMergeMethod;
   merging: boolean;
+  isChatOpen: boolean;
+  chatSidebar: ReactNode;
   onSelectProjectFilter: (value: "all" | number) => void;
   onSearchQueryChange: (value: string) => void;
   onRefresh: () => Promise<void>;
   onOpenPullRequest: (pullRequest: GithubPullRequestSummary) => Promise<void>;
   onBackToBoard: () => void;
   onOpenGithubUrl: (url: string) => void;
+  onToggleChat: () => void;
   onSelectFilePath: (path: string | null) => void;
   onMergeMethodChange: (method: GithubPullRequestMergeMethod) => void;
   onMerge: () => Promise<boolean>;
@@ -79,12 +83,15 @@ function GithubPrHubPresentational({
   selectedFilePath,
   mergeMethod,
   merging,
+  isChatOpen,
+  chatSidebar,
   onSelectProjectFilter,
   onSearchQueryChange,
   onRefresh,
   onOpenPullRequest,
   onBackToBoard,
   onOpenGithubUrl,
+  onToggleChat,
   onSelectFilePath,
   onMergeMethodChange,
   onMerge,
@@ -250,6 +257,14 @@ function GithubPrHubPresentational({
           <div className="flex items-center gap-2 shrink-0">
             <Button
               type="button"
+              variant={isChatOpen ? "secondary" : "ghost"}
+              size="sm"
+              onClick={onToggleChat}
+            >
+              {isChatOpen ? "Hide AI Chat" : "AI Chat"}
+            </Button>
+            <Button
+              type="button"
               variant="secondary"
               size="sm"
               onClick={() => onOpenGithubUrl(selectedPullRequest.htmlUrl)}
@@ -260,7 +275,7 @@ function GithubPrHubPresentational({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[360px_1fr]">
+      <div className={`flex-1 min-h-0 grid ${isChatOpen ? "grid-cols-[360px_minmax(0,1fr)_400px]" : "grid-cols-[360px_1fr]"}`}>
         <div className="border-r border-surface overflow-y-auto p-4 space-y-4">
           {detailError && <ErrorBanner>{detailError}</ErrorBanner>}
           {detailLoading && (
@@ -308,8 +323,8 @@ function GithubPrHubPresentational({
                     className="h-9 rounded border border-surface bg-main px-2 text-sm text-text"
                     disabled={merging}
                   >
-                    <option value="squash">Squash</option>
                     <option value="merge">Merge commit</option>
+                    <option value="squash">Squash</option>
                   </select>
                 </label>
                 {mergeDisabledReason && (
@@ -378,6 +393,12 @@ function GithubPrHubPresentational({
             </div>
           </div>
         </div>
+
+        {isChatOpen && (
+          <div className="min-h-0 border-l border-surface">
+            {chatSidebar}
+          </div>
+        )}
       </div>
     </div>
   );

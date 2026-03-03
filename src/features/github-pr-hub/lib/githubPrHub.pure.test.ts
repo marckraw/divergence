@@ -14,6 +14,7 @@ function makePullRequest(partial: Partial<GithubPullRequestSummary>): GithubPull
     id: partial.id ?? 1,
     projectId: partial.projectId ?? 1,
     projectName: partial.projectName ?? "Project",
+    projectPath: partial.projectPath ?? "/tmp/project",
     owner: partial.owner ?? "openai",
     repo: partial.repo ?? "divergence",
     repoKey: partial.repoKey ?? "openai/divergence",

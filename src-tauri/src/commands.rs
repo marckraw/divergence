@@ -5,7 +5,8 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::process::Stdio;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -593,6 +594,16 @@ pub struct BranchChangesResponse {
 #[derive(Debug, Serialize)]
 pub struct WriteReviewBriefResponse {
     pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalAgentPromptResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: Option<i32>,
+    pub timed_out: bool,
+    pub duration_ms: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1857,6 +1868,106 @@ pub async fn read_file_if_exists(
     path: String,
 ) -> Result<Option<String>, String> {
     git::read_file_if_exists(&path)
+}
+
+#[tauri::command]
+pub async fn run_local_agent_prompt(
+    command: String,
+    cwd: String,
+    timeout_ms: Option<u64>,
+    env_vars: Option<Vec<(String, String)>>,
+) -> Result<LocalAgentPromptResult, String> {
+    use tokio::io::AsyncReadExt;
+
+    let trimmed_command = command.trim();
+    if trimmed_command.is_empty() {
+        return Err("Command is required.".to_string());
+    }
+
+    let cwd_path = PathBuf::from(&cwd);
+    if !cwd_path.is_dir() {
+        return Err(format!("Working directory does not exist: {}", cwd));
+    }
+
+    let timeout_ms = timeout_ms.unwrap_or(120_000).clamp(5_000, 600_000);
+    let started = Instant::now();
+
+    #[cfg(target_os = "windows")]
+    let mut child_command = {
+        let mut cmd = tokio::process::Command::new("cmd");
+        cmd.arg("/C").arg(trimmed_command);
+        cmd
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let mut child_command = {
+        let mut cmd = tokio::process::Command::new("/bin/zsh");
+        cmd.arg("-lc").arg(trimmed_command);
+        cmd
+    };
+
+    child_command
+        .current_dir(&cwd_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    for (key, value) in env_vars.unwrap_or_default() {
+        if !key.trim().is_empty() {
+            child_command.env(key, value);
+        }
+    }
+
+    let mut child = child_command
+        .spawn()
+        .map_err(|error| format!("Failed to spawn agent command: {}", error))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_task = tokio::spawn(async move {
+        let mut bytes = Vec::new();
+        if let Some(mut stream) = stdout {
+            let _ = stream.read_to_end(&mut bytes).await;
+        }
+        bytes
+    });
+    let stderr_task = tokio::spawn(async move {
+        let mut bytes = Vec::new();
+        if let Some(mut stream) = stderr {
+            let _ = stream.read_to_end(&mut bytes).await;
+        }
+        bytes
+    });
+
+    let wait_result = tokio::time::timeout(Duration::from_millis(timeout_ms), child.wait()).await;
+    let (exit_code, timed_out) = match wait_result {
+        Ok(status_result) => {
+            let status = status_result
+                .map_err(|error| format!("Failed while waiting for agent command: {}", error))?;
+            (status.code(), false)
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            (None, true)
+        }
+    };
+
+    let stdout_bytes = stdout_task
+        .await
+        .map_err(|error| format!("Failed to collect agent stdout: {}", error))?;
+    let stderr_bytes = stderr_task
+        .await
+        .map_err(|error| format!("Failed to collect agent stderr: {}", error))?;
+
+    Ok(LocalAgentPromptResult {
+        stdout: String::from_utf8_lossy(&stdout_bytes).to_string(),
+        stderr: String::from_utf8_lossy(&stderr_bytes).to_string(),
+        exit_code,
+        timed_out,
+        duration_ms: started.elapsed().as_millis() as u64,
+    })
 }
 
 #[tauri::command]

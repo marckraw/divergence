@@ -8,3 +8,8 @@ export type {
   GithubPullRequestMergeResult,
   GithubPrChecksState,
 } from "./model/githubPrHub.types";
+export type {
+  GithubPrChatAgent,
+  GithubPrChatMessage,
+  GithubPrChatThreadState,
+} from "./model/githubPrChat.types";

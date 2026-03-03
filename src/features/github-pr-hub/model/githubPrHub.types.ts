@@ -15,6 +15,7 @@ export interface GithubPullRequestSummary {
   id: number;
   projectId: number;
   projectName: string;
+  projectPath: string;
   owner: string;
   repo: string;
   repoKey: string;
@@ -71,4 +72,3 @@ export interface GithubPullRequestMergeResult {
   method: string;
   mergedAtMs: number | null;
 }
-

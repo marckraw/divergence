@@ -43,8 +43,9 @@ export function useGithubPrHub({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  const [mergeMethod, setMergeMethod] = useState<GithubPullRequestMergeMethod>("squash");
+  const [mergeMethod, setMergeMethod] = useState<GithubPullRequestMergeMethod>("merge");
   const [merging, setMerging] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const requestIdRef = useRef(0);
 
   const resolveTargets = useCallback(async (): Promise<GithubPrProjectTarget[]> => {
@@ -138,6 +139,7 @@ export function useGithubPrHub({
             ...item,
             projectId: target.projectId,
             projectName: target.projectName,
+            projectPath: target.projectPath,
             owner: target.owner,
             repo: target.repo,
             repoKey: target.repoKey,
@@ -206,6 +208,7 @@ export function useGithubPrHub({
     setSelectedFilePath(null);
     setDetailLoading(true);
     setDetailError(null);
+    setIsChatOpen(false);
 
     try {
       const [detailResponse, filesResponse] = await Promise.all([
@@ -230,6 +233,7 @@ export function useGithubPrHub({
     setDetailError(null);
     setSelectedFilePath(null);
     setMerging(false);
+    setIsChatOpen(false);
   }, []);
 
   const mergeSelectedPullRequest = useCallback(async (): Promise<boolean> => {
@@ -299,10 +303,11 @@ export function useGithubPrHub({
     mergeMethod,
     setMergeMethod,
     merging,
+    isChatOpen,
+    setIsChatOpen,
     refresh: () => loadBoard(true),
     openPullRequest,
     backToBoard,
     mergeSelectedPullRequest,
   };
 }
-
