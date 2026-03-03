@@ -9,7 +9,7 @@ import {
 } from "react";
 import Terminal from "./Terminal.container";
 import MainAreaPresentational from "./MainArea.presentational";
-import type { MainAreaOpenDiff, MainAreaProps, RightPanelTab } from "./MainArea.types";
+import type { MainAreaProps, RightPanelTab } from "./MainArea.types";
 import {
   buildEqualSplitPaneSizes,
   normalizeSplitPaneSizes,
@@ -17,18 +17,10 @@ import {
 } from "../../../entities";
 import type {
   ChangesMode,
-  GitChangeEntry,
   SplitPaneId,
   SplitSessionState,
   TerminalSession,
 } from "../../../entities";
-import {
-  clearPromptQueueItems,
-  deletePromptQueueItem,
-  enqueuePromptQueueItem,
-  listPromptQueueItems,
-  type PromptQueueItemRow,
-} from "../../../entities/prompt-queue";
 import { buildSplitTmuxSessionName } from "../../../entities/terminal-session";
 import {
   createReviewBriefForDraft,
@@ -37,36 +29,16 @@ import {
   type DiffReviewComment,
 } from "../../../features/diff-review";
 import {
-  buildLinearIssuePrompt,
-  enrichLinearIssuesWithProject,
-  filterLinearTaskQueueIssues,
-  formatLinearLoadFailureDetails,
-  mergeLinearTaskQueueIssues,
-  resolveLinearIssueProjects,
-  type LinearIssueStatusFilter,
-  type LinearTaskQueueIssue,
-} from "../../../features/linear-task-queue";
-import {
-  formatBytes,
   getAggregatedTerminalStatus,
-  joinSessionPath,
 } from "../lib/mainArea.pure";
 import { resolveActivePaneSessionId } from "../lib/activePaneSession.pure";
 import {
-  fetchLinearProjectIssues,
-  fetchLinearWorkflowStates,
-  getProjectLinearRef,
-  getErrorMessage,
-  updateLinearIssueState,
   useAppSettings,
 } from "../../../shared";
-import type { LinearWorkflowState } from "../../../shared";
 import { resolvePromptQueueScope } from "../lib/promptQueueScope.pure";
-import { readTextFile, writeTextFile } from "../../../shared/api/fs.api";
-import {
-  getBranchDiff,
-  getWorkingDiff,
-} from "../api/mainArea.api";
+import { usePromptQueue } from "../model/usePromptQueue";
+import { useFileEditor } from "../model/useFileEditor";
+import { useLinearTaskQueue } from "../model/useLinearTaskQueue";
 
 const EMPTY_REVIEW_COMMENTS: DiffReviewComment[] = [];
 
@@ -99,45 +71,10 @@ function MainAreaContainer({
   const activeSplit = activeSession ? splitBySessionId.get(activeSession.id) ?? null : null;
   const activeRootPath = activeSession?.path ?? null;
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>("settings");
-  const [openFilePath, setOpenFilePath] = useState<string | null>(null);
-  const [openFileContent, setOpenFileContent] = useState("");
-  const [openFileInitial, setOpenFileInitial] = useState("");
-  const [fileLoadError, setFileLoadError] = useState<string | null>(null);
-  const [fileSaveError, setFileSaveError] = useState<string | null>(null);
-  const [isLoadingFile, setIsLoadingFile] = useState(false);
-  const [isSavingFile, setIsSavingFile] = useState(false);
-  const [isReadOnly, setIsReadOnly] = useState(false);
-  const [largeFileWarning, setLargeFileWarning] = useState<string | null>(null);
-  const [openDiff, setOpenDiff] = useState<MainAreaOpenDiff | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
-  const [diffError, setDiffError] = useState<string | null>(null);
-  const [drawerTab, setDrawerTab] = useState<"diff" | "edit">("edit");
-  const [allowEdit, setAllowEdit] = useState(true);
   const [changesMode, setChangesMode] = useState<ChangesMode>("working");
   const [reviewRunError, setReviewRunError] = useState<string | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
   const [isDraggingSplitPane, setIsDraggingSplitPane] = useState(false);
-  const [queueItems, setQueueItems] = useState<PromptQueueItemRow[]>([]);
-  const [queueDraft, setQueueDraft] = useState("");
-  const [queueLoading, setQueueLoading] = useState(false);
-  const [queueError, setQueueError] = useState<string | null>(null);
-  const [queueingPrompt, setQueueingPrompt] = useState(false);
-  const [queueActionItemId, setQueueActionItemId] = useState<number | null>(null);
-  const [queueSendingItemId, setQueueSendingItemId] = useState<number | null>(null);
-  const [linearProjectName, setLinearProjectName] = useState<string | null>(null);
-  const [linearIssues, setLinearIssues] = useState<LinearTaskQueueIssue[]>([]);
-  const [linearLoading, setLinearLoading] = useState(false);
-  const [linearRefreshing, setLinearRefreshing] = useState(false);
-  const [linearError, setLinearError] = useState<string | null>(null);
-  const [linearInfoMessage, setLinearInfoMessage] = useState<string | null>(null);
-  const [linearSendingIssueId, setLinearSendingIssueId] = useState<string | null>(null);
-  const [linearStatusFilter, setLinearStatusFilter] = useState<LinearIssueStatusFilter>("open");
-  const [linearSearchQuery, setLinearSearchQuery] = useState("");
-  const [linearWorkflowStates, setLinearWorkflowStates] = useState<LinearWorkflowState[]>([]);
-  const [linearUpdatingIssueId, setLinearUpdatingIssueId] = useState<string | null>(null);
-  const [linearStatePickerOpenIssueId, setLinearStatePickerOpenIssueId] = useState<string | null>(null);
-  const lastAutoLoadedLinearContextKeyRef = useRef<string | null>(null);
-  const linearContextKeyRef = useRef<string | null>(null);
   const { settings: appSettings } = useAppSettings();
   const {
     activeDraft,
@@ -149,17 +86,9 @@ function MainAreaContainer({
     clearAllDrafts,
   } = useDiffReviewDraft({ workspacePath: activeRootPath, mode: changesMode });
 
-  const isDrawerOpen = Boolean(openFilePath);
-  const isDirty = openFileContent !== openFileInitial;
   const reviewComments = activeDraft?.comments ?? EMPTY_REVIEW_COMMENTS;
   const reviewFinalComment = activeDraft?.finalComment ?? "";
   const reviewAgent = activeDraft?.agent ?? "claude";
-  const openFileReviewComments = useMemo(() => {
-    if (!openFilePath) {
-      return [];
-    }
-    return reviewComments.filter((comment) => comment.anchor.filePath === openFilePath);
-  }, [openFilePath, reviewComments]);
   const queueScope = useMemo(
     () => resolvePromptQueueScope(activeSession),
     [activeSession],
@@ -171,517 +100,99 @@ function MainAreaContainer({
   );
   const activePaneSessionIdRef = useRef(activePaneSessionId);
   activePaneSessionIdRef.current = activePaneSessionId;
-  const activeSessionType = activeSession?.type ?? null;
-  const activeSessionProjectId = activeSession?.projectId ?? null;
-  const activeSessionTargetId = activeSession?.targetId ?? null;
-  const activeSessionWorkspaceOwnerId = activeSession?.workspaceOwnerId ?? null;
-  const linearSessionContext = useMemo(() => {
-    if (!activeSessionType || activeSessionProjectId === null || activeSessionTargetId === null) {
-      return null;
-    }
 
-    return {
-      type: activeSessionType,
-      projectId: activeSessionProjectId,
-      targetId: activeSessionTargetId,
-      workspaceOwnerId: activeSessionWorkspaceOwnerId ?? undefined,
-    };
-  }, [
-    activeSessionProjectId,
-    activeSessionTargetId,
-    activeSessionType,
-    activeSessionWorkspaceOwnerId,
-  ]);
-  const linearContextKey = useMemo(() => {
-    if (!activeSessionId || !linearSessionContext) {
-      return null;
-    }
+  // File editor hook
+  const {
+    openFilePath,
+    openFileContent,
+    openDiff,
+    diffLoading,
+    diffError,
+    drawerTab,
+    allowEdit,
+    isDrawerOpen,
+    isDirty,
+    isSavingFile,
+    isLoadingFile,
+    isReadOnly,
+    fileLoadError,
+    fileSaveError,
+    largeFileWarning,
+    handleOpenFile,
+    handleRemoveFile,
+    handleOpenChange,
+    handleCloseDrawer,
+    handleSaveFile,
+    handleChangeContent,
+    resetFileEditor,
+  } = useFileEditor({ activeRootPath, changesMode });
 
-    return [
-      activeSessionId,
-      linearSessionContext.type,
-      linearSessionContext.projectId,
-      linearSessionContext.targetId,
-      linearSessionContext.workspaceOwnerId ?? "none",
-    ].join(":");
-  }, [activeSessionId, linearSessionContext]);
-  const visibleLinearIssues = useMemo(() => (
-    filterLinearTaskQueueIssues(linearIssues, linearStatusFilter, linearSearchQuery)
-  ), [linearIssues, linearSearchQuery, linearStatusFilter]);
+  const openFileReviewComments = useMemo(() => {
+    if (!openFilePath) {
+      return [];
+    }
+    return reviewComments.filter((comment) => comment.anchor.filePath === openFilePath);
+  }, [openFilePath, reviewComments]);
+
+  // Prompt queue hook
+  const {
+    queueItems,
+    queueDraft,
+    queueLoading,
+    queueError,
+    queueingPrompt,
+    queueActionItemId,
+    queueSendingItemId,
+    setQueueDraft,
+    handleQueuePrompt,
+    handleQueueRemoveItem,
+    handleQueueClear,
+    handleQueueSendItem,
+  } = usePromptQueue({
+    queueScope,
+    activePaneSessionIdRef,
+    onSendPromptToSession: onSendPromptToSession,
+  });
+
+  // Linear task queue hook
+  const {
+    linearProjectName,
+    linearTotalIssueCount,
+    visibleLinearIssues,
+    linearLoading,
+    linearRefreshing,
+    linearError,
+    linearInfoMessage,
+    linearSendingIssueId,
+    linearStatusFilter,
+    linearSearchQuery,
+    linearWorkflowStates,
+    linearUpdatingIssueId,
+    linearStatePickerOpenIssueId,
+    setLinearStatusFilter,
+    setLinearSearchQuery,
+    setLinearStatePickerOpenIssueId,
+    handleLinearRefresh,
+    handleLinearSendIssue,
+    handleLinearUpdateIssueState,
+    resetLinearState,
+  } = useLinearTaskQueue({
+    activeSession,
+    appSettings,
+    projects,
+    workspaceMembersByWorkspaceId,
+    rightPanelTab,
+    activePaneSessionIdRef,
+    onSendPromptToSession: onSendPromptToSession,
+  });
 
   useEffect(() => {
-    linearContextKeyRef.current = linearContextKey;
-  }, [linearContextKey]);
-
-  useEffect(() => {
-    setOpenFilePath(null);
-    setOpenFileContent("");
-    setOpenFileInitial("");
-    setFileLoadError(null);
-    setFileSaveError(null);
-    setIsLoadingFile(false);
-    setIsSavingFile(false);
-    setIsReadOnly(false);
-    setLargeFileWarning(null);
-    setOpenDiff(null);
-    setDiffLoading(false);
-    setDiffError(null);
-    setDrawerTab("edit");
-    setAllowEdit(true);
+    resetFileEditor();
     setReviewRunError(null);
     setReviewRunning(false);
     clearAllDrafts();
-    setLinearProjectName(null);
-    setLinearIssues([]);
-    setLinearLoading(false);
-    setLinearRefreshing(false);
-    setLinearError(null);
-    setLinearInfoMessage(null);
-    setLinearSendingIssueId(null);
-    setLinearWorkflowStates([]);
-    setLinearUpdatingIssueId(null);
-    setLinearStatePickerOpenIssueId(null);
-  }, [activeSession?.id, clearAllDrafts]);
-
-  useEffect(() => {
-    if (!queueScope) {
-      setQueueItems([]);
-      setQueueDraft("");
-      setQueueLoading(false);
-      setQueueError(null);
-      setQueueingPrompt(false);
-      setQueueActionItemId(null);
-      setQueueSendingItemId(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadQueue = async () => {
-      setQueueLoading(true);
-      try {
-        const items = await listPromptQueueItems(queueScope.scopeType, queueScope.scopeId);
-        if (!cancelled) {
-          setQueueItems(items);
-          setQueueError(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setQueueError(error instanceof Error ? error.message : "Failed to load prompt queue.");
-        }
-      } finally {
-        if (!cancelled) {
-          setQueueLoading(false);
-        }
-      }
-    };
-
-    void loadQueue();
-    return () => {
-      cancelled = true;
-    };
-  }, [queueScope]);
-
-  const handleLoadLinearIssues = useCallback(async (refresh = false): Promise<boolean> => {
-    const requestContextKey = linearContextKeyRef.current;
-
-    if (!linearSessionContext || !requestContextKey) {
-      setLinearProjectName(null);
-      setLinearIssues([]);
-      setLinearError(null);
-      setLinearInfoMessage("Open a project, divergence, or workspace session to load Linear tasks.");
-      return false;
-    }
-
-    const token = appSettings.linearApiToken?.trim() ?? "";
-    if (!token) {
-      setLinearProjectName(null);
-      setLinearIssues([]);
-      setLinearError(null);
-      setLinearInfoMessage("Add a Linear API token in Settings > Integrations to load tasks.");
-      return false;
-    }
-
-    const isWorkspaceSession = linearSessionContext.type === "workspace"
-      || linearSessionContext.type === "workspace_divergence";
-    const candidateProjects = resolveLinearIssueProjects(
-      linearSessionContext,
-      projects,
-      workspaceMembersByWorkspaceId,
-    );
-
-    if (candidateProjects.length === 0) {
-      setLinearProjectName(null);
-      setLinearIssues([]);
-      setLinearError(null);
-      setLinearInfoMessage(
-        isWorkspaceSession
-          ? "This workspace has no member projects to load from."
-          : "Unable to resolve the active project for this session.",
-      );
-      return false;
-    }
-
-    if (refresh) {
-      setLinearRefreshing(true);
-    } else {
-      setLinearLoading(true);
-    }
-
-    try {
-      const settledResults = await Promise.allSettled(
-        candidateProjects.map(async (project) => {
-          const projectRef = await getProjectLinearRef(project.path);
-          if (!projectRef?.projectId) {
-            return {
-              kind: "skipped" as const,
-              project,
-            };
-          }
-
-          const issues = await fetchLinearProjectIssues(token, projectRef.projectId);
-          return {
-            kind: "success" as const,
-            project,
-            projectRef,
-            issues,
-          };
-        }),
-      );
-
-      const successfulLoads: Array<{
-        project: (typeof candidateProjects)[number];
-        projectRef: { projectId: string; projectName: string | null; teamId: string | null };
-        issues: Awaited<ReturnType<typeof fetchLinearProjectIssues>>;
-      }> = [];
-      const skippedProjects: Array<(typeof candidateProjects)[number]> = [];
-      const failedProjects: Array<{ projectName: string; message: string }> = [];
-
-      for (const [index, result] of settledResults.entries()) {
-        const project = candidateProjects[index];
-        if (!project) {
-          continue;
-        }
-
-        if (result.status === "rejected") {
-          failedProjects.push({
-            projectName: project.name,
-            message: getErrorMessage(result.reason, "Failed to fetch Linear issues."),
-          });
-          continue;
-        }
-
-        if (result.value.kind === "skipped") {
-          skippedProjects.push(project);
-          continue;
-        }
-
-        successfulLoads.push(result.value);
-      }
-
-      const mergedIssues = mergeLinearTaskQueueIssues(
-        successfulLoads.map((load) => enrichLinearIssuesWithProject(load.issues, load.project)),
-      );
-      if (linearContextKeyRef.current !== requestContextKey) {
-        return true;
-      }
-
-      setLinearIssues(mergedIssues);
-
-      const firstTeamId = successfulLoads
-        .map((load) => load.projectRef.teamId)
-        .find((id): id is string => Boolean(id?.trim()));
-
-      if (firstTeamId) {
-        try {
-          const states = await fetchLinearWorkflowStates(token, firstTeamId);
-          if (linearContextKeyRef.current === requestContextKey) {
-            setLinearWorkflowStates(states);
-          }
-        } catch {
-          if (linearContextKeyRef.current === requestContextKey) {
-            setLinearWorkflowStates([]);
-          }
-        }
-      } else {
-        setLinearWorkflowStates([]);
-      }
-
-      if (isWorkspaceSession) {
-        const loadedCount = successfulLoads.length;
-        setLinearProjectName(
-          loadedCount === candidateProjects.length
-            ? `Workspace (${loadedCount} projects)`
-            : `Workspace (${loadedCount}/${candidateProjects.length} projects loaded)`,
-        );
-      } else {
-        const firstLoad = successfulLoads[0];
-        setLinearProjectName(
-          firstLoad?.projectRef.projectName
-          ?? firstLoad?.project.name
-          ?? null,
-        );
-      }
-
-      let nextError: string | null = null;
-      let nextInfoMessage: string | null = null;
-
-      if (successfulLoads.length === 0) {
-        if (skippedProjects.length === candidateProjects.length) {
-          nextInfoMessage = isWorkspaceSession
-            ? "No Linear project mappings were found in .ralphy/config.json for workspace member projects."
-            : "No Linear project mapping found in .ralphy/config.json for this project.";
-        } else if (failedProjects.length > 0) {
-          nextError = `Failed to load Linear tasks. ${formatLinearLoadFailureDetails(failedProjects)}`;
-          if (skippedProjects.length > 0) {
-            nextInfoMessage = `Skipped ${skippedProjects.length} project${
-              skippedProjects.length === 1 ? "" : "s"
-            } without Linear mapping.`;
-          }
-        }
-      } else {
-        const messageParts: string[] = [];
-        if (mergedIssues.length === 0) {
-          messageParts.push(
-            isWorkspaceSession
-              ? "No issues found across mapped workspace projects."
-              : "No issues found in this Linear project.",
-          );
-        }
-        if (skippedProjects.length > 0) {
-          messageParts.push(
-            `Skipped ${skippedProjects.length} project${
-              skippedProjects.length === 1 ? "" : "s"
-            } without Linear mapping.`,
-          );
-        }
-        if (failedProjects.length > 0) {
-          messageParts.push(
-            `Failed to load ${failedProjects.length} project${
-              failedProjects.length === 1 ? "" : "s"
-            }: ${formatLinearLoadFailureDetails(failedProjects)}`,
-          );
-        }
-        nextInfoMessage = messageParts.length > 0 ? messageParts.join(" ") : null;
-      }
-
-      setLinearError(nextError);
-      setLinearInfoMessage(nextInfoMessage);
-      return true;
-    } catch (error) {
-      if (linearContextKeyRef.current !== requestContextKey) {
-        return true;
-      }
-      setLinearError(getErrorMessage(error, "Failed to load Linear tasks."));
-      setLinearInfoMessage(null);
-      return true;
-    } finally {
-      if (linearContextKeyRef.current === requestContextKey) {
-        if (refresh) {
-          setLinearRefreshing(false);
-        } else {
-          setLinearLoading(false);
-        }
-      }
-    }
-  }, [appSettings.linearApiToken, linearSessionContext, projects, workspaceMembersByWorkspaceId]);
-
-  useEffect(() => {
-    if (rightPanelTab !== "linear" || !linearContextKey) {
-      return;
-    }
-
-    if (lastAutoLoadedLinearContextKeyRef.current === linearContextKey) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadLinearIssues = async () => {
-      const attempted = await handleLoadLinearIssues(false);
-      if (!cancelled && attempted) {
-        lastAutoLoadedLinearContextKeyRef.current = linearContextKey;
-      }
-    };
-
-    void loadLinearIssues();
-    return () => {
-      cancelled = true;
-    };
-  }, [handleLoadLinearIssues, linearContextKey, rightPanelTab]);
-
-  const handleOpenFile = useCallback(async (
-    path: string,
-    options?: { resetDiff?: boolean; throwOnError?: boolean }
-  ) => {
-    const resetDiff = options?.resetDiff ?? true;
-    const throwOnError = options?.throwOnError ?? false;
-    if (resetDiff) {
-      setOpenDiff(null);
-      setDiffLoading(false);
-      setDiffError(null);
-      setDrawerTab("edit");
-      setAllowEdit(true);
-    }
-    setOpenFilePath(path);
-    setOpenFileContent("");
-    setOpenFileInitial("");
-    setFileLoadError(null);
-    setFileSaveError(null);
-    setIsReadOnly(false);
-    setLargeFileWarning(null);
-    setIsLoadingFile(true);
-
-    try {
-      const content = await readTextFile(path);
-      setOpenFileContent(content);
-      setOpenFileInitial(content);
-
-      if (content.includes("\0")) {
-        setIsReadOnly(true);
-      }
-
-      const contentBytes = content.length;
-      if (contentBytes > 2_000_000) {
-        setLargeFileWarning(
-          `Large file (${formatBytes(contentBytes)}). Editing may be slow.`
-        );
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to read file.";
-      setFileLoadError(message);
-      if (throwOnError) {
-        throw error;
-      }
-    } finally {
-      setIsLoadingFile(false);
-    }
-  }, []);
-
-  const handleRemoveFile = useCallback((path: string) => {
-    if (openFilePath !== path) {
-      return;
-    }
-
-    setOpenFilePath(null);
-    setOpenFileContent("");
-    setOpenFileInitial("");
-    setFileLoadError(null);
-    setFileSaveError(null);
-    setIsReadOnly(false);
-    setLargeFileWarning(null);
-    setOpenDiff(null);
-    setDiffLoading(false);
-    setDiffError(null);
-    setDrawerTab("edit");
-    setAllowEdit(true);
-  }, [openFilePath]);
-
-  const handleOpenChange = useCallback(async (entry: GitChangeEntry) => {
-    if (!activeRootPath) {
-      return;
-    }
-
-    const absolutePath = joinSessionPath(activeRootPath, entry.path);
-    const isDeleted = entry.status === "D";
-
-    setDrawerTab("diff");
-    setAllowEdit(!isDeleted && changesMode === "working");
-    setOpenDiff(null);
-    setDiffLoading(true);
-    setDiffError(null);
-
-    if (isDeleted) {
-      setOpenFilePath(absolutePath);
-      setOpenFileContent("");
-      setOpenFileInitial("");
-      setFileLoadError(null);
-      setFileSaveError(null);
-      setIsReadOnly(true);
-      setLargeFileWarning(null);
-      setIsLoadingFile(false);
-    } else {
-      try {
-        await handleOpenFile(absolutePath, { resetDiff: false, throwOnError: true });
-      } catch (error) {
-        setDiffError(error instanceof Error ? error.message : "Failed to load file.");
-        setDiffLoading(false);
-        return;
-      }
-    }
-
-    try {
-      if (changesMode === "branch") {
-        const diff = await getBranchDiff(activeRootPath, absolutePath);
-        setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
-      } else {
-        const diff = await getWorkingDiff(activeRootPath, absolutePath);
-        setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
-      }
-    } catch (error) {
-      setDiffError(error instanceof Error ? error.message : "Failed to load diff.");
-    } finally {
-      setDiffLoading(false);
-    }
-  }, [activeRootPath, changesMode, handleOpenFile]);
-
-  const handleCloseDrawer = useCallback(() => {
-    if (isDirty) {
-      const confirmClose = window.confirm("Discard unsaved changes?");
-      if (!confirmClose) {
-        return;
-      }
-    }
-    setOpenFilePath(null);
-    setOpenFileContent("");
-    setOpenFileInitial("");
-    setFileLoadError(null);
-    setFileSaveError(null);
-    setIsReadOnly(false);
-    setLargeFileWarning(null);
-    setOpenDiff(null);
-    setDiffLoading(false);
-    setDiffError(null);
-    setDrawerTab("edit");
-    setAllowEdit(true);
-  }, [isDirty]);
-
-  const handleSaveFile = useCallback(async () => {
-    if (!openFilePath || isReadOnly || isSavingFile) {
-      return;
-    }
-    setIsSavingFile(true);
-    setFileSaveError(null);
-    try {
-      await writeTextFile(openFilePath, openFileContent);
-      setOpenFileInitial(openFileContent);
-      if (openDiff && activeRootPath) {
-        setDiffLoading(true);
-        setDiffError(null);
-        try {
-          const diff = await getWorkingDiff(activeRootPath, openFilePath);
-          setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
-        } catch (error) {
-          setDiffError(error instanceof Error ? error.message : "Failed to refresh diff.");
-          console.warn("Failed to refresh diff:", error);
-        } finally {
-          setDiffLoading(false);
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save file.";
-      setFileSaveError(message);
-    } finally {
-      setIsSavingFile(false);
-    }
-  }, [activeRootPath, isReadOnly, isSavingFile, openDiff, openFileContent, openFilePath]);
-
-  const handleChangeContent = useCallback((next: string) => {
-    setOpenFileContent(next);
-    if (fileSaveError) {
-      setFileSaveError(null);
-    }
-  }, [fileSaveError]);
+    resetLinearState();
+  }, [activeSession?.id, clearAllDrafts, resetFileEditor, resetLinearState]);
 
   const handleAddDiffComment = useCallback((anchor: DiffReviewAnchor, message: string) => {
     addComment(anchor, message);
@@ -709,147 +220,6 @@ function MainAreaContainer({
       setReviewRunning(false);
     }
   }, [activeDraft, activeRootPath, activeSession, clearActiveDraft, onRunReviewAgentRequest]);
-
-  const handleQueuePrompt = useCallback(async () => {
-    if (!queueScope) {
-      return;
-    }
-    const prompt = queueDraft.trim();
-    if (!prompt) {
-      return;
-    }
-
-    setQueueingPrompt(true);
-    try {
-      await enqueuePromptQueueItem({
-        scopeType: queueScope.scopeType,
-        scopeId: queueScope.scopeId,
-        prompt,
-      });
-      const items = await listPromptQueueItems(queueScope.scopeType, queueScope.scopeId);
-      setQueueItems(items);
-      setQueueDraft("");
-      setQueueError(null);
-    } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Failed to queue prompt.");
-    } finally {
-      setQueueingPrompt(false);
-    }
-  }, [queueDraft, queueScope]);
-
-  const handleQueueRemoveItem = useCallback(async (itemId: number) => {
-    setQueueActionItemId(itemId);
-    try {
-      await deletePromptQueueItem(itemId);
-      setQueueItems((prev) => prev.filter((item) => item.id !== itemId));
-      setQueueError(null);
-    } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Failed to remove queued prompt.");
-    } finally {
-      setQueueActionItemId((prev) => (prev === itemId ? null : prev));
-    }
-  }, []);
-
-  const handleQueueClear = useCallback(async () => {
-    if (!queueScope) {
-      return;
-    }
-    setQueueLoading(true);
-    try {
-      await clearPromptQueueItems(queueScope.scopeType, queueScope.scopeId);
-      setQueueItems([]);
-      setQueueError(null);
-    } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Failed to clear prompt queue.");
-    } finally {
-      setQueueLoading(false);
-    }
-  }, [queueScope]);
-
-  const handleQueueSendItem = useCallback(async (itemId: number) => {
-    const item = queueItems.find((current) => current.id === itemId);
-    const currentSessionId = activePaneSessionIdRef.current;
-    if (!currentSessionId) {
-      setQueueError("No active terminal session. Open a session first.");
-      return;
-    }
-    if (!item) {
-      return;
-    }
-
-    setQueueSendingItemId(itemId);
-    try {
-      await onSendPromptToSession(currentSessionId, item.prompt);
-      await deletePromptQueueItem(itemId);
-      setQueueItems((prev) => prev.filter((current) => current.id !== itemId));
-      setQueueError(null);
-    } catch (error) {
-      setQueueError(error instanceof Error ? error.message : "Failed to send queued prompt.");
-    } finally {
-      setQueueSendingItemId((prev) => (prev === itemId ? null : prev));
-    }
-  }, [onSendPromptToSession, queueItems]);
-
-  const handleLinearRefresh = useCallback(async () => {
-    const attempted = await handleLoadLinearIssues(true);
-    if (attempted && linearContextKey) {
-      lastAutoLoadedLinearContextKeyRef.current = linearContextKey;
-    }
-  }, [handleLoadLinearIssues, linearContextKey]);
-
-  const handleLinearSendIssue = useCallback(async (issueId: string) => {
-    const issue = linearIssues.find((current) => current.id === issueId);
-    const currentSessionId = activePaneSessionIdRef.current;
-    if (!currentSessionId) {
-      setLinearError("No active terminal session. Open a session first.");
-      return;
-    }
-    if (!issue) {
-      return;
-    }
-
-    setLinearSendingIssueId(issueId);
-    try {
-      await onSendPromptToSession(currentSessionId, buildLinearIssuePrompt(issue));
-      setLinearError(null);
-    } catch (error) {
-      setLinearError(getErrorMessage(error, "Failed to send Linear task."));
-    } finally {
-      setLinearSendingIssueId((prev) => (prev === issueId ? null : prev));
-    }
-  }, [linearIssues, onSendPromptToSession]);
-
-  const handleLinearUpdateIssueState = useCallback(async (issueId: string, stateId: string) => {
-    const token = appSettings.linearApiToken?.trim() ?? "";
-    if (!token) {
-      setLinearError("Linear API token is required to update issue state.");
-      return;
-    }
-
-    setLinearUpdatingIssueId(issueId);
-    try {
-      const result = await updateLinearIssueState(token, issueId, stateId);
-      if (result.success) {
-        setLinearIssues((prev) => prev.map((issue) => {
-          if (issue.id !== issueId) {
-            return issue;
-          }
-          return {
-            ...issue,
-            stateName: result.stateName ?? issue.stateName,
-            stateType: result.stateType ?? issue.stateType,
-          };
-        }));
-        setLinearError(null);
-      } else {
-        setLinearError("Linear API reported the state update was not successful.");
-      }
-    } catch (error) {
-      setLinearError(getErrorMessage(error, "Failed to update issue state."));
-    } finally {
-      setLinearUpdatingIssueId((prev) => (prev === issueId ? null : prev));
-    }
-  }, [appSettings.linearApiToken]);
 
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
@@ -1103,7 +473,7 @@ function MainAreaContainer({
       onQueueClear={handleQueueClear}
       linearProjectName={linearProjectName}
       linearIssues={visibleLinearIssues}
-      linearTotalIssueCount={linearIssues.length}
+      linearTotalIssueCount={linearTotalIssueCount}
       linearLoading={linearLoading}
       linearRefreshing={linearRefreshing}
       linearError={linearError}

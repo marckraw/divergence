@@ -40,7 +40,6 @@ import {
 import { WorkspaceSettings } from "../features/workspace-settings";
 import { TaskCenterPage, TaskToasts, useTaskCenter } from "../features/task-center";
 import { hydrateTasksFromAutomationRuns } from "../entities/task";
-import type { WorkSidebarMode, WorkSidebarTab } from "../features/work-sidebar";
 import { useAllDivergences } from "../entities/divergence";
 import { useProjectSettingsMap, useProjects } from "../entities/project";
 import { useWorkspaces } from "../entities/workspace";
@@ -49,8 +48,6 @@ import { useAutomations } from "../entities/automation";
 import {
   useInboxEvents,
   insertInboxEvent,
-  getGithubPollState,
-  upsertGithubPollState,
 } from "../entities/inbox-event";
 import {
   ackCloudAutomationEvent,
@@ -60,7 +57,6 @@ import {
   getProjectGithubRepository,
   IconButton,
   nackCloudAutomationEvent,
-  notifyCommandFinished,
   pullCloudAutomationEventQueueCounts,
   ProgressBar,
   recordDebugEvent,
@@ -68,22 +64,14 @@ import {
   useUpdater,
   type GithubPrMergedAutomationEvent,
 } from "../shared";
-import {
-  areSplitPaneSizesEqual,
-  normalizeSplitPaneSizes,
-} from "../entities";
 import type {
   Project,
   Divergence,
   TerminalSession,
-  SplitOrientation,
-  SplitPaneId,
-  SplitSessionState,
   BackgroundTask,
   Workspace,
 } from "../entities";
 import { buildSplitTmuxSessionName } from "../entities/terminal-session";
-import { getRalphyConfigSummary } from "../shared/api/ralphyConfig.api";
 import { killTmuxSession } from "../shared/api/tmuxSessions.api";
 import {
   renderReviewAgentCommand,
@@ -93,27 +81,16 @@ import {
 import { resolveProjectForNewDivergence } from "./lib/appSelection.pure";
 import { buildTerminalSession, buildWorkspaceKey, buildWorkspaceTerminalSession, buildWorkspaceDivergenceTerminalSession, generateSessionEntropy } from "./lib/sessionBuilder.pure";
 import {
-  buildNextSplitState,
   closeFocusedSplitPane,
   focusNextSplitPane,
   focusPreviousSplitPane,
-  focusSplitPane,
   isDefaultSinglePaneState,
 } from "./lib/splitSession.pure";
-import {
-  buildIdleNotificationTargetLabel,
-  shouldNotifyIdle,
-} from "./lib/idleNotification.pure";
 import { resolveAppShortcut } from "./lib/appShortcuts.pure";
-import {
-  buildGithubInboxBody,
-  buildGithubInboxExternalId,
-  buildGithubInboxTitle,
-  buildGithubRepoTarget,
-  classifyGithubPullRequestEvent,
-} from "./lib/githubInbox.pure";
-import { fetchGithubPullRequests } from "./api/githubPullRequests.api";
-import type { GithubRepoTarget } from "./model/githubPullRequests.types";
+import { useSplitPaneManagement } from "./model/useSplitPaneManagement";
+import { useGithubInboxPolling } from "./model/useGithubInboxPolling";
+import { useSidebarLayout } from "./model/useSidebarLayout";
+import { useIdleNotification } from "./model/useIdleNotification";
 import {
   clearPersistedTerminalTabsState,
   loadPersistedTerminalTabsState,
@@ -123,11 +100,6 @@ import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
 import { GithubPrHub } from "../features/github-pr-hub";
 
-const NOTIFY_MIN_BUSY_MS = 5000;
-const NOTIFY_IDLE_DELAY_MS = 1500;
-const NOTIFY_COOLDOWN_MS = 3000;
-const GITHUB_POLL_INTERVAL_MS = 2 * 60_000;
-const GITHUB_INITIAL_POLL_DELAY_MS = 15_000;
 const CLOUD_QUEUE_COUNTS_POLL_INTERVAL_MS = 30_000;
 const RESTORE_TABS_TOAST_TTL_MS = 4000;
 
@@ -166,7 +138,14 @@ function App() {
   const { allocations: portAllocations, refresh: refreshPortAllocations } = usePortAllocations();
   const [sessions, setSessions] = useState<Map<string, TerminalSession>>(new Map());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [splitBySessionId, setSplitBySessionId] = useState<Map<string, SplitSessionState>>(new Map());
+  const {
+    splitBySessionId,
+    setSplitBySessionId,
+    handleSplitSession,
+    handleFocusSplitPane,
+    handleResizeSplitPanes,
+    handleResetSplitSession,
+  } = useSplitPaneManagement();
   const [reconnectBySessionId, setReconnectBySessionId] = useState<Map<string, number>>(new Map());
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
@@ -178,28 +157,34 @@ function App() {
   const [createWorkspaceDivergenceFor, setCreateWorkspaceDivergenceFor] = useState<import("../entities").Workspace | null>(null);
   const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(256);
-  const [isDraggingSidebar, setIsDraggingSidebar] = useState(false);
-  const [sidebarMode, setSidebarMode] = useState<WorkSidebarMode>("projects");
-  const [workTab, setWorkTab] = useState<WorkSidebarTab>("inbox");
+  const {
+    isSidebarOpen,
+    setIsSidebarOpen,
+    isRightPanelOpen,
+    sidebarWidth,
+    isDraggingSidebar,
+    sidebarMode,
+    setSidebarMode,
+    workTab,
+    setWorkTab,
+    toggleSidebar,
+    toggleRightPanel,
+    handleSidebarDragStart,
+    handleSidebarDragDoubleClick,
+    handleSidebarModeChange,
+    handleWorkTabChange,
+  } = useSidebarLayout({
+    onModeChange: () => {
+      setShowQuickSwitcher(false);
+      setShowSettings(false);
+    },
+  });
   const [restoredTabsToastMessage, setRestoredTabsToastMessage] = useState<string | null>(null);
-  const [idleAttentionSessionIds, setIdleAttentionSessionIds] = useState<Set<string>>(new Set());
-  const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>([]);
   const [queuedCloudCountByAutomationId, setQueuedCloudCountByAutomationId] = useState<Map<number, number>>(new Map());
   const sessionsRef = useRef<Map<string, TerminalSession>>(sessions);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   const statusBySessionRef = useRef<Map<string, TerminalSession["status"]>>(new Map());
-  const busySinceRef = useRef<Map<string, number>>(new Map());
-  const idleNotifyTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const lastNotifiedAtRef = useRef<Map<string, number>>(new Map());
   const commandBySessionIdRef = useRef<Map<string, (command: string) => void>>(new Map());
-  const githubRepoTargetsRef = useRef<GithubRepoTarget[]>([]);
-  const githubPollingInFlightRef = useRef(false);
-  const githubTokenWarningShownRef = useRef(false);
-  const dragStartXRef = useRef(0);
-  const dragStartWidthRef = useRef(0);
   const hasRestoredTabsRef = useRef(false);
   const restoredTabsToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const {
@@ -258,6 +243,12 @@ function App() {
     markRead: markInboxRead,
     markAllRead: markAllInboxRead,
   } = useInboxEvents("all");
+
+  useGithubInboxPolling({
+    projects,
+    appSettings,
+    onRefreshInbox: refreshInbox,
+  });
 
   // Automation run poller — monitors running tmux-based automation runs
   useAutomationRunPoller({
@@ -359,21 +350,6 @@ function App() {
   }, [sessions]);
 
   useEffect(() => {
-    setIdleAttentionSessionIds((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const sessionId of prev) {
-        if (sessions.has(sessionId)) {
-          next.add(sessionId);
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [sessions]);
-
-  useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
@@ -431,16 +407,42 @@ function App() {
     });
   }, [sessions, activeSessionId, appSettings.restoreTabsOnRestart]);
 
-  useEffect(() => {
-    githubRepoTargetsRef.current = githubRepoTargets;
-  }, [githubRepoTargets]);
-
   // Build projects by ID map for merge detection
   const projectsById = useMemo(() => {
     const map = new Map<number, { name: string }>();
     projects.forEach(p => map.set(p.id, { name: p.name }));
     return map;
   }, [projects]);
+
+  const {
+    idleAttentionSessionIds,
+    setIdleAttentionSessionIds,
+    clearNotificationTracking,
+    onSessionBecameIdle,
+    onSessionBecameBusy,
+    onSessionBecameActive,
+  } = useIdleNotification({
+    activeSessionId,
+    projectsById,
+    sessionsRef,
+    statusBySessionRef,
+  });
+
+  // Clean up idle attention tracking for removed sessions
+  useEffect(() => {
+    setIdleAttentionSessionIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const sessionId of prev) {
+        if (sessions.has(sessionId)) {
+          next.add(sessionId);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [sessions, setIdleAttentionSessionIds]);
 
   const projectById = useMemo(() => {
     const map = new Map<number, Project>();
@@ -463,122 +465,6 @@ function App() {
     divergencesByProject.forEach(divs => all.push(...divs));
     return all;
   }, [divergencesByProject]);
-
-  const refreshGithubRepoTargets = useCallback(async () => {
-    if (projects.length === 0) {
-      setGithubRepoTargets([]);
-      return;
-    }
-
-    const targets = await Promise.all(projects.map(async (project) => {
-      try {
-        const config = await getRalphyConfigSummary(project.path);
-        if (config.status !== "ok") {
-          return null;
-        }
-        const owner = config.summary.integrations?.github?.owner?.trim();
-        const repo = config.summary.integrations?.github?.repo?.trim();
-        if (!owner || !repo) {
-          return null;
-        }
-        return buildGithubRepoTarget({
-          projectId: project.id,
-          projectName: project.name,
-          owner,
-          repo,
-        });
-      } catch (error) {
-        console.warn(`Failed to load Ralphy config for ${project.name}:`, error);
-        return null;
-      }
-    }));
-
-    setGithubRepoTargets(targets.filter((target): target is GithubRepoTarget => target !== null));
-  }, [projects]);
-
-  useEffect(() => {
-    void refreshGithubRepoTargets();
-  }, [refreshGithubRepoTargets]);
-
-  const clearIdleNotifyTimer = useCallback((sessionId: string) => {
-    const existing = idleNotifyTimersRef.current.get(sessionId);
-    if (existing) {
-      clearTimeout(existing);
-      idleNotifyTimersRef.current.delete(sessionId);
-    }
-  }, []);
-
-  const clearIdleAttention = useCallback((sessionId: string) => {
-    setIdleAttentionSessionIds((prev) => {
-      if (!prev.has(sessionId)) {
-        return prev;
-      }
-      const next = new Set(prev);
-      next.delete(sessionId);
-      return next;
-    });
-  }, []);
-
-  const markIdleAttention = useCallback((sessionId: string) => {
-    setIdleAttentionSessionIds((prev) => {
-      if (prev.has(sessionId)) {
-        return prev;
-      }
-      const next = new Set(prev);
-      next.add(sessionId);
-      return next;
-    });
-  }, []);
-
-  const clearNotificationTracking = useCallback((sessionId: string) => {
-    clearIdleNotifyTimer(sessionId);
-    clearIdleAttention(sessionId);
-    busySinceRef.current.delete(sessionId);
-    statusBySessionRef.current.delete(sessionId);
-    lastNotifiedAtRef.current.delete(sessionId);
-  }, [clearIdleNotifyTimer, clearIdleAttention]);
-
-  useEffect(() => {
-    if (!activeSessionId) {
-      return;
-    }
-    clearIdleAttention(activeSessionId);
-  }, [activeSessionId, clearIdleAttention]);
-
-  const scheduleIdleNotification = useCallback((sessionId: string, startedAt: number) => {
-    clearIdleNotifyTimer(sessionId);
-
-    const timeoutId = setTimeout(async () => {
-      const currentSession = sessionsRef.current.get(sessionId);
-      const now = Date.now();
-      const duration = now - startedAt;
-      const lastNotifiedAt = lastNotifiedAtRef.current.get(sessionId) ?? 0;
-      const activeId = activeSessionIdRef.current;
-      const shouldNotify = shouldNotifyIdle({
-        sessionExists: Boolean(currentSession),
-        sessionStatus: currentSession?.status ?? null,
-        durationMs: duration,
-        notifyMinBusyMs: NOTIFY_MIN_BUSY_MS,
-        nowMs: now,
-        lastNotifiedAtMs: lastNotifiedAt,
-        notifyCooldownMs: NOTIFY_COOLDOWN_MS,
-        isWindowFocused: document.hasFocus(),
-        isSessionActive: activeId === sessionId,
-      });
-      if (!shouldNotify || !currentSession) {
-        return;
-      }
-
-      const projectName = projectsById.get(currentSession.projectId)?.name ?? currentSession.name;
-      const targetLabel = buildIdleNotificationTargetLabel(currentSession, projectName);
-
-      await notifyCommandFinished("Command finished", `${targetLabel} is idle`);
-      lastNotifiedAtRef.current.set(sessionId, now);
-      busySinceRef.current.delete(sessionId);
-    }, NOTIFY_IDLE_DELAY_MS);
-
-    idleNotifyTimersRef.current.set(sessionId, timeoutId);
-  }, [clearIdleNotifyTimer, projectsById]);
 
   // Reset banner dismiss when a new update or error arrives
   useEffect(() => {
@@ -864,61 +750,6 @@ function App() {
     sendCommandToSession,
   ]);
 
-  const handleSplitSession = useCallback((sessionId: string, orientation: SplitOrientation) => {
-    setSplitBySessionId(prev => {
-      const next = new Map(prev);
-      const current = next.get(sessionId);
-      next.set(sessionId, buildNextSplitState(current, orientation));
-      return next;
-    });
-  }, []);
-
-  const handleFocusSplitPane = useCallback((sessionId: string, paneId: SplitPaneId) => {
-    setSplitBySessionId((prev) => {
-      const current = prev.get(sessionId);
-      if (!current) {
-        return prev;
-      }
-      const nextState = focusSplitPane(current, paneId);
-      if (nextState === current) {
-        return prev;
-      }
-      const next = new Map(prev);
-      next.set(sessionId, nextState);
-      return next;
-    });
-  }, []);
-
-  const handleResizeSplitPanes = useCallback((sessionId: string, paneSizes: number[]) => {
-    setSplitBySessionId((prev) => {
-      const current = prev.get(sessionId);
-      if (!current || current.paneIds.length <= 1) {
-        return prev;
-      }
-      const nextSizes = normalizeSplitPaneSizes(current.paneIds.length, paneSizes);
-      const currentSizes = normalizeSplitPaneSizes(current.paneIds.length, current.paneSizes);
-      if (areSplitPaneSizesEqual(currentSizes, nextSizes)) {
-        return prev;
-      }
-      const next = new Map(prev);
-      next.set(sessionId, {
-        ...current,
-        paneSizes: nextSizes,
-      });
-      return next;
-    });
-  }, []);
-
-  const handleResetSplitSession = useCallback((sessionId: string) => {
-    setSplitBySessionId(prev => {
-      if (!prev.has(sessionId)) {
-        return prev;
-      }
-      const next = new Map(prev);
-      next.delete(sessionId);
-      return next;
-    });
-  }, []);
 
   const handleReconnectSession = useCallback((sessionId: string) => {
     setReconnectBySessionId(prev => {
@@ -929,76 +760,16 @@ function App() {
     });
   }, []);
 
-  const toggleSidebar = useCallback(() => {
-    setIsSidebarOpen(prev => !prev);
-  }, []);
-
-  const toggleRightPanel = useCallback(() => {
-    setIsRightPanelOpen(prev => !prev);
-  }, []);
-
-  const handleSidebarDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDraggingSidebar(true);
-    dragStartXRef.current = e.clientX;
-    dragStartWidthRef.current = sidebarWidth;
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "col-resize";
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const delta = moveEvent.clientX - dragStartXRef.current;
-      const newWidth = Math.min(480, Math.max(180, dragStartWidthRef.current + delta));
-      setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsDraggingSidebar(false);
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-  }, [sidebarWidth]);
-
-  const handleSidebarDragDoubleClick = useCallback(() => {
-    setSidebarWidth(256);
-  }, []);
-
-  const handleSidebarModeChange = useCallback((mode: WorkSidebarMode) => {
-    setSidebarMode(mode);
-    if (mode === "work" || mode === "workspaces") {
-      setShowQuickSwitcher(false);
-      setShowSettings(false);
-    }
-  }, []);
-
-  const handleWorkTabChange = useCallback((tab: WorkSidebarTab) => {
-    setSidebarMode("work");
-    setWorkTab(tab);
-  }, []);
-
   const handleSessionStatusChange = useCallback((sessionId: string, status: TerminalSession["status"]) => {
     const previousStatus = statusBySessionRef.current.get(sessionId) ?? "idle";
     statusBySessionRef.current.set(sessionId, status);
 
     if (status === "busy") {
-      clearIdleAttention(sessionId);
-      busySinceRef.current.set(sessionId, Date.now());
-      clearIdleNotifyTimer(sessionId);
+      onSessionBecameBusy(sessionId);
     } else if (status === "active") {
-      clearIdleAttention(sessionId);
-      clearIdleNotifyTimer(sessionId);
+      onSessionBecameActive(sessionId);
     } else if (status === "idle" && previousStatus !== "idle") {
-      const startedAt = busySinceRef.current.get(sessionId);
-      if (previousStatus === "busy" && activeSessionIdRef.current !== sessionId) {
-        markIdleAttention(sessionId);
-      }
-      if (startedAt) {
-        scheduleIdleNotification(sessionId, startedAt);
-      }
+      onSessionBecameIdle(sessionId);
     }
 
     setSessions(prev => {
@@ -1012,7 +783,7 @@ function App() {
       }
       return newSessions;
     });
-  }, [clearIdleAttention, clearIdleNotifyTimer, markIdleAttention, scheduleIdleNotification]);
+  }, [onSessionBecameBusy, onSessionBecameActive, onSessionBecameIdle]);
 
   useEffect(() => {
     setSessions(prev => {
@@ -1659,107 +1430,6 @@ function App() {
       console.warn("Failed to attach to automation tmux session:", err);
     }
   }, [projectById, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, portAllocationByEntityKey, sendCommandToSession]);
-
-  const pollGithubInbox = useCallback(async (): Promise<void> => {
-    if (githubPollingInFlightRef.current) {
-      return;
-    }
-
-    const githubToken = appSettings.githubToken?.trim() ?? "";
-    if (!githubToken) {
-      if (!githubTokenWarningShownRef.current) {
-        githubTokenWarningShownRef.current = true;
-        console.warn("GitHub polling is disabled because no GitHub token is configured in Settings.");
-      }
-      return;
-    }
-    githubTokenWarningShownRef.current = false;
-
-    const repoTargets = githubRepoTargetsRef.current;
-    if (repoTargets.length === 0) {
-      return;
-    }
-
-    githubPollingInFlightRef.current = true;
-    let insertedCount = 0;
-    try {
-      for (const repoTarget of repoTargets) {
-        const nowMs = Date.now();
-        const lastPolledAtMs = await getGithubPollState(repoTarget.repoKey);
-        if (lastPolledAtMs === null) {
-          await upsertGithubPollState(repoTarget.repoKey, nowMs);
-          continue;
-        }
-
-        let pullRequests;
-        try {
-          pullRequests = await fetchGithubPullRequests(githubToken, repoTarget.owner, repoTarget.repo);
-        } catch (error) {
-          console.warn(`GitHub polling failed for ${repoTarget.repoKey}:`, error);
-          continue;
-        }
-
-        for (const pullRequest of pullRequests) {
-          try {
-            const kind = classifyGithubPullRequestEvent(pullRequest, lastPolledAtMs);
-            if (!kind) {
-              continue;
-            }
-
-            const eventAtMs = kind === "github_pr_opened"
-              ? pullRequest.createdAtMs
-              : pullRequest.updatedAtMs;
-            const insertedId = await insertInboxEvent({
-              kind,
-              source: "github",
-              projectId: repoTarget.projectId,
-              externalId: buildGithubInboxExternalId(
-                repoTarget.repoKey,
-                pullRequest.id,
-                kind,
-                eventAtMs
-              ),
-              title: buildGithubInboxTitle(repoTarget.repoKey, pullRequest.number, kind),
-              body: buildGithubInboxBody(pullRequest),
-              payloadJson: JSON.stringify({
-                projectId: repoTarget.projectId,
-                repoKey: repoTarget.repoKey,
-                pullRequest,
-              }),
-              createdAtMs: eventAtMs,
-            });
-            if (insertedId) {
-              insertedCount += 1;
-            }
-          } catch (error) {
-            console.warn(`Failed to process PR #${pullRequest.number} for ${repoTarget.repoKey}:`, error);
-          }
-        }
-
-        await upsertGithubPollState(repoTarget.repoKey, nowMs);
-      }
-
-      if (insertedCount > 0) {
-        await refreshInbox();
-      }
-    } finally {
-      githubPollingInFlightRef.current = false;
-    }
-  }, [appSettings.githubToken, refreshInbox]);
-
-  useEffect(() => {
-    const initialTimerId = window.setTimeout(() => {
-      void pollGithubInbox();
-    }, GITHUB_INITIAL_POLL_DELAY_MS);
-    const timerId = window.setInterval(() => {
-      void pollGithubInbox();
-    }, GITHUB_POLL_INTERVAL_MS);
-
-    return () => {
-      window.clearTimeout(initialTimerId);
-      window.clearInterval(timerId);
-    };
-  }, [pollGithubInbox]);
 
   const resolveProjectForNewDivergenceCallback = useCallback((): Project | null => {
     return resolveProjectForNewDivergence({
