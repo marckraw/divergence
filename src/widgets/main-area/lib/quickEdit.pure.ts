@@ -32,13 +32,20 @@ export function trimTrailingSlash(value: string): string {
 
 export function getDirname(value: string): string {
   const normalized = normalizePath(value);
-  const trimmed = trimTrailingSlash(normalized);
+  if (/^[A-Za-z]:\/?$/.test(normalized)) {
+    return `${normalized.slice(0, 2)}/`;
+  }
+
+  const trimmed = trimTrailingSlash(normalized) || (normalized.startsWith("/") ? "/" : normalized);
   const lastSlash = trimmed.lastIndexOf("/");
   if (lastSlash < 0) {
-    return trimmed;
+    return ".";
   }
   if (lastSlash === 0) {
     return "/";
+  }
+  if (lastSlash === 2 && /^[A-Za-z]:\//.test(trimmed)) {
+    return `${trimmed.slice(0, 2)}/`;
   }
   return trimmed.slice(0, lastSlash);
 }
@@ -106,7 +113,12 @@ export function isImportCompletionEnabled(filePath: string | null): boolean {
   }
 
   const lower = filePath.toLowerCase();
-  return Array.from(IMPORT_COMPLETION_EXTENSIONS).some((ext) => lower.endsWith(ext));
+  for (const ext of IMPORT_COMPLETION_EXTENSIONS) {
+    if (lower.endsWith(ext)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function buildImportLabel(name: string): string {

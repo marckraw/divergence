@@ -20,7 +20,10 @@ describe("quick edit utils", () => {
   it("computes dirname", () => {
     expect(getDirname("/a/b/file.ts")).toBe("/a/b");
     expect(getDirname("/file.ts")).toBe("/");
-    expect(getDirname("file.ts")).toBe("file.ts");
+    expect(getDirname("file.ts")).toBe(".");
+    expect(getDirname("C:/file.ts")).toBe("C:/");
+    expect(getDirname("C:/a/b/file.ts")).toBe("C:/a/b");
+    expect(getDirname("/")).toBe("/");
   });
 
   it("joins and resolves paths", () => {

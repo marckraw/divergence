@@ -258,8 +258,41 @@ const getLanguageExtension = (filePath: string | null) => {
 
 const DIR_CACHE_TTL_MS = 10_000;
 const PACKAGE_CACHE_TTL_MS = 60_000;
-const dirCache = new Map<string, { at: number; entries: { name: string; isDir: boolean }[] }>();
-const packageCache = new Map<string, { at: number; names: string[] }>();
+const MAX_DIR_CACHE_ENTRIES = 500;
+const MAX_PACKAGE_CACHE_ENTRIES = 500;
+
+type DirCacheValue = { at: number; entries: { name: string; isDir: boolean }[] };
+type PackageCacheValue = { at: number; names: string[] };
+
+const dirCache = new Map<string, DirCacheValue>();
+const packageCache = new Map<string, PackageCacheValue>();
+
+function pruneCache<T extends { at: number }>(
+  cache: Map<string, T>,
+  now: number,
+  ttlMs: number,
+  maxEntries: number
+): void {
+  for (const [key, value] of cache) {
+    if (now - value.at >= ttlMs) {
+      cache.delete(key);
+    }
+  }
+
+  if (cache.size <= maxEntries) {
+    return;
+  }
+
+  const overflowCount = cache.size - maxEntries;
+  const oldestKeys = Array.from(cache.entries())
+    .sort((left, right) => left[1].at - right[1].at)
+    .slice(0, overflowCount)
+    .map(([key]) => key);
+
+  for (const key of oldestKeys) {
+    cache.delete(key);
+  }
+}
 
 const getImportPathMatch = (context: CompletionContext) => {
   const line = context.state.doc.lineAt(context.pos);
@@ -276,8 +309,10 @@ const getImportPathMatch = (context: CompletionContext) => {
 
 const readDirCached = async (path: string) => {
   const now = Date.now();
+  pruneCache(dirCache, now, DIR_CACHE_TTL_MS, MAX_DIR_CACHE_ENTRIES);
   const cached = dirCache.get(path);
-  if (cached && now - cached.at < DIR_CACHE_TTL_MS) {
+  if (cached) {
+    cached.at = now;
     return cached.entries;
   }
 
@@ -296,6 +331,7 @@ const readDirCached = async (path: string) => {
         return a.name.localeCompare(b.name);
       });
     dirCache.set(path, { at: now, entries: normalized });
+    pruneCache(dirCache, now, DIR_CACHE_TTL_MS, MAX_DIR_CACHE_ENTRIES);
     return normalized;
   } catch {
     return [];
@@ -304,8 +340,10 @@ const readDirCached = async (path: string) => {
 
 const readPackageNamesCached = async (rootPath: string) => {
   const now = Date.now();
+  pruneCache(packageCache, now, PACKAGE_CACHE_TTL_MS, MAX_PACKAGE_CACHE_ENTRIES);
   const cached = packageCache.get(rootPath);
-  if (cached && now - cached.at < PACKAGE_CACHE_TTL_MS) {
+  if (cached) {
+    cached.at = now;
     return cached.names;
   }
 
@@ -330,9 +368,11 @@ const readPackageNamesCached = async (rootPath: string) => {
     }
     const list = Array.from(names).sort();
     packageCache.set(rootPath, { at: now, names: list });
+    pruneCache(packageCache, now, PACKAGE_CACHE_TTL_MS, MAX_PACKAGE_CACHE_ENTRIES);
     return list;
   } catch {
     packageCache.set(rootPath, { at: now, names: [] });
+    pruneCache(packageCache, now, PACKAGE_CACHE_TTL_MS, MAX_PACKAGE_CACHE_ENTRIES);
     return [];
   }
 };
@@ -521,8 +561,15 @@ function CodeEditor({
       state,
       parent: containerRef.current,
     });
+    const createdView = viewRef.current;
+    const focusFrame = window.requestAnimationFrame(() => {
+      if (viewRef.current === createdView) {
+        createdView.focus();
+      }
+    });
 
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       viewRef.current?.destroy();
       viewRef.current = null;
     };
