@@ -51,6 +51,7 @@ import {
   getAggregatedTerminalStatus,
   joinSessionPath,
 } from "../lib/mainArea.pure";
+import { resolveActivePaneSessionId } from "../lib/activePaneSession.pure";
 import {
   fetchLinearProjectIssues,
   fetchLinearWorkflowStates,
@@ -164,6 +165,10 @@ function MainAreaContainer({
     [activeSession],
   );
   const activeSessionId = activeSession?.id ?? null;
+  const activePaneSessionId = useMemo(
+    () => resolveActivePaneSessionId(activeSessionId, activeSplit),
+    [activeSessionId, activeSplit],
+  );
   const activeSessionType = activeSession?.type ?? null;
   const activeSessionProjectId = activeSession?.projectId ?? null;
   const activeSessionTargetId = activeSession?.targetId ?? null;
@@ -754,15 +759,14 @@ function MainAreaContainer({
   }, [queueScope]);
 
   const handleQueueSendItem = useCallback(async (itemId: number) => {
-    const activeSessionId = activeSession?.id;
     const item = queueItems.find((current) => current.id === itemId);
-    if (!activeSessionId || !item) {
+    if (!activePaneSessionId || !item) {
       return;
     }
 
     setQueueSendingItemId(itemId);
     try {
-      await onSendPromptToSession(activeSessionId, item.prompt);
+      await onSendPromptToSession(activePaneSessionId, item.prompt);
       await deletePromptQueueItem(itemId);
       setQueueItems((prev) => prev.filter((current) => current.id !== itemId));
       setQueueError(null);
@@ -771,7 +775,7 @@ function MainAreaContainer({
     } finally {
       setQueueSendingItemId((prev) => (prev === itemId ? null : prev));
     }
-  }, [activeSession?.id, onSendPromptToSession, queueItems]);
+  }, [activePaneSessionId, onSendPromptToSession, queueItems]);
 
   const handleLinearRefresh = useCallback(async () => {
     const attempted = await handleLoadLinearIssues(true);
@@ -781,22 +785,21 @@ function MainAreaContainer({
   }, [handleLoadLinearIssues, linearContextKey]);
 
   const handleLinearSendIssue = useCallback(async (issueId: string) => {
-    const activeSessionId = activeSession?.id;
     const issue = linearIssues.find((current) => current.id === issueId);
-    if (!activeSessionId || !issue) {
+    if (!activePaneSessionId || !issue) {
       return;
     }
 
     setLinearSendingIssueId(issueId);
     try {
-      await onSendPromptToSession(activeSessionId, buildLinearIssuePrompt(issue));
+      await onSendPromptToSession(activePaneSessionId, buildLinearIssuePrompt(issue));
       setLinearError(null);
     } catch (error) {
       setLinearError(getErrorMessage(error, "Failed to send Linear task."));
     } finally {
       setLinearSendingIssueId((prev) => (prev === issueId ? null : prev));
     }
-  }, [activeSession?.id, linearIssues, onSendPromptToSession]);
+  }, [activePaneSessionId, linearIssues, onSendPromptToSession]);
 
   const handleLinearUpdateIssueState = useCallback(async (issueId: string, stateId: string) => {
     const token = appSettings.linearApiToken?.trim() ?? "";
@@ -967,8 +970,8 @@ function MainAreaContainer({
                   isFocused={isFocusedPane}
                   onStatusChange={isSplit ? handleSplitStatusChange(session.id, paneId) : handleStatusChange(session.id)}
                   onReconnect={() => onReconnectSession(session.id)}
-                  onRegisterCommand={isPrimaryPane ? onRegisterTerminalCommand : undefined}
-                  onUnregisterCommand={isPrimaryPane ? onUnregisterTerminalCommand : undefined}
+                  onRegisterCommand={onRegisterTerminalCommand}
+                  onUnregisterCommand={onUnregisterTerminalCommand}
                   onClose={() => onCloseSession(session.id)}
                 />
               </div>
