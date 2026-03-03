@@ -102,6 +102,7 @@ export { default as LoadingSpinner } from "./LoadingSpinner.presentational";
 export { default as ModalHeader } from "./ModalHeader.presentational";
 export { default as ModalFooter } from "./ModalFooter.presentational";
 export { default as Kbd } from "./Kbd.presentational";
+export { default as SecretTokenField } from "./SecretTokenField.presentational";
 
 export type { ButtonProps } from "./Button.presentational";
 export type { IconButtonProps } from "./IconButton.presentational";
@@ -126,3 +127,4 @@ export type { LoadingSpinnerProps } from "./LoadingSpinner.presentational";
 export type { ModalHeaderProps } from "./ModalHeader.presentational";
 export type { ModalFooterProps } from "./ModalFooter.presentational";
 export type { KbdProps } from "./Kbd.presentational";
+export type { SecretTokenFieldProps } from "./SecretTokenField.presentational";

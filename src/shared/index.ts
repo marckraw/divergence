@@ -35,6 +35,7 @@ export {
   TabButton,
   Textarea,
   TextInput,
+  SecretTokenField,
   ToolbarButton,
 } from "./ui";
 export type {
@@ -62,6 +63,7 @@ export type {
   SegmentedControlProps,
   SelectProps,
   SelectTriggerProps,
+  SecretTokenFieldProps,
   TextareaProps,
   TextInputProps,
 } from "./ui";
