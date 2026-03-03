@@ -308,8 +308,8 @@ function GithubPrHubPresentational({
                     className="h-9 rounded border border-surface bg-main px-2 text-sm text-text"
                     disabled={merging}
                   >
-                    <option value="squash">Squash</option>
                     <option value="merge">Merge commit</option>
+                    <option value="squash">Squash</option>
                   </select>
                 </label>
                 {mergeDisabledReason && (

@@ -43,7 +43,7 @@ export function useGithubPrHub({
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  const [mergeMethod, setMergeMethod] = useState<GithubPullRequestMergeMethod>("squash");
+  const [mergeMethod, setMergeMethod] = useState<GithubPullRequestMergeMethod>("merge");
   const [merging, setMerging] = useState(false);
   const requestIdRef = useRef(0);
 
@@ -305,4 +305,3 @@ export function useGithubPrHub({
     mergeSelectedPullRequest,
   };
 }
-
