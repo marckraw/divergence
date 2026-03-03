@@ -510,9 +510,10 @@ function MainAreaContainer({
 
   const handleOpenFile = useCallback(async (
     path: string,
-    options?: { resetDiff?: boolean }
+    options?: { resetDiff?: boolean; throwOnError?: boolean }
   ) => {
     const resetDiff = options?.resetDiff ?? true;
+    const throwOnError = options?.throwOnError ?? false;
     if (resetDiff) {
       setOpenDiff(null);
       setDiffLoading(false);
@@ -547,6 +548,9 @@ function MainAreaContainer({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to read file.";
       setFileLoadError(message);
+      if (throwOnError) {
+        throw error;
+      }
     } finally {
       setIsLoadingFile(false);
     }
@@ -585,21 +589,23 @@ function MainAreaContainer({
     setDiffLoading(true);
     setDiffError(null);
 
-    if (isDeleted || changesMode === "branch") {
-      if (isDeleted) {
-        setOpenFilePath(absolutePath);
-        setOpenFileContent("");
-        setOpenFileInitial("");
-        setFileLoadError(null);
-        setFileSaveError(null);
-        setIsReadOnly(true);
-        setLargeFileWarning(null);
-        setIsLoadingFile(false);
-      } else {
-        await handleOpenFile(absolutePath, { resetDiff: false });
-      }
+    if (isDeleted) {
+      setOpenFilePath(absolutePath);
+      setOpenFileContent("");
+      setOpenFileInitial("");
+      setFileLoadError(null);
+      setFileSaveError(null);
+      setIsReadOnly(true);
+      setLargeFileWarning(null);
+      setIsLoadingFile(false);
     } else {
-      await handleOpenFile(absolutePath, { resetDiff: false });
+      try {
+        await handleOpenFile(absolutePath, { resetDiff: false, throwOnError: true });
+      } catch (error) {
+        setDiffError(error instanceof Error ? error.message : "Failed to load file.");
+        setDiffLoading(false);
+        return;
+      }
     }
 
     try {

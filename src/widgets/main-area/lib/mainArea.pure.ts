@@ -1,14 +1,15 @@
 import type { TerminalSession } from "../../../entities";
 
 export function joinSessionPath(parent: string, child: string): string {
-  if (child.startsWith("/") || child.startsWith("\\")) {
-    return child;
+  const normalizedChild = child.replace(/^[/\\]+/, "");
+  if (!normalizedChild) {
+    return parent;
   }
   if (parent.endsWith("/") || parent.endsWith("\\")) {
-    return `${parent}${child}`;
+    return `${parent}${normalizedChild}`;
   }
   const separator = parent.includes("\\") ? "\\" : "/";
-  return `${parent}${separator}${child}`;
+  return `${parent}${separator}${normalizedChild}`;
 }
 
 export function formatBytes(bytes: number): string {

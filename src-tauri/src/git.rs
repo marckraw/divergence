@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::Write as IoWrite;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::io::ErrorKind;
@@ -1343,19 +1343,72 @@ fn parse_porcelain_untracked_entry(part: &str) -> GitChange {
     }
 }
 
-pub fn get_diff(repo_path: &Path, file_path: &Path, mode: DiffMode) -> Result<GitDiff, String> {
-    let rel_path = file_path.strip_prefix(repo_path).unwrap_or(file_path);
-    let rel_string = path_to_string(rel_path);
+fn normalize_relative_path(path: &Path) -> Option<PathBuf> {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(part) => normalized.push(part),
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return None;
+                }
+            }
+            Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(normalized)
+}
 
-    let diff = run_diff(repo_path, &rel_string, mode)?;
-    let mut diff_text = diff;
+fn resolve_repo_relative_path(repo_path: &Path, file_path: &Path) -> Result<PathBuf, String> {
+    if let Ok(relative) = file_path.strip_prefix(repo_path) {
+        return Ok(relative.to_path_buf());
+    }
+
+    if !file_path.is_absolute() {
+        if let Some(relative) = normalize_relative_path(file_path) {
+            return Ok(relative);
+        }
+    }
+
+    Err(format!(
+        "File path '{}' is not inside repository '{}'",
+        path_to_string(file_path),
+        path_to_string(repo_path)
+    ))
+}
+
+fn diff_numstat_indicates_binary(numstat: &str) -> bool {
+    numstat
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .any(|line| {
+            let mut fields = line.splitn(3, '\t');
+            let added = fields.next().map(str::trim);
+            let removed = fields.next().map(str::trim);
+            matches!((added, removed), (Some("-"), Some("-")))
+        })
+}
+
+pub fn get_diff(repo_path: &Path, file_path: &Path, mode: DiffMode) -> Result<GitDiff, String> {
+    let rel_path = resolve_repo_relative_path(repo_path, file_path)?;
+    let rel_string = path_to_string(&rel_path);
+
+    let mut diff_text = run_diff(repo_path, &rel_string, mode)?;
+    let mut used_untracked_diff = false;
 
     if diff_text.is_empty() && matches!(mode, DiffMode::Working) && is_untracked(repo_path, &rel_string)
     {
         diff_text = run_untracked_diff(repo_path, &rel_string)?;
+        used_untracked_diff = true;
     }
 
-    let is_binary = diff_text.contains("Binary files") || diff_text.contains("GIT binary patch");
+    let diff_numstat = if used_untracked_diff {
+        run_untracked_diff_numstat(repo_path, &rel_string)?
+    } else {
+        run_diff_numstat(repo_path, &rel_string, mode)?
+    };
+    let is_binary = diff_numstat_indicates_binary(&diff_numstat);
 
     Ok(GitDiff {
         diff: diff_text,
@@ -1399,12 +1452,37 @@ fn run_diff(repo_path: &Path, rel_path: &str, mode: DiffMode) -> Result<String, 
     run_git_diff(repo_path, &args)
 }
 
+fn run_diff_numstat(repo_path: &Path, rel_path: &str, mode: DiffMode) -> Result<String, String> {
+    let mut args = vec!["diff", "--no-color", "--numstat"];
+    if matches!(mode, DiffMode::Staged) {
+        args.push("--cached");
+    }
+    args.push("--");
+    args.push(rel_path);
+
+    run_git_diff(repo_path, &args)
+}
+
 fn run_untracked_diff(repo_path: &Path, rel_path: &str) -> Result<String, String> {
     let null_device = if cfg!(windows) { "NUL" } else { "/dev/null" };
     let args = [
         "diff",
         "--no-color",
         "--patch",
+        "--no-index",
+        "--",
+        null_device,
+        rel_path,
+    ];
+    run_git_diff(repo_path, &args)
+}
+
+fn run_untracked_diff_numstat(repo_path: &Path, rel_path: &str) -> Result<String, String> {
+    let null_device = if cfg!(windows) { "NUL" } else { "/dev/null" };
+    let args = [
+        "diff",
+        "--no-color",
+        "--numstat",
         "--no-index",
         "--",
         null_device,
@@ -1809,24 +1887,32 @@ pub fn list_branch_changes(repo_path: &Path) -> Result<BranchChanges, String> {
     })
 }
 
+fn run_branch_diff(repo_path: &Path, base: &str, rel_path: &str) -> Result<String, String> {
+    let base_ref = format!("{}...HEAD", base);
+    run_git_diff(
+        repo_path,
+        &["diff", "--no-color", "--patch", &base_ref, "--", rel_path],
+    )
+}
+
+fn run_branch_diff_numstat(repo_path: &Path, base: &str, rel_path: &str) -> Result<String, String> {
+    let base_ref = format!("{}...HEAD", base);
+    run_git_diff(
+        repo_path,
+        &["diff", "--no-color", "--numstat", &base_ref, "--", rel_path],
+    )
+}
+
 pub fn get_branch_diff(repo_path: &Path, file_path: &Path) -> Result<GitDiff, String> {
     let base_ref = find_base_ref(repo_path)?;
     let Some(ref base) = base_ref else {
         return Err("No base branch found".to_string());
     };
-    let rel_path = file_path.strip_prefix(repo_path).unwrap_or(file_path);
-    let diff_text = run_git_diff(
-        repo_path,
-        &[
-            "diff",
-            "--no-color",
-            "--patch",
-            &format!("{}...HEAD", base),
-            "--",
-            &rel_path.to_string_lossy(),
-        ],
-    )?;
-    let is_binary = diff_text.contains("Binary files") || diff_text.contains("GIT binary patch");
+    let rel_path = resolve_repo_relative_path(repo_path, file_path)?;
+    let rel_string = path_to_string(&rel_path);
+    let diff_text = run_branch_diff(repo_path, base, &rel_string)?;
+    let diff_numstat = run_branch_diff_numstat(repo_path, base, &rel_string)?;
+    let is_binary = diff_numstat_indicates_binary(&diff_numstat);
     Ok(GitDiff {
         diff: diff_text,
         is_binary,
