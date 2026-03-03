@@ -62,9 +62,10 @@ Use these suffixes for new or migrated files:
 `*.container.tsx` files:
 
 - own side effects and state wiring
-- pass view models/handlers to presentational components
+- compose presentational components and pass view models/handlers to them
+- may also render JSX directly when a separate presentational would be a hollow pass-through
 
-When creating a new container component, co-locate a matching presentational component unless there is a clear exception.
+Prefer extracting render-only UI into presentational components — they are easy to reason about and test. But do not force a 1:1 container-to-presentational pairing; a container that purely orchestrates child presentationals does not need its own matching presentational file.
 
 ### Import boundary rules
 
