@@ -29,6 +29,8 @@ export interface GithubPullRequestSummary {
   headRef: string;
   headSha: string;
   draft: boolean;
+  mergeable: boolean | null;
+  mergeableState: string | null;
 }
 
 export interface GithubPullRequestDetail {

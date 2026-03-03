@@ -39,4 +39,24 @@ describe("resolveActivePaneSessionId", () => {
       primaryPaneId: "pane-1",
     })).toBe("session-1");
   });
+
+  it("returns base session id when focused pane matches non-default primary", () => {
+    expect(resolveActivePaneSessionId("session-1", {
+      orientation: "vertical",
+      paneIds: ["pane-2", "pane-1"],
+      paneSizes: [0.5, 0.5],
+      focusedPaneId: "pane-2",
+      primaryPaneId: "pane-2",
+    })).toBe("session-1");
+  });
+
+  it("returns suffixed id for non-primary pane after close-and-readd", () => {
+    expect(resolveActivePaneSessionId("session-1", {
+      orientation: "vertical",
+      paneIds: ["pane-2", "pane-1"],
+      paneSizes: [0.5, 0.5],
+      focusedPaneId: "pane-1",
+      primaryPaneId: "pane-2",
+    })).toBe("session-1-pane-1");
+  });
 });

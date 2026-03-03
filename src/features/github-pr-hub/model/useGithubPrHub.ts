@@ -147,6 +147,8 @@ export function useGithubPrHub({
             headRef: item.headRef ?? "",
             headSha: item.headSha ?? "",
             draft: item.draft ?? false,
+            mergeable: item.mergeable ?? null,
+            mergeableState: item.mergeableState ?? null,
           };
 
           const key = `${normalized.repoKey}#${normalized.number}`;

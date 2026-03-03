@@ -753,7 +753,7 @@ function App() {
           return;
         }
         if (Date.now() - startedAt >= timeoutMs) {
-          reject(new Error("Timed out while waiting for terminal command channel."));
+          reject(new Error("Terminal is not ready — the session may still be loading or its shell failed to start. Try clicking the session tab or reconnecting."));
           return;
         }
         window.setTimeout(poll, 50);
@@ -777,7 +777,7 @@ function App() {
     }
 
     const activateIfNeeded = options?.activateIfNeeded ?? true;
-    const timeoutMs = options?.timeoutMs ?? 15_000;
+    const timeoutMs = options?.timeoutMs ?? (activateIfNeeded ? 15_000 : 2_000);
     const previousActiveSessionId = activeSessionIdRef.current;
     const shouldActivate = activateIfNeeded && previousActiveSessionId !== sessionId;
 

@@ -64,6 +64,22 @@ export function getChecksToneClass(checksState: string | null): string {
   return "border-surface text-subtext bg-main/30";
 }
 
+export function hasGithubMergeConflicts(
+  mergeable: boolean | null,
+  mergeableState: string | null,
+): boolean {
+  const normalized = mergeableState?.trim().toLowerCase() ?? "";
+  if (normalized === "dirty" || normalized.includes("conflict")) {
+    return true;
+  }
+
+  if (mergeable === false && normalized.length === 0) {
+    return true;
+  }
+
+  return false;
+}
+
 export function getGithubFileStatusToneClass(status: string): string {
   const normalized = status.trim().toLowerCase();
   if (normalized === "added") return "bg-green/20 text-green";
@@ -125,4 +141,3 @@ export function getDiffLineClass(kind: ParsedDiffLine["kind"]): string {
       return "text-text";
   }
 }
-
