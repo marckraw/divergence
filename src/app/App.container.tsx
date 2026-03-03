@@ -1664,6 +1664,16 @@ function App() {
       return;
     }
 
+    const githubToken = appSettings.githubToken?.trim() ?? "";
+    if (!githubToken) {
+      if (!githubTokenWarningShownRef.current) {
+        githubTokenWarningShownRef.current = true;
+        console.warn("GitHub polling is disabled because no GitHub token is configured in Settings.");
+      }
+      return;
+    }
+    githubTokenWarningShownRef.current = false;
+
     const repoTargets = githubRepoTargetsRef.current;
     if (repoTargets.length === 0) {
       return;
@@ -1682,16 +1692,8 @@ function App() {
 
         let pullRequests;
         try {
-          pullRequests = await fetchGithubPullRequests(repoTarget.owner, repoTarget.repo);
+          pullRequests = await fetchGithubPullRequests(githubToken, repoTarget.owner, repoTarget.repo);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (message.toLowerCase().includes("github_token")) {
-            if (!githubTokenWarningShownRef.current) {
-              githubTokenWarningShownRef.current = true;
-              console.warn("GitHub polling is disabled because GITHUB_TOKEN is missing.");
-            }
-            return;
-          }
           console.warn(`GitHub polling failed for ${repoTarget.repoKey}:`, error);
           continue;
         }
@@ -1742,7 +1744,7 @@ function App() {
     } finally {
       githubPollingInFlightRef.current = false;
     }
-  }, [refreshInbox]);
+  }, [appSettings.githubToken, refreshInbox]);
 
   useEffect(() => {
     const initialTimerId = window.setTimeout(() => {
