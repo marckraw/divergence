@@ -13,7 +13,8 @@ export function resolveActivePaneSessionId(
   }
 
   const focusedPaneId = splitState.focusedPaneId;
-  if (!splitState.paneIds.includes(focusedPaneId) || focusedPaneId === "pane-1") {
+  const primaryPaneId = splitState.primaryPaneId;
+  if (!splitState.paneIds.includes(focusedPaneId) || focusedPaneId === primaryPaneId) {
     return sessionId;
   }
 

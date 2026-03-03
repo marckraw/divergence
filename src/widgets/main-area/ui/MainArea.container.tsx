@@ -169,6 +169,8 @@ function MainAreaContainer({
     () => resolveActivePaneSessionId(activeSessionId, activeSplit),
     [activeSessionId, activeSplit],
   );
+  const activePaneSessionIdRef = useRef(activePaneSessionId);
+  activePaneSessionIdRef.current = activePaneSessionId;
   const activeSessionType = activeSession?.type ?? null;
   const activeSessionProjectId = activeSession?.projectId ?? null;
   const activeSessionTargetId = activeSession?.targetId ?? null;
@@ -766,13 +768,18 @@ function MainAreaContainer({
 
   const handleQueueSendItem = useCallback(async (itemId: number) => {
     const item = queueItems.find((current) => current.id === itemId);
-    if (!activePaneSessionId || !item) {
+    const currentSessionId = activePaneSessionIdRef.current;
+    if (!currentSessionId) {
+      setQueueError("No active terminal session. Open a session first.");
+      return;
+    }
+    if (!item) {
       return;
     }
 
     setQueueSendingItemId(itemId);
     try {
-      await onSendPromptToSession(activePaneSessionId, item.prompt);
+      await onSendPromptToSession(currentSessionId, item.prompt);
       await deletePromptQueueItem(itemId);
       setQueueItems((prev) => prev.filter((current) => current.id !== itemId));
       setQueueError(null);
@@ -781,7 +788,7 @@ function MainAreaContainer({
     } finally {
       setQueueSendingItemId((prev) => (prev === itemId ? null : prev));
     }
-  }, [activePaneSessionId, onSendPromptToSession, queueItems]);
+  }, [onSendPromptToSession, queueItems]);
 
   const handleLinearRefresh = useCallback(async () => {
     const attempted = await handleLoadLinearIssues(true);
@@ -792,20 +799,25 @@ function MainAreaContainer({
 
   const handleLinearSendIssue = useCallback(async (issueId: string) => {
     const issue = linearIssues.find((current) => current.id === issueId);
-    if (!activePaneSessionId || !issue) {
+    const currentSessionId = activePaneSessionIdRef.current;
+    if (!currentSessionId) {
+      setLinearError("No active terminal session. Open a session first.");
+      return;
+    }
+    if (!issue) {
       return;
     }
 
     setLinearSendingIssueId(issueId);
     try {
-      await onSendPromptToSession(activePaneSessionId, buildLinearIssuePrompt(issue));
+      await onSendPromptToSession(currentSessionId, buildLinearIssuePrompt(issue));
       setLinearError(null);
     } catch (error) {
       setLinearError(getErrorMessage(error, "Failed to send Linear task."));
     } finally {
       setLinearSendingIssueId((prev) => (prev === issueId ? null : prev));
     }
-  }, [activePaneSessionId, linearIssues, onSendPromptToSession]);
+  }, [linearIssues, onSendPromptToSession]);
 
   const handleLinearUpdateIssueState = useCallback(async (issueId: string, stateId: string) => {
     const token = appSettings.linearApiToken?.trim() ?? "";
