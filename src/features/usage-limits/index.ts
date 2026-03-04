@@ -10,8 +10,6 @@ export {
 } from "./model/usageLimits.pure";
 export type {
   UsageWindow,
-  UsageLimitsStatus,
-  ClaudeUsageResult,
   CodexUsageResult,
   UsageLevel,
   UsageLimitsState,

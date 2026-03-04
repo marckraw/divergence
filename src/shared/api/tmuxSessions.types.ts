@@ -1,5 +1,6 @@
 export interface TmuxSessionEntry {
   name: string;
+  socket_path: string;
   created: string;
   attached: boolean;
   window_count: number;

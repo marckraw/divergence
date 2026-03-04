@@ -88,8 +88,14 @@ export async function getTmuxDiagnostics(): Promise<TmuxDiagnosticsEntry> {
   return inflightTmuxDiagnostics;
 }
 
-export async function killTmuxSession(sessionName: string): Promise<void> {
-  await invoke("kill_tmux_session", { sessionName });
+export async function killTmuxSession(
+  sessionName: string,
+  socketPath?: string
+): Promise<void> {
+  await invoke("kill_tmux_session", {
+    sessionName,
+    socketPath: socketPath ?? null,
+  });
 }
 
 export async function killAllTmuxSessions(sessionNames: string[]): Promise<void> {

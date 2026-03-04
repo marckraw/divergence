@@ -16,9 +16,7 @@ function UsageLimitsButtonPresentational({
   dotColor,
   showDot,
   onToggle,
-  claude,
   codex,
-  status,
   loading,
   lastFetchedAtMs,
   onRefresh,
@@ -54,9 +52,7 @@ function UsageLimitsButtonPresentational({
       {isOpen && (
         <div className="absolute right-0 top-full mt-1 z-50">
           <UsageLimitsPopover
-            claude={claude}
             codex={codex}
-            status={status}
             loading={loading}
             lastFetchedAtMs={lastFetchedAtMs}
             onRefresh={onRefresh}

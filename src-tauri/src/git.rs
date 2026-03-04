@@ -187,12 +187,26 @@ pub fn set_origin_to_source_remote(source: &Path, destination: &Path) -> Result<
     Ok(())
 }
 
-pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
+pub fn kill_tmux_session(session_name: &str, socket_path: Option<&str>) -> Result<(), String> {
+    let session_name = session_name.trim();
     if !session_name.starts_with("divergence-") {
         return Ok(());
     }
 
+    let socket_path = socket_path
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    debug_log(&format!(
+        "[divergence] kill_tmux_session: target={:?}, socket={:?}",
+        session_name,
+        socket_path
+    ));
+
     let mut cmd = command_with_tmux();
+    if let Some(socket_path) = socket_path {
+        cmd.args(["-S", socket_path]);
+    }
     cmd.args(["kill-session", "-t", session_name]);
     let output = run_command_with_timeout(
         &mut cmd,
@@ -203,6 +217,11 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
     match output {
         Ok(result) => {
             if result.status.success() {
+                debug_log(&format!(
+                    "[divergence] kill_tmux_session: success target={:?}, socket={:?}",
+                    session_name,
+                    socket_path
+                ));
                 return Ok(());
             }
 
@@ -211,6 +230,12 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
                 || stderr.contains("no server running")
                 || stderr.contains("failed to connect to server")
             {
+                debug_log(&format!(
+                    "[divergence] kill_tmux_session: non-fatal miss target={:?}, socket={:?}, stderr={:?}",
+                    session_name,
+                    socket_path,
+                    stderr.trim()
+                ));
                 return Ok(());
             }
 
@@ -233,6 +258,7 @@ pub fn kill_tmux_session(session_name: &str) -> Result<(), String> {
 #[derive(Debug, Clone)]
 pub struct TmuxSessionInfo {
     pub name: String,
+    pub socket_path: String,
     pub created: String,
     pub attached: bool,
     pub window_count: u32,
@@ -291,7 +317,7 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
 
     const SEP: &str = ":::";
     let fmt = format!(
-        "#{{session_name}}{0}#{{session_created}}{0}#{{session_attached}}{0}#{{session_windows}}{0}#{{session_activity}}",
+        "#{{session_name}}{0}#{{socket_path}}{0}#{{session_created}}{0}#{{session_attached}}{0}#{{session_windows}}{0}#{{session_activity}}",
         SEP
     );
 
@@ -355,7 +381,7 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
 
     for line in stdout.lines() {
         let parts: Vec<&str> = line.split(SEP).collect();
-        if parts.len() < 5 {
+        if parts.len() < 6 {
             debug_log(&format!("[divergence] list_tmux_sessions: skipping malformed line (parts={}): {:?}", parts.len(), line.chars().take(100).collect::<String>()));
             continue;
         }
@@ -366,10 +392,11 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
         }
         sessions.push(TmuxSessionInfo {
             name: name.to_string(),
-            created: epoch_to_iso8601(parts[1]),
-            attached: parts[2] != "0",
-            window_count: parts[3].trim().parse().unwrap_or(0),
-            activity: epoch_to_iso8601(parts[4]),
+            socket_path: parts[1].to_string(),
+            created: epoch_to_iso8601(parts[2]),
+            attached: parts[3] != "0",
+            window_count: parts[4].trim().parse().unwrap_or(0),
+            activity: epoch_to_iso8601(parts[5]),
         });
     }
 

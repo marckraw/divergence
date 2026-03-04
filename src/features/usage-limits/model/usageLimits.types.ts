@@ -4,17 +4,6 @@ export interface UsageWindow {
   label: string;
 }
 
-export interface UsageLimitsStatus {
-  claudeCredentialsFound: boolean;
-  codexCredentialsFound: boolean;
-}
-
-export interface ClaudeUsageResult {
-  available: boolean;
-  error: string | null;
-  windows: UsageWindow[];
-}
-
 export interface CodexUsageResult {
   available: boolean;
   error: string | null;
@@ -25,9 +14,7 @@ export interface CodexUsageResult {
 export type UsageLevel = "normal" | "warning" | "critical";
 
 export interface UsageLimitsState {
-  claude: ClaudeUsageResult | null;
   codex: CodexUsageResult | null;
-  status: UsageLimitsStatus | null;
   loading: boolean;
   lastFetchedAtMs: number | null;
 }

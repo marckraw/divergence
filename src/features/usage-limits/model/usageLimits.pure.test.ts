@@ -106,34 +106,33 @@ describe("usage limits pure utils", () => {
 
   describe("getSummaryUsageLevel", () => {
     it("returns normal when no data", () => {
-      expect(getSummaryUsageLevel(null, null)).toBe("normal");
+      expect(getSummaryUsageLevel(null)).toBe("normal");
     });
 
     it("returns level based on highest utilization", () => {
-      const claude = {
-        available: true,
-        error: null,
-        windows: [
-          { utilization: 0.3, resetsAt: null, label: "Session" },
-          { utilization: 0.72, resetsAt: null, label: "Weekly" },
-        ],
-      };
-      expect(getSummaryUsageLevel(claude, null)).toBe("warning");
-    });
-
-    it("uses critical when any window is critical", () => {
-      const claude = {
-        available: true,
-        error: null,
-        windows: [{ utilization: 0.9, resetsAt: null, label: "Session" }],
-      };
       const codex = {
         available: true,
         error: null,
         planType: "Pro",
-        windows: [{ utilization: 0.3, resetsAt: null, label: "Primary" }],
+        windows: [
+          { utilization: 0.3, resetsAt: null, label: "Primary" },
+          { utilization: 0.72, resetsAt: null, label: "Secondary" },
+        ],
       };
-      expect(getSummaryUsageLevel(claude, codex)).toBe("critical");
+      expect(getSummaryUsageLevel(codex)).toBe("warning");
+    });
+
+    it("uses critical when any window is critical", () => {
+      const codex = {
+        available: true,
+        error: null,
+        planType: "Pro",
+        windows: [
+          { utilization: 0.9, resetsAt: null, label: "Primary" },
+          { utilization: 0.3, resetsAt: null, label: "Secondary" },
+        ],
+      };
+      expect(getSummaryUsageLevel(codex)).toBe("critical");
     });
   });
 
