@@ -140,8 +140,6 @@ pub fn run() {
             commands::delete_workspace_folder,
             commands::get_workspaces_base_path,
             commands::check_port_available,
-            usage_limits::get_usage_limits_status,
-            usage_limits::fetch_claude_usage,
             usage_limits::fetch_codex_usage,
         ])
         .run(tauri::generate_context!());

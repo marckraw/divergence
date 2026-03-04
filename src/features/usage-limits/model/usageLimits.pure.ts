@@ -1,7 +1,6 @@
 import type {
   UsageLevel,
   UsageWindow,
-  ClaudeUsageResult,
   CodexUsageResult,
 } from "./usageLimits.types";
 
@@ -68,13 +67,9 @@ export function getUsageLevelBarColor(level: UsageLevel): string {
 }
 
 export function getSummaryUsageLevel(
-  claude: ClaudeUsageResult | null,
   codex: CodexUsageResult | null,
 ): UsageLevel {
-  const allWindows: UsageWindow[] = [
-    ...(claude?.windows ?? []),
-    ...(codex?.windows ?? []),
-  ];
+  const allWindows: UsageWindow[] = codex?.windows ?? [];
 
   if (allWindows.length === 0) return "normal";
 
