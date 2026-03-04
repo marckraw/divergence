@@ -38,7 +38,7 @@ describe("tmux ownership utils", () => {
       projectName: project.name,
       projectId: project.id,
     });
-    const projectPaneThreeName = buildSplitTmuxSessionName(projectSessionName, "pane-3");
+    const projectPaneFourName = buildSplitTmuxSessionName(projectSessionName, "pane-4");
 
     const sessions: TmuxSessionEntry[] = [
       {
@@ -49,7 +49,7 @@ describe("tmux ownership utils", () => {
         activity: "now",
       },
       {
-        name: projectPaneThreeName,
+        name: projectPaneFourName,
         created: "now",
         attached: true,
         window_count: 1,

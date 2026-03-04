@@ -101,6 +101,13 @@ describe("tmux panel utils", () => {
     expect(
       findSessionIdsByTmuxSessionName(
         sessions,
+        "divergence-project-alpha-1-pane-4"
+      )
+    ).toEqual(["project-1"]);
+
+    expect(
+      findSessionIdsByTmuxSessionName(
+        sessions,
         "divergence-non-existent"
       )
     ).toEqual([]);

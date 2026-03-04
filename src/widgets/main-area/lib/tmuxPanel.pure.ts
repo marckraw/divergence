@@ -86,6 +86,7 @@ export function findSessionIdsByTmuxSessionName(
       tmuxSessionName === baseName
       || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-2")
       || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-3")
+      || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-4")
     ) {
       matches.push(session.id);
     }
