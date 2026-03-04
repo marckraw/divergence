@@ -1,5 +1,11 @@
 # divergence
 
+## 0.26.4
+
+### Patch Changes
+
+- 07b7354: Increase terminal split capacity from 3 to 4 panes, including pane-4 support in split session state and tmux session ownership/mapping helpers.
+
 ## 0.26.3
 
 ### Patch Changes
