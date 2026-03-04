@@ -27,6 +27,7 @@ const divergence: Divergence = {
 function makeSession(ownership: TmuxSessionWithOwnership["ownership"]): TmuxSessionWithOwnership {
   return {
     name: "sess",
+    socket_path: "/tmp/tmux-501/default",
     created: "now",
     attached: true,
     window_count: 1,

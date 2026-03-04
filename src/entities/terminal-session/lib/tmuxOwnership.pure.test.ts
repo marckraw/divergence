@@ -43,6 +43,7 @@ describe("tmux ownership utils", () => {
     const sessions: TmuxSessionEntry[] = [
       {
         name: projectSessionName,
+        socket_path: "/tmp/tmux-501/default",
         created: "now",
         attached: true,
         window_count: 1,
@@ -50,6 +51,7 @@ describe("tmux ownership utils", () => {
       },
       {
         name: projectPaneFourName,
+        socket_path: "/tmp/tmux-501/default",
         created: "now",
         attached: true,
         window_count: 1,
@@ -57,6 +59,7 @@ describe("tmux ownership utils", () => {
       },
       {
         name: "divergence-random",
+        socket_path: "/tmp/tmux-501/default",
         created: "now",
         attached: false,
         window_count: 1,

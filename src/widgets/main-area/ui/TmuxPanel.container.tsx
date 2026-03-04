@@ -56,17 +56,16 @@ function TmuxPanel({
     killAll();
   }, [tmuxSessions.length, killAll]);
 
-  const handleKillSession = useCallback(async (sessionName: string) => {
+  const handleKillSession = useCallback(async (sessionName: string, socketPath: string) => {
     const matchingSessionIds = Array.from(new Set(findSessionIdsByTmuxSessionName(appSessions, sessionName)));
     if (matchingSessionIds.length > 0) {
       for (const sessionId of matchingSessionIds) {
         await onCloseSessionAndKillTmux(sessionId);
       }
-      await refresh();
-      return;
     }
-    await killSession(sessionName);
-  }, [appSessions, killSession, onCloseSessionAndKillTmux, refresh]);
+    // Always kill the exact clicked tmux target to avoid stale split/useTmux mismatch misses.
+    await killSession(sessionName, socketPath);
+  }, [appSessions, killSession, onCloseSessionAndKillTmux]);
 
   return (
     <TmuxPanelPresentational>
@@ -315,7 +314,7 @@ function TmuxPanel({
                 type="button"
                 className="w-5 h-5 flex items-center justify-center text-subtext hover:text-red opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                 onClick={() => {
-                  void handleKillSession(session.name);
+                  void handleKillSession(session.name, session.socket_path);
                 }}
                 title="Kill session"
                 disabled={loading}

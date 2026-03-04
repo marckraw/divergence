@@ -11,7 +11,6 @@ import {
 } from "../../../shared";
 import {
   getTmuxDiagnostics,
-  killAllTmuxSessions,
   killTmuxSession,
   listTmuxSessions,
 } from "../../../shared/api/tmuxSessions.api";
@@ -28,7 +27,7 @@ interface UseTmuxSessionsResult {
   orphanCount: number;
   diagnostics: TmuxDiagnosticsEntry | null;
   refresh: () => Promise<void>;
-  killSession: (name: string) => Promise<void>;
+  killSession: (name: string, socketPath?: string) => Promise<void>;
   killOrphans: () => Promise<void>;
   killAll: () => Promise<void>;
 }
@@ -126,11 +125,11 @@ export function useTmuxSessions(
   }, [refresh]);
 
   const killSession = useCallback(
-    async (name: string) => {
+    async (name: string, socketPath?: string) => {
       setLoading(true);
       setError(null);
       try {
-        await killTmuxSession(name);
+        await killTmuxSession(name, socketPath);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to kill tmux session.";
@@ -146,14 +145,14 @@ export function useTmuxSessions(
     if (!ownershipReady) {
       return;
     }
-    const orphanNames = sessions
-      .filter((s) => s.ownership.kind === "orphan")
-      .map((s) => s.name);
-    if (orphanNames.length === 0) return;
+    const orphanSessions = sessions.filter((s) => s.ownership.kind === "orphan");
+    if (orphanSessions.length === 0) return;
     setLoading(true);
     setError(null);
     try {
-      await killAllTmuxSessions(orphanNames);
+      for (const session of orphanSessions) {
+        await killTmuxSession(session.name, session.socket_path);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to kill tmux sessions.";
@@ -164,12 +163,13 @@ export function useTmuxSessions(
   }, [sessions, refresh, ownershipReady]);
 
   const killAll = useCallback(async () => {
-    const allNames = sessions.map((s) => s.name);
-    if (allNames.length === 0) return;
+    if (sessions.length === 0) return;
     setLoading(true);
     setError(null);
     try {
-      await killAllTmuxSessions(allNames);
+      for (const session of sessions) {
+        await killTmuxSession(session.name, session.socket_path);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to kill tmux sessions.";
