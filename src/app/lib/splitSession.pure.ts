@@ -8,7 +8,7 @@ import type {
   SplitSessionState,
 } from "../../entities";
 
-const ALL_PANES: SplitPaneId[] = ["pane-1", "pane-2", "pane-3"];
+const ALL_PANES: SplitPaneId[] = ["pane-1", "pane-2", "pane-3", "pane-4"];
 
 export const MAX_SPLIT_PANES = ALL_PANES.length;
 

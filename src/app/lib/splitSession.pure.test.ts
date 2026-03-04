@@ -20,16 +20,24 @@ describe("split session utils", () => {
 
     const second = buildNextSplitState(first, "vertical");
     expect(second.paneIds).toEqual(["pane-1", "pane-2", "pane-3"]);
-    expect(second.paneIds).toHaveLength(MAX_SPLIT_PANES);
-    expect(second.paneSizes).toHaveLength(MAX_SPLIT_PANES);
+    expect(second.paneSizes).toHaveLength(3);
     expect(second.paneSizes?.[0]).toBeCloseTo(1 / 3, 5);
     expect(second.paneSizes?.[1]).toBeCloseTo(1 / 3, 5);
     expect(second.paneSizes?.[2]).toBeCloseTo(1 / 3, 5);
 
-    const third = buildNextSplitState(second, "horizontal");
-    expect(third.paneIds).toEqual(["pane-1", "pane-2", "pane-3"]);
-    expect(third.orientation).toBe("horizontal");
-    expect(third.paneSizes).toEqual(second.paneSizes);
+    const third = buildNextSplitState(second, "vertical");
+    expect(third.paneIds).toEqual(["pane-1", "pane-2", "pane-3", "pane-4"]);
+    expect(third.paneIds).toHaveLength(MAX_SPLIT_PANES);
+    expect(third.paneSizes).toHaveLength(MAX_SPLIT_PANES);
+    expect(third.paneSizes?.[0]).toBeCloseTo(0.25, 5);
+    expect(third.paneSizes?.[1]).toBeCloseTo(0.25, 5);
+    expect(third.paneSizes?.[2]).toBeCloseTo(0.25, 5);
+    expect(third.paneSizes?.[3]).toBeCloseTo(0.25, 5);
+
+    const fourth = buildNextSplitState(third, "horizontal");
+    expect(fourth.paneIds).toEqual(["pane-1", "pane-2", "pane-3", "pane-4"]);
+    expect(fourth.orientation).toBe("horizontal");
+    expect(fourth.paneSizes).toEqual(third.paneSizes);
   });
 
   it("tracks focus and closes focused pane", () => {
@@ -48,12 +56,15 @@ describe("split session utils", () => {
 
   it("cycles focus to next and previous pane", () => {
     const state = buildNextSplitState(
-      buildNextSplitState(null, "vertical"),
+      buildNextSplitState(
+        buildNextSplitState(null, "vertical"),
+        "vertical",
+      ),
       "vertical",
     );
-    // state has pane-1, pane-2, pane-3 with focus on pane-3
-    expect(state.paneIds).toEqual(["pane-1", "pane-2", "pane-3"]);
-    expect(state.focusedPaneId).toBe("pane-3");
+    // state has pane-1, pane-2, pane-3, pane-4 with focus on pane-4
+    expect(state.paneIds).toEqual(["pane-1", "pane-2", "pane-3", "pane-4"]);
+    expect(state.focusedPaneId).toBe("pane-4");
 
     // next wraps to pane-1
     const next1 = focusNextSplitPane(state);
@@ -67,9 +78,9 @@ describe("split session utils", () => {
     const prev1 = focusPreviousSplitPane(next2);
     expect(prev1.focusedPaneId).toBe("pane-1");
 
-    // previous from pane-1 wraps to pane-3
+    // previous from pane-1 wraps to pane-4
     const prev2 = focusPreviousSplitPane(prev1);
-    expect(prev2.focusedPaneId).toBe("pane-3");
+    expect(prev2.focusedPaneId).toBe("pane-4");
   });
 
   it("returns same state when cycling focus with single pane", () => {
