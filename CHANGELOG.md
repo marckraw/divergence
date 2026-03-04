@@ -1,5 +1,11 @@
 # divergence
 
+## 0.27.0
+
+### Minor Changes
+
+- d7c60f1: Remove Claude API usage checks from the Usage Limits feature. The Claude usage endpoint consistently returned 429/rate-limit errors and OAuth scope issues. Only Codex usage tracking remains. The `claudeOAuthToken` setting is unchanged and still used by automations and GitHub PR Hub.
+
 ## 0.26.4
 
 ### Patch Changes
