@@ -11,8 +11,11 @@ describe("shouldAutoReconnect", () => {
     expect(shouldAutoReconnect(1, true, MAX_AUTO_RECONNECT_ATTEMPTS + 1)).toBe(false);
   });
 
-  it("returns true for tmux sessions regardless of exit code", () => {
-    expect(shouldAutoReconnect(0, true, 0)).toBe(true);
+  it("returns false for tmux sessions with clean exit (intentional kill)", () => {
+    expect(shouldAutoReconnect(0, true, 0)).toBe(false);
+  });
+
+  it("returns true for tmux sessions with non-zero exit code", () => {
     expect(shouldAutoReconnect(1, true, 0)).toBe(true);
     expect(shouldAutoReconnect(137, true, 2)).toBe(true);
   });
