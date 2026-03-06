@@ -22,6 +22,10 @@ const TMUX_DIAGNOSTICS_TIMEOUT_MS = 10_000;
 let inflightListTmuxSessions: Promise<TmuxSessionEntry[]> | null = null;
 let inflightTmuxDiagnostics: Promise<TmuxDiagnosticsEntry> | null = null;
 
+function invalidateTmuxSessionListCache(): void {
+  inflightListTmuxSessions = null;
+}
+
 function withTimeout<T>(
   operation: Promise<T>,
   timeoutMs: number,
@@ -92,14 +96,22 @@ export async function killTmuxSession(
   sessionName: string,
   socketPath?: string
 ): Promise<void> {
-  await invoke("kill_tmux_session", {
-    sessionName,
-    socketPath: socketPath ?? null,
-  });
+  try {
+    await invoke("kill_tmux_session", {
+      sessionName,
+      socketPath: socketPath ?? null,
+    });
+  } finally {
+    invalidateTmuxSessionListCache();
+  }
 }
 
 export async function killAllTmuxSessions(sessionNames: string[]): Promise<void> {
-  await invoke("kill_all_tmux_sessions", { sessionNames });
+  try {
+    await invoke("kill_all_tmux_sessions", { sessionNames });
+  } finally {
+    invalidateTmuxSessionListCache();
+  }
 }
 
 export async function killProjectTmuxSessions(projectId: number, projectName: string): Promise<void> {

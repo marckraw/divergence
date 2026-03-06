@@ -204,6 +204,10 @@ pub fn kill_tmux_session(session_name: &str, socket_path: Option<&str>) -> Resul
     ));
 
     let mut cmd = command_with_tmux();
+    // If Divergence is launched from inside tmux, clear TMUX so kill-session
+    // targets the requested server/socket instead of silently falling back to
+    // the parent session context.
+    cmd.env_remove("TMUX");
     if let Some(socket_path) = socket_path {
         cmd.args(["-S", socket_path]);
     }

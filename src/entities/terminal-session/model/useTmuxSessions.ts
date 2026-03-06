@@ -55,6 +55,18 @@ export function useTmuxSessions(
     [sessions, ownershipReady]
   );
 
+  const removeSessionFromState = useCallback((name: string, socketPath?: string) => {
+    setRawSessions((current) => current.filter((session) => {
+      if (session.name !== name) {
+        return true;
+      }
+      if (socketPath && session.socket_path !== socketPath) {
+        return true;
+      }
+      return false;
+    }));
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -130,6 +142,7 @@ export function useTmuxSessions(
       setError(null);
       try {
         await killTmuxSession(name, socketPath);
+        removeSessionFromState(name, socketPath);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to kill tmux session.";
@@ -138,7 +151,7 @@ export function useTmuxSessions(
         await refresh();
       }
     },
-    [refresh]
+    [refresh, removeSessionFromState]
   );
 
   const killOrphans = useCallback(async () => {
@@ -152,6 +165,7 @@ export function useTmuxSessions(
     try {
       for (const session of orphanSessions) {
         await killTmuxSession(session.name, session.socket_path);
+        removeSessionFromState(session.name, session.socket_path);
       }
     } catch (err) {
       const message =
@@ -160,7 +174,7 @@ export function useTmuxSessions(
     } finally {
       await refresh();
     }
-  }, [sessions, refresh, ownershipReady]);
+  }, [sessions, refresh, ownershipReady, removeSessionFromState]);
 
   const killAll = useCallback(async () => {
     if (sessions.length === 0) return;
@@ -169,6 +183,7 @@ export function useTmuxSessions(
     try {
       for (const session of sessions) {
         await killTmuxSession(session.name, session.socket_path);
+        removeSessionFromState(session.name, session.socket_path);
       }
     } catch (err) {
       const message =
@@ -177,7 +192,7 @@ export function useTmuxSessions(
     } finally {
       await refresh();
     }
-  }, [sessions, refresh]);
+  }, [sessions, refresh, removeSessionFromState]);
 
   return {
     sessions,
