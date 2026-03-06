@@ -1,5 +1,13 @@
 # divergence
 
+## 0.27.1
+
+### Patch Changes
+
+- bbba2a4: Fix tmux session kill actions so sessions are terminated against the correct tmux server and disappear promptly from the tmux sessions panel.
+
+  Stop auto-reconnecting terminal sessions after intentional clean exits, which prevents killed tmux sessions from immediately respawning.
+
 ## 0.27.0
 
 ### Minor Changes
