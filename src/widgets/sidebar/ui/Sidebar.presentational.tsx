@@ -58,6 +58,7 @@ function SidebarPresentational({
   onSelectSession,
   onCloseSession,
   onDeleteAgentSession,
+  onRenameAgentSession,
   onCloseSessionAndKillTmux,
   onCreateAdditionalSession,
   onRemoveProject,
@@ -607,6 +608,9 @@ function SidebarPresentational({
                                                     Open Conversation
                                                   </ContextMenuItem>
                                                 )}
+                                                <ContextMenuItem onSelect={() => onRenameAgentSession(session.id)}>
+                                                  Rename Conversation
+                                                </ContextMenuItem>
                                                 <ContextMenuSeparator />
                                                 <ContextMenuItem className="text-red focus:text-red" onSelect={() => onDeleteAgentSession(session.id)}>
                                                   Delete Conversation
@@ -687,6 +691,9 @@ function SidebarPresentational({
                                       Open Conversation
                                     </ContextMenuItem>
                                   )}
+                                  <ContextMenuItem onSelect={() => onRenameAgentSession(session.id)}>
+                                    Rename Conversation
+                                  </ContextMenuItem>
                                   <ContextMenuSeparator />
                                   <ContextMenuItem className="text-red focus:text-red" onSelect={() => onDeleteAgentSession(session.id)}>
                                     Delete Conversation

@@ -34,7 +34,10 @@ import {
   getAvailableAgentProviders,
   getAgentRuntimeProviderDefaultModel,
   IconButton,
+  ModalFooter,
+  ModalShell,
   ProgressBar,
+  TextInput,
   useAppSettings,
   useUpdater,
 } from "../shared";
@@ -46,7 +49,7 @@ import type {
   WorkspaceDivergence,
   WorkspaceSession,
 } from "../entities";
-import { isAgentSession } from "../entities";
+import { isAgentSession, suggestAgentSessionTitle } from "../entities";
 import { useSplitPaneManagement } from "./model/useSplitPaneManagement";
 import { useGithubInboxPolling } from "./model/useGithubInboxPolling";
 import { useSidebarLayout } from "./model/useSidebarLayout";
@@ -92,6 +95,10 @@ function App() {
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [renameAgentSessionState, setRenameAgentSessionState] = useState<{
+    sessionId: string;
+    value: string;
+  } | null>(null);
   const [settingsInitialCategory, setSettingsInitialCategory] = useState<SettingsCategoryId>("general");
   const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
@@ -525,6 +532,7 @@ function App() {
       workspaceOwnerId,
       workspaceKey: buildWorkspaceKey(input.type, input.item.id),
       sessionRole: "default",
+      nameMode: "default",
       model: getAgentRuntimeProviderDefaultModel(agentRuntimeCapabilities, input.provider) ?? undefined,
       name: `${input.item.name} • ${input.provider}${conversationSuffix}`,
       path,
@@ -574,6 +582,84 @@ function App() {
     });
     setActiveSessionId((current) => current === sessionId ? nextActiveSessionId : current);
   };
+
+  const handleRenameAgentConversation = (sessionId: string) => {
+    const session = agentSessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+
+    setRenameAgentSessionState({
+      sessionId,
+      value: session.name,
+    });
+  };
+
+  const handleRenameAgentConversationSubmit = () => {
+    if (!renameAgentSessionState) {
+      return;
+    }
+
+    const session = agentSessions.get(renameAgentSessionState.sessionId);
+    if (!session) {
+      setRenameAgentSessionState(null);
+      return;
+    }
+
+    const trimmedName = renameAgentSessionState.value.trim();
+    if (!trimmedName || trimmedName === session.name) {
+      setRenameAgentSessionState(null);
+      return;
+    }
+
+    void updateAgentSession({
+      sessionId: renameAgentSessionState.sessionId,
+      name: trimmedName,
+      nameMode: "manual",
+    }).catch((error) => {
+      console.warn("Failed to rename agent session:", error);
+    }).finally(() => {
+      setRenameAgentSessionState(null);
+    });
+  };
+
+  useEffect(() => {
+    if (!renameAgentSessionState) {
+      return;
+    }
+
+    if (!agentSessions.has(renameAgentSessionState.sessionId)) {
+      setRenameAgentSessionState(null);
+    }
+  }, [agentSessions, renameAgentSessionState]);
+
+  useEffect(() => {
+    agentSessions.forEach((session) => {
+      if (session.nameMode === "manual" || session.sessionRole !== "default") {
+        return;
+      }
+
+      const suggestedTitle = suggestAgentSessionTitle(session);
+      if (!suggestedTitle || suggestedTitle === session.name) {
+        return;
+      }
+
+      if (renamingAgentSessionIdsRef.current.has(session.id)) {
+        return;
+      }
+
+      renamingAgentSessionIdsRef.current.add(session.id);
+      void updateAgentSession({
+        sessionId: session.id,
+        name: suggestedTitle,
+        nameMode: "auto",
+      }).catch((error) => {
+        console.warn("Failed to auto-rename agent session:", error);
+      }).finally(() => {
+        renamingAgentSessionIdsRef.current.delete(session.id);
+      });
+    });
+  }, [agentSessions, updateAgentSession]);
 
   // ── Keyboard Shortcuts ──
   useAppKeyboardShortcuts({
@@ -649,6 +735,7 @@ function App() {
     const available = getAvailableAgentProviders(agentRuntimeCapabilities);
     return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
   }, [agentRuntimeCapabilities]);
+  const renamingAgentSessionIdsRef = useRef<Set<string>>(new Set());
 
   return (
     <div className="flex h-full w-full">
@@ -678,6 +765,7 @@ function App() {
           }}
           onCloseSession={handleCloseWorkspaceSession}
           onDeleteAgentSession={handleDeleteAgentConversation}
+          onRenameAgentSession={handleRenameAgentConversation}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
@@ -913,6 +1001,71 @@ function App() {
             />
           );
         })()}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {renameAgentSessionState && (
+          <ModalShell
+            onRequestClose={() => setRenameAgentSessionState(null)}
+            size="md"
+            surface="main"
+            panelClassName="w-full max-w-md mx-4"
+          >
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleRenameAgentConversationSubmit();
+              }}
+            >
+              <div className="p-4 border-b border-surface">
+                <h2 className="text-lg font-semibold text-text">Rename Conversation</h2>
+                <p className="text-xs text-subtext mt-1">
+                  Give this conversation a custom name. Manual names stay fixed and will not be auto-renamed.
+                </p>
+              </div>
+
+              <div className="p-4">
+                <TextInput
+                  value={renameAgentSessionState.value}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setRenameAgentSessionState((current) => {
+                      if (!current) {
+                        return current;
+                      }
+                      return {
+                        ...current,
+                        value,
+                      };
+                    });
+                  }}
+                  placeholder="Conversation name"
+                  tone="surface"
+                  autoFocus
+                />
+              </div>
+
+              <ModalFooter className="p-4">
+                <Button
+                  type="button"
+                  onClick={() => setRenameAgentSessionState(null)}
+                  variant="ghost"
+                  size="md"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={renameAgentSessionState.value.trim().length === 0}
+                  variant="primary"
+                  size="md"
+                >
+                  Save
+                </Button>
+              </ModalFooter>
+            </form>
+          </ModalShell>
+        )}
       </AnimatePresence>
 
       <TaskToasts

@@ -21,6 +21,7 @@ export type {
   AgentRequest,
   AgentRequestKind,
   AgentRequestStatus,
+  AgentRuntimeDebugEvent,
   AgentRuntimeStatus,
   AgentSession,
   AgentSessionRole,
@@ -32,6 +33,7 @@ export {
   createAgentSessionLabel,
   createEmptyAgentSessionSnapshot,
   getAgentSessionTimestamp,
+  suggestAgentSessionTitle,
 } from "./agent-session";
 export type {
   WorkspaceSession,

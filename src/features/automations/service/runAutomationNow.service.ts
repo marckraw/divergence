@@ -70,6 +70,7 @@ export interface RunAutomationNowInput {
     workspaceOwnerId?: number;
     workspaceKey: string;
     sessionRole?: "default" | "review-agent" | "manual";
+    nameMode?: "default" | "auto" | "manual";
     name: string;
     path: string;
   }) => Promise<AgentSessionSnapshot>;
@@ -239,6 +240,7 @@ export async function runAutomationNow(
       workspaceOwnerId: agentTarget.workspaceOwnerId,
       workspaceKey: agentTarget.workspaceKey,
       sessionRole: "manual",
+      nameMode: "manual",
       name: `Automation: ${input.automation.name}`,
       path: divergencePath,
     });
