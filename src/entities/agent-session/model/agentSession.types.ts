@@ -1,4 +1,8 @@
-import type { AgentRuntimeProvider } from "../../../shared";
+import type {
+  AgentRuntimeAttachment,
+  AgentRuntimeInteractionMode,
+  AgentRuntimeProvider,
+} from "../../../shared";
 
 export type AgentProvider = AgentRuntimeProvider;
 
@@ -30,6 +34,8 @@ export interface AgentMessage {
   content: string;
   status: AgentMessageStatus;
   createdAtMs: number;
+  interactionMode?: AgentRuntimeInteractionMode;
+  attachments?: AgentRuntimeAttachment[];
 }
 
 export interface AgentActivity {

@@ -7,8 +7,7 @@ impl AgentRuntimeState {
         app: &AppHandle,
         session: &AgentSessionSnapshot,
         session_id: &str,
-        prompt: &str,
-        automation_mode: bool,
+        turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
         let mut command = Command::new("codex");
         command
@@ -127,8 +126,8 @@ impl AgentRuntimeState {
                 json!({
                     "threadId": thread_id,
                     "cwd": session.path,
-                    "approvalPolicy": if automation_mode { "never" } else { "on-request" },
-                    "sandbox": if automation_mode { "danger-full-access" } else { "workspace-write" },
+                    "approvalPolicy": if turn.automation_mode { "never" } else { "on-request" },
+                    "sandbox": if turn.automation_mode { "danger-full-access" } else { "workspace-write" },
                     "experimentalRawEvents": false,
                     "model": session.model,
                 }),
@@ -142,8 +141,8 @@ impl AgentRuntimeState {
                 "thread/start",
                 json!({
                     "cwd": session.path,
-                    "approvalPolicy": if automation_mode { "never" } else { "on-request" },
-                    "sandbox": if automation_mode { "danger-full-access" } else { "workspace-write" },
+                    "approvalPolicy": if turn.automation_mode { "never" } else { "on-request" },
+                    "sandbox": if turn.automation_mode { "danger-full-access" } else { "workspace-write" },
                     "experimentalRawEvents": false,
                     "model": session.model,
                 }),
@@ -165,21 +164,50 @@ impl AgentRuntimeState {
             .and_then(|current_session| current_session.thread_id)
             .ok_or_else(|| "Codex thread id was missing after thread start/resume.".to_string())?;
 
+        let mut turn_input = vec![json!({
+            "type": "text",
+            "text": turn.prompt,
+            "text_elements": [],
+        })];
+        for attachment in &turn.attachments {
+            turn_input.push(json!({
+                "type": "image",
+                "url": read_codex_attachment_data_url(session_id, attachment)?,
+            }));
+        }
+
+        let mut turn_start_params = json!({
+            "threadId": thread_id,
+            "model": session.model,
+            "input": turn_input,
+            "approvalPolicy": if turn.automation_mode { "never" } else { "on-request" },
+        });
+        if matches!(turn.interaction_mode, AgentInteractionMode::Plan) {
+            turn_start_params["collaborationMode"] = json!({
+                "mode": "plan",
+                "settings": {
+                    "model": session.model,
+                    "reasoning_effort": "medium",
+                    "developer_instructions": CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
+                }
+            });
+        } else {
+            turn_start_params["collaborationMode"] = json!({
+                "mode": "default",
+                "settings": {
+                    "model": session.model,
+                    "reasoning_effort": "medium",
+                    "developer_instructions": CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+                }
+            });
+        }
+
         send_codex_request(
             &writer_tx,
             &pending_responses,
             &mut next_request_id,
             "turn/start",
-            json!({
-                "threadId": thread_id,
-                "model": session.model,
-                "input": [{
-                    "type": "text",
-                    "text": prompt,
-                    "text_elements": [],
-                }],
-                "approvalPolicy": if automation_mode { "never" } else { "on-request" },
-            }),
+            turn_start_params,
         )
         .await?;
 
@@ -731,6 +759,11 @@ impl AgentRuntimeState {
     }
 }
 
+const CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS: &str =
+    "Work directly in the repository, explain key changes clearly, and keep output concise and actionable.";
+const CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS: &str =
+    "Do not make changes yet. Investigate the repository, propose a concrete implementation plan, and ask concise clarifying questions when needed.";
+
 async fn send_codex_request(
     writer: &mpsc::UnboundedSender<String>,
     pending_responses: &PendingResponseRegistry,
@@ -946,6 +979,20 @@ fn classify_codex_app_server_stderr(stderr_output: &str) -> Option<String> {
         return None;
     }
     Some(format!("Codex App Server stderr: {trimmed}"))
+}
+
+fn read_codex_attachment_data_url(
+    session_id: &str,
+    attachment: &AgentAttachment,
+) -> Result<String, String> {
+    let attachment_path = resolve_staged_attachment_path(session_id, &attachment.id)?;
+    let bytes = fs::read(&attachment_path)
+        .map_err(|error| format!("Failed to read staged Codex attachment: {error}"))?;
+    Ok(format!(
+        "data:{};base64,{}",
+        attachment.mime_type,
+        BASE64_STANDARD.encode(bytes),
+    ))
 }
 
 fn read_codex_route_item_id(params: &Value) -> Option<String> {

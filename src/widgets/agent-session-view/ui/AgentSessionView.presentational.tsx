@@ -1,16 +1,21 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, RefObject } from "react";
+import { Paperclip, X } from "lucide-react";
 import WorkspaceSessionTabsPresentational from "../../workspace-session-tabs";
 import {
   Button,
   EmptyState,
   getAgentProviderLabel,
   getAgentRuntimeProviderModelOptions,
+  IconButton,
   Markdown,
+  SegmentedControl,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  supportsAgentRuntimeImageAttachments,
+  supportsAgentRuntimePlanMode,
   Textarea,
 } from "../../../shared";
 import { buildAgentTimeline } from "../lib/agentTimeline.pure";
@@ -41,6 +46,24 @@ function isSubmitShortcut(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
   return event.key === "Enter" && (event.metaKey || event.ctrlKey);
 }
 
+function isInteractionModeShortcut(event: KeyboardEvent<HTMLTextAreaElement>): boolean {
+  return event.key === "Tab"
+    && event.shiftKey
+    && !event.metaKey
+    && !event.ctrlKey
+    && !event.altKey;
+}
+
+function formatAttachmentSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  if (sizeBytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(sizeBytes / 102.4) / 10)} KB`;
+  }
+  return `${Math.round(sizeBytes / (1024 * 102.4)) / 10} MB`;
+}
+
 function AgentSessionViewPresentational({
   session,
   sessionList,
@@ -49,13 +72,22 @@ function AgentSessionViewPresentational({
   capabilities,
   draft,
   isSubmitting,
+  isStagingAttachment,
   isUpdatingModel,
   requestAnswers,
   isResolvingRequest,
+  attachmentInputRef,
   onSelectSession,
   onCloseSession,
   onDraftChange,
+  onInteractionModeChange,
   onModelChange,
+  onAttachmentInputChange,
+  onComposerPaste,
+  onComposerDrop,
+  onComposerDragOver,
+  onRemoveAttachment,
+  onTriggerAttachmentPicker,
   onRequestAnswerChange,
   onSubmit,
   onSubmitRequest,
@@ -65,6 +97,8 @@ function AgentSessionViewPresentational({
   const pendingRequest = session.pendingRequest;
   const modelOptions = getAgentRuntimeProviderModelOptions(capabilities, session.provider);
   const selectedModelLabel = getModelLabel(session.provider, session.model, capabilities);
+  const supportsPlanMode = supportsAgentRuntimePlanMode(capabilities, session.provider);
+  const supportsImageAttachments = supportsAgentRuntimeImageAttachments(capabilities, session.provider);
   const canSubmitPendingRequest = pendingRequest?.kind === "user-input"
     && (pendingRequest.questions ?? []).every((_, index) => Boolean(requestAnswers[index]?.trim()));
   const timelineItems = buildAgentTimeline(session.messages, session.activities);
@@ -240,7 +274,7 @@ function AgentSessionViewPresentational({
               {timelineItems.length === 0 ? (
                 <EmptyState className="rounded-2xl border border-dashed border-surface bg-sidebar/30 p-10">
                   <p>No agent turns yet</p>
-                  <p className="mt-2 text-xs">Send a prompt to start a Claude or Codex runtime turn.</p>
+                  <p className="mt-2 text-xs">Send a prompt to start an agent runtime turn.</p>
                 </EmptyState>
               ) : (
                 timelineItems.map((item) => {
@@ -319,13 +353,33 @@ function AgentSessionViewPresentational({
                       }`}
                     >
                       <div className="mb-3 flex items-center justify-between gap-3">
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-subtext">
-                          {message.role}
-                        </span>
-                        <span className="text-[11px] text-subtext">
-                          {message.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-subtext">
+                            {message.role}
+                          </span>
+                          {message.interactionMode === "plan" && (
+                            <span className="rounded-full border border-yellow/30 bg-yellow/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-yellow">
+                              Plan
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-subtext">{message.status}</span>
                       </div>
+
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {message.attachments.map((attachment) => (
+                            <span
+                              key={attachment.id}
+                              className="inline-flex items-center gap-2 rounded-full border border-surface/80 bg-main/60 px-3 py-1 text-[11px] text-subtext"
+                            >
+                              <Paperclip className="h-3.5 w-3.5" />
+                              <span className="max-w-[18rem] truncate">{attachment.name}</span>
+                              <span>{formatAttachmentSize(attachment.sizeBytes)}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
                       {isUser ? (
                         <div className="whitespace-pre-wrap break-words text-sm leading-7 text-text">
@@ -344,33 +398,148 @@ function AgentSessionViewPresentational({
           <div className="border-t border-surface bg-sidebar/70 px-5 py-4">
             <div className="mx-auto w-full max-w-5xl space-y-3">
               {!pendingRequest && (
-                <Textarea
-                  value={draft}
-                  onChange={(event) => onDraftChange(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (!isSubmitShortcut(event)) {
-                      return;
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div
+                      className={!supportsPlanMode || isSubmitting || session.runtimeStatus === "running"
+                        ? "pointer-events-none opacity-60"
+                        : undefined}
+                    >
+                      <SegmentedControl
+                        items={[
+                          { id: "default" as const, label: "Chat" },
+                          { id: "plan" as const, label: "Plan" },
+                        ]}
+                        value={draft.interactionMode}
+                        onChange={(value) => {
+                          if (!supportsPlanMode || isSubmitting || session.runtimeStatus === "running") {
+                            return;
+                          }
+                          onInteractionModeChange(value);
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={attachmentInputRef as RefObject<HTMLInputElement>}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={onAttachmentInputChange}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={onTriggerAttachmentPicker}
+                        disabled={!supportsImageAttachments || isSubmitting || isStagingAttachment}
+                        title={
+                          supportsImageAttachments
+                            ? "Attach image files"
+                            : `${getAgentProviderLabel(session.provider)} image attachments are not supported yet`
+                        }
+                      >
+                        <Paperclip className="mr-2 h-4 w-4" />
+                        {isStagingAttachment ? "Staging..." : "Add image"}
+                      </Button>
+                    </div>
+                  </div>
+                  {draft.attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {draft.attachments.map((attachment) => (
+                        <span
+                          key={attachment.id}
+                          className="inline-flex items-center gap-2 rounded-full border border-surface/80 bg-main/60 px-3 py-1 text-[11px] text-subtext"
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                          <span className="max-w-[18rem] truncate">{attachment.name}</span>
+                          <span>{formatAttachmentSize(attachment.sizeBytes)}</span>
+                          <IconButton
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            icon={<X className="h-3.5 w-3.5" />}
+                            label={`Remove ${attachment.name}`}
+                            onClick={() => { void onRemoveAttachment(attachment.id); }}
+                          />
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {draft.attachmentError && (
+                    <div className="rounded-xl border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
+                      {draft.attachmentError}
+                    </div>
+                  )}
+                  {!supportsImageAttachments && (
+                    <p className="text-xs text-subtext">
+                      {getAgentProviderLabel(session.provider)} does not support image attachments in
+                      Divergence yet.
+                    </p>
+                  )}
+                  <Textarea
+                    value={draft.text}
+                    onChange={(event) => onDraftChange(event.target.value)}
+                    onPaste={(event) => {
+                      void onComposerPaste(event);
+                    }}
+                    onDrop={(event) => {
+                      void onComposerDrop(event);
+                    }}
+                    onDragOver={onComposerDragOver}
+                    onKeyDown={(event) => {
+                      if (
+                        isInteractionModeShortcut(event)
+                        && supportsPlanMode
+                        && !isSubmitting
+                        && session.runtimeStatus !== "running"
+                      ) {
+                        event.preventDefault();
+                        onInteractionModeChange(
+                          draft.interactionMode === "plan" ? "default" : "plan",
+                        );
+                        return;
+                      }
+                      if (!isSubmitShortcut(event)) {
+                        return;
+                      }
+                      event.preventDefault();
+                      void onSubmit();
+                    }}
+                    placeholder={
+                      draft.interactionMode === "plan"
+                        ? `Ask ${session.provider} to investigate and plan work in ${session.path}`
+                        : `Ask ${session.provider} to work in ${session.path}`
                     }
-                    event.preventDefault();
-                    void onSubmit();
-                  }}
-                  placeholder={`Ask ${session.provider} to work in ${session.path}`}
-                  className="min-h-[112px] resize-y rounded-2xl bg-main/80"
-                />
+                    className="min-h-[112px] resize-y rounded-2xl bg-main/80"
+                  />
+                </>
               )}
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-subtext">
                   {pendingRequest
                     ? `Waiting on ${pendingRequest.kind}`
-                    : "Runtime prompt input. Cmd/Ctrl+Enter to send"}
+                    : `Runtime prompt input. ${
+                      draft.interactionMode === "plan" ? "Plan turn enabled." : "Chat turn enabled."
+                    } Shift+Tab toggles mode. Cmd/Ctrl+Enter to send`}
                 </p>
                 {!pendingRequest && (
                   <Button
                     type="button"
                     onClick={() => { void onSubmit(); }}
-                    disabled={isSubmitting || session.runtimeStatus === "running" || !draft.trim()}
+                    disabled={
+                      isSubmitting
+                      || isStagingAttachment
+                      || session.runtimeStatus === "running"
+                      || !draft.text.trim()
+                    }
                   >
-                    {session.runtimeStatus === "running" ? "Running..." : "Send"}
+                    {session.runtimeStatus === "running"
+                      ? "Running..."
+                      : draft.interactionMode === "plan"
+                        ? "Plan"
+                        : "Send"}
                   </Button>
                 )}
               </div>

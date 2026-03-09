@@ -250,6 +250,8 @@ function App() {
     getSession: getAgentSession,
     createSession: createAgentSession,
     startTurn: startAgentTurn,
+    stageAttachment: stageAgentAttachment,
+    discardAttachment: discardAgentAttachment,
     respondToRequest: respondToAgentRequest,
     updateSession: updateAgentSession,
     openSession: openAgentSession,
@@ -786,6 +788,8 @@ function App() {
           onCloseSession={handleCloseWorkspaceSession}
           onUpdateModel={(sessionId, model) => updateAgentSession({ sessionId, model })}
           onSendPrompt={startAgentTurn}
+          onStageAttachment={stageAgentAttachment}
+          onDiscardAttachment={discardAgentAttachment}
           onRespondToRequest={respondToAgentRequest}
           onStopSession={stopAgentSession}
         />

@@ -4,6 +4,7 @@ mod cursor;
 mod gemini;
 mod provider_registry;
 
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use self::codex::send_codex_message;
 use self::provider_registry::{
     default_model_for_provider, normalize_agent_model, provider_descriptors,
@@ -95,6 +96,9 @@ pub struct AgentRuntimeProviderFeatures {
     pub streaming: bool,
     pub resume: bool,
     pub structured_requests: bool,
+    pub plan_mode: bool,
+    pub image_attachments: bool,
+    pub structured_plan_ui: bool,
     pub usage_inspection: bool,
     pub provider_extras: bool,
 }
@@ -152,6 +156,13 @@ pub enum AgentRuntimeStatus {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+pub enum AgentInteractionMode {
+    Default,
+    Plan,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AgentMessageRole {
     User,
     Assistant,
@@ -168,12 +179,25 @@ pub enum AgentMessageStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentAttachment {
+    pub id: String,
+    pub name: String,
+    pub mime_type: String,
+    pub size_bytes: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentMessage {
     pub id: String,
     pub role: AgentMessageRole,
     pub content: String,
     pub status: AgentMessageStatus,
     pub created_at_ms: i64,
+    #[serde(default)]
+    pub interaction_mode: Option<AgentInteractionMode>,
+    #[serde(default)]
+    pub attachments: Option<Vec<AgentAttachment>>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -293,8 +317,29 @@ pub struct CreateAgentSessionInput {
 pub struct StartAgentTurnInput {
     pub session_id: String,
     pub prompt: String,
+    pub interaction_mode: Option<AgentInteractionMode>,
+    #[serde(default)]
+    pub attachments: Option<Vec<AgentAttachment>>,
     pub claude_oauth_token: Option<String>,
     pub automation_mode: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageAgentAttachmentInput {
+    pub session_id: String,
+    pub name: String,
+    pub mime_type: String,
+    pub base64_content: String,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct AgentTurnInvocation {
+    pub prompt: String,
+    pub attachments: Vec<AgentAttachment>,
+    pub interaction_mode: AgentInteractionMode,
+    pub claude_oauth_token: String,
+    pub automation_mode: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -474,6 +519,53 @@ impl AgentRuntimeState {
         Ok(snapshot)
     }
 
+    pub fn stage_attachment(
+        &self,
+        input: StageAgentAttachmentInput,
+    ) -> Result<AgentAttachment, String> {
+        let session = self
+            .get_session(&input.session_id)?
+            .ok_or_else(|| format!("Agent session not found: {}", input.session_id))?;
+
+        let trimmed_name = input.name.trim();
+        if trimmed_name.is_empty() {
+            return Err("Attachment name is required.".to_string());
+        }
+        let trimmed_mime_type = input.mime_type.trim();
+        if trimmed_mime_type.is_empty() {
+            return Err("Attachment mimeType is required.".to_string());
+        }
+
+        let bytes = BASE64_STANDARD
+            .decode(input.base64_content.trim())
+            .map_err(|error| format!("Failed to decode attachment payload: {error}"))?;
+        let attachment_id = format!("attachment-{}", Uuid::new_v4());
+        let attachment_dir = session_attachment_dir(&session.id);
+        fs::create_dir_all(&attachment_dir)
+            .map_err(|error| format!("Failed to create agent attachment directory: {error}"))?;
+
+        let attachment_path =
+            attachment_dir.join(build_attachment_filename(&attachment_id, trimmed_name));
+        fs::write(&attachment_path, bytes.as_slice())
+            .map_err(|error| format!("Failed to stage agent attachment: {error}"))?;
+
+        Ok(AgentAttachment {
+            id: attachment_id,
+            name: trimmed_name.to_string(),
+            mime_type: trimmed_mime_type.to_string(),
+            size_bytes: bytes.len(),
+        })
+    }
+
+    pub fn discard_attachment(&self, session_id: &str, attachment_id: &str) -> Result<(), String> {
+        let attachment_path = resolve_staged_attachment_path(session_id, attachment_id)?;
+        if attachment_path.exists() {
+            fs::remove_file(&attachment_path)
+                .map_err(|error| format!("Failed to remove staged attachment: {error}"))?;
+        }
+        Ok(())
+    }
+
     pub fn start_turn(
         &self,
         app: AppHandle,
@@ -484,9 +576,15 @@ impl AgentRuntimeState {
             return Err("Prompt is required.".to_string());
         }
 
-        let prompt_for_process = prompt.clone();
-        let oauth_token = input.claude_oauth_token.unwrap_or_default();
-        let automation_mode = input.automation_mode.unwrap_or(false);
+        let interaction_mode = input.interaction_mode.unwrap_or(AgentInteractionMode::Default);
+        let attachments = input.attachments.unwrap_or_default();
+        let turn = AgentTurnInvocation {
+            prompt: prompt.clone(),
+            attachments: attachments.clone(),
+            interaction_mode,
+            claude_oauth_token: input.claude_oauth_token.unwrap_or_default(),
+            automation_mode: input.automation_mode.unwrap_or(false),
+        };
         let session_id = input.session_id;
 
         let snapshot = self.mutate_session(&session_id, |session| {
@@ -506,6 +604,8 @@ impl AgentRuntimeState {
                 content: prompt.clone(),
                 status: AgentMessageStatus::Done,
                 created_at_ms: now,
+                interaction_mode: Some(interaction_mode),
+                attachments: (!attachments.is_empty()).then_some(attachments.clone()),
             });
             if !matches!(session.provider, AgentProvider::Codex) {
                 session.messages.push(AgentMessage {
@@ -514,6 +614,8 @@ impl AgentRuntimeState {
                     content: String::new(),
                     status: AgentMessageStatus::Streaming,
                     created_at_ms: now,
+                    interaction_mode: None,
+                    attachments: None,
                 });
             }
             Ok(())
@@ -527,9 +629,7 @@ impl AgentRuntimeState {
                 .run_turn_process(
                     &app,
                     &session_id,
-                    &prompt_for_process,
-                    &oauth_token,
-                    automation_mode,
+                    &turn,
                 )
                 .await;
 
@@ -578,7 +678,12 @@ impl AgentRuntimeState {
         if sessions.remove(session_id).is_none() {
             return Err(format!("Agent session not found: {session_id}"));
         }
-        self.persist_locked(&sessions)
+        self.persist_locked(&sessions)?;
+        let attachment_dir = session_attachment_dir(session_id);
+        if attachment_dir.exists() {
+            let _ = fs::remove_dir_all(attachment_dir);
+        }
+        Ok(())
     }
 
     pub fn update_session(
@@ -683,28 +788,49 @@ impl AgentRuntimeState {
         &self,
         app: &AppHandle,
         session_id: &str,
-        prompt: &str,
-        claude_oauth_token: &str,
-        automation_mode: bool,
+        turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
         let Some(session) = self.get_session(session_id)? else {
             return Err(format!("Agent session not found: {session_id}"));
         };
 
+        if matches!(session.provider, AgentProvider::Cursor) && !turn.attachments.is_empty() {
+            return Err(
+                "Cursor image attachments are not supported in Divergence yet.".to_string(),
+            );
+        }
+
         match session.provider {
             AgentProvider::Claude => {
-                self.run_claude_turn_process(app, &session, session_id, prompt, claude_oauth_token)
-                    .await
+                self.run_claude_turn_process(
+                    app,
+                    &session,
+                    session_id,
+                    turn,
+                )
+                .await
             }
             AgentProvider::Codex => {
-                self.run_codex_turn_process(app, &session, session_id, prompt, automation_mode)
-                    .await
+                self.run_codex_turn_process(
+                    app,
+                    &session,
+                    session_id,
+                    turn,
+                )
+                .await
             }
             AgentProvider::Cursor => {
-                self.run_cursor_turn_process(app, &session, session_id, prompt).await
+                self.run_cursor_turn_process(app, &session, session_id, turn)
+                    .await
             }
             AgentProvider::Gemini => {
-                self.run_gemini_turn_process(app, &session, session_id, prompt).await
+                self.run_gemini_turn_process(
+                    app,
+                    &session,
+                    session_id,
+                    turn,
+                )
+                .await
             }
         }
     }
@@ -944,6 +1070,63 @@ fn default_persistence_path() -> PathBuf {
     base.join("divergence").join("agent-runtime").join("sessions.json")
 }
 
+fn default_attachment_base_dir() -> PathBuf {
+    let base = dirs::data_local_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("divergence").join("agent-runtime").join("attachments")
+}
+
+fn session_attachment_dir(session_id: &str) -> PathBuf {
+    default_attachment_base_dir().join(session_id)
+}
+
+fn sanitize_attachment_name(name: &str) -> String {
+    let trimmed = name.trim();
+    let mut sanitized = trimmed
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_') {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    while sanitized.contains("--") {
+        sanitized = sanitized.replace("--", "-");
+    }
+    sanitized.trim_matches('-').to_string()
+}
+
+fn build_attachment_filename(attachment_id: &str, name: &str) -> String {
+    let sanitized_name = sanitize_attachment_name(name);
+    if sanitized_name.is_empty() {
+        attachment_id.to_string()
+    } else {
+        format!("{attachment_id}-{sanitized_name}")
+    }
+}
+
+fn resolve_staged_attachment_path(session_id: &str, attachment_id: &str) -> Result<PathBuf, String> {
+    let attachment_dir = session_attachment_dir(session_id);
+    let entries = fs::read_dir(&attachment_dir)
+        .map_err(|error| format!("Failed to read staged attachments for session {session_id}: {error}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Failed to inspect staged attachment: {error}"))?;
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if file_name.starts_with(attachment_id) {
+            return Ok(path);
+        }
+    }
+    Err(format!(
+        "Staged attachment not found for session {session_id}: {attachment_id}"
+    ))
+}
+
 fn default_true() -> bool {
     true
 }
@@ -1101,6 +1284,8 @@ fn ensure_assistant_message<'a>(
             content: String::new(),
             status: AgentMessageStatus::Streaming,
             created_at_ms: now_ms(),
+            interaction_mode: None,
+            attachments: None,
         });
         let last_index = session.messages.len().saturating_sub(1);
         return session
@@ -1116,6 +1301,8 @@ fn ensure_assistant_message<'a>(
             content: String::new(),
             status: AgentMessageStatus::Streaming,
             created_at_ms: now_ms(),
+            interaction_mode: None,
+            attachments: None,
         });
     }
 
@@ -1151,6 +1338,8 @@ fn ensure_assistant_message<'a>(
             content: String::new(),
             status: AgentMessageStatus::Streaming,
             created_at_ms: now_ms(),
+            interaction_mode: None,
+            attachments: None,
         });
     }
 

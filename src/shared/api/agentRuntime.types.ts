@@ -12,6 +12,8 @@ export type AgentRuntimeSessionStatus = "idle" | "active" | "busy";
 
 export type AgentRuntimeStatus = "idle" | "running" | "waiting" | "error" | "stopped";
 
+export type AgentRuntimeInteractionMode = "default" | "plan";
+
 export type AgentRuntimeMessageRole = "user" | "assistant" | "system";
 
 export type AgentRuntimeMessageStatus = "streaming" | "done" | "error";
@@ -50,6 +52,9 @@ export interface AgentRuntimeProviderFeatures {
   streaming: boolean;
   resume: boolean;
   structuredRequests: boolean;
+  planMode: boolean;
+  imageAttachments: boolean;
+  structuredPlanUi: boolean;
   usageInspection: boolean;
   providerExtras: boolean;
 }
@@ -86,6 +91,8 @@ export interface AgentRuntimeMessage {
   content: string;
   status: AgentRuntimeMessageStatus;
   createdAtMs: number;
+  interactionMode?: AgentRuntimeInteractionMode;
+  attachments?: AgentRuntimeAttachment[];
 }
 
 export interface AgentRuntimeActivity {
@@ -108,6 +115,13 @@ export interface AgentRuntimeRequest {
   status: AgentRuntimeRequestStatus;
   openedAtMs: number;
   resolvedAtMs?: number;
+}
+
+export interface AgentRuntimeAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 export interface AgentRuntimeSessionSnapshot {
@@ -150,8 +164,17 @@ export interface CreateAgentSessionInput {
 export interface StartAgentTurnInput {
   sessionId: string;
   prompt: string;
+  interactionMode?: AgentRuntimeInteractionMode;
+  attachments?: AgentRuntimeAttachment[];
   claudeOAuthToken?: string;
   automationMode?: boolean;
+}
+
+export interface StageAgentRuntimeAttachmentInput {
+  sessionId: string;
+  name: string;
+  mimeType: string;
+  base64Content: string;
 }
 
 export interface RespondAgentRequestInput {

@@ -10,6 +10,9 @@ import {
   getAgentRuntimeProviderDescriptor,
   getAgentRuntimeProviderModelOptions,
   indexAgentRuntimeProviders,
+  supportsAgentRuntimeImageAttachments,
+  supportsAgentRuntimePlanMode,
+  supportsAgentRuntimeStructuredPlanUi,
 } from "./agentProviders.pure";
 import type { AgentRuntimeCapabilities } from "../api/agentRuntime.types";
 
@@ -36,6 +39,9 @@ const capabilities: AgentRuntimeCapabilities = {
         streaming: true,
         resume: true,
         structuredRequests: false,
+        planMode: true,
+        imageAttachments: true,
+        structuredPlanUi: false,
         usageInspection: false,
         providerExtras: false,
       },
@@ -58,6 +64,9 @@ const capabilities: AgentRuntimeCapabilities = {
         streaming: true,
         resume: true,
         structuredRequests: false,
+        planMode: true,
+        imageAttachments: false,
+        structuredPlanUi: false,
         usageInspection: false,
         providerExtras: true,
       },
@@ -80,6 +89,9 @@ const capabilities: AgentRuntimeCapabilities = {
         streaming: true,
         resume: true,
         structuredRequests: true,
+        planMode: true,
+        imageAttachments: true,
+        structuredPlanUi: true,
         usageInspection: true,
         providerExtras: true,
       },
@@ -102,6 +114,9 @@ const capabilities: AgentRuntimeCapabilities = {
         streaming: false,
         resume: false,
         structuredRequests: false,
+        planMode: true,
+        imageAttachments: true,
+        structuredPlanUi: false,
         usageInspection: false,
         providerExtras: true,
       },
@@ -139,5 +154,11 @@ describe("agentProviders.pure", () => {
       "cursor",
       "gemini",
     ]);
+  });
+
+  it("resolves plan and image attachment capability flags", () => {
+    expect(supportsAgentRuntimePlanMode(capabilities, "claude")).toBe(true);
+    expect(supportsAgentRuntimeImageAttachments(capabilities, "cursor")).toBe(false);
+    expect(supportsAgentRuntimeStructuredPlanUi(capabilities, "codex")).toBe(true);
   });
 });

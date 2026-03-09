@@ -1,6 +1,7 @@
 use crate::agent_runtime::{
-    AgentRuntimeCapabilities, AgentRuntimeState, AgentSessionSnapshot, CreateAgentSessionInput,
-    RespondAgentRequestInput, StartAgentTurnInput, UpdateAgentSessionInput,
+    AgentAttachment, AgentRuntimeCapabilities, AgentRuntimeState, AgentSessionSnapshot,
+    CreateAgentSessionInput, RespondAgentRequestInput, StageAgentAttachmentInput,
+    StartAgentTurnInput, UpdateAgentSessionInput,
 };
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
@@ -84,6 +85,23 @@ pub async fn start_agent_turn(
     agent_runtime: State<'_, AgentRuntimeState>,
 ) -> Result<AgentSessionSnapshot, String> {
     agent_runtime.start_turn(app_handle, input)
+}
+
+#[tauri::command]
+pub async fn stage_agent_attachment(
+    input: StageAgentAttachmentInput,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<AgentAttachment, String> {
+    agent_runtime.stage_attachment(input)
+}
+
+#[tauri::command]
+pub async fn discard_agent_attachment(
+    session_id: String,
+    attachment_id: String,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<(), String> {
+    agent_runtime.discard_attachment(&session_id, &attachment_id)
 }
 
 #[tauri::command]
