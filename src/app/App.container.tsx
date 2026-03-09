@@ -2,8 +2,10 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
 import Sidebar from "../widgets/sidebar";
 import MainArea from "../widgets/main-area";
+import AgentSessionView from "../widgets/agent-session-view";
 import { InboxPanel } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
+import { useAgentRuntime } from "../features/agent-runtime";
 import QuickSwitcher from "../features/quick-switcher";
 import { onMobileHandshake } from "./api/mobileHandshake.api";
 import Settings from "../widgets/settings-modal";
@@ -25,19 +27,26 @@ import {
   useInboxEvents,
 } from "../entities/inbox-event";
 import {
+  AGENT_PROVIDER_ORDER,
   Button,
   DEFAULT_EDITOR_THEME_DARK,
   DEFAULT_EDITOR_THEME_LIGHT,
+  getAvailableAgentProviders,
+  getAgentRuntimeProviderDefaultModel,
   IconButton,
   ProgressBar,
   useAppSettings,
   useUpdater,
 } from "../shared";
 import type {
+  AgentProvider,
   Project,
   Divergence,
-  TerminalSession,
+  Workspace,
+  WorkspaceDivergence,
+  WorkspaceSession,
 } from "../entities";
+import { isAgentSession } from "../entities";
 import { useSplitPaneManagement } from "./model/useSplitPaneManagement";
 import { useGithubInboxPolling } from "./model/useGithubInboxPolling";
 import { useSidebarLayout } from "./model/useSidebarLayout";
@@ -53,6 +62,7 @@ import { useTaskCenterAttachment } from "./model/useTaskCenterAttachment";
 import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
 import { GithubPrHub } from "../features/github-pr-hub";
+import { buildWorkspaceKey } from "./lib/sessionBuilder.pure";
 
 function App() {
   const updater = useUpdater(true);
@@ -233,6 +243,56 @@ function App() {
     restoreTabsOnRestart: appSettings.restoreTabsOnRestart,
   });
 
+  const {
+    capabilities: agentRuntimeCapabilities,
+    agentSessions,
+    openAgentSessions,
+    getSession: getAgentSession,
+    createSession: createAgentSession,
+    startTurn: startAgentTurn,
+    respondToRequest: respondToAgentRequest,
+    updateSession: updateAgentSession,
+    openSession: openAgentSession,
+    closeSession: closeAgentSession,
+    stopSession: stopAgentSession,
+    deleteSession: deleteAgentSession,
+  } = useAgentRuntime({
+    claudeOAuthToken: appSettings.claudeOAuthToken ?? "",
+  });
+
+  const closeSessionsForProjectAndAgents = (projectId: number) => {
+    closeSessionsForProject(projectId);
+    agentSessions.forEach((session) => {
+      if (session.projectId === projectId) {
+        void deleteAgentSession(session.id).catch((error) => {
+          console.warn("Failed to delete project agent session:", error);
+        });
+      }
+    });
+  };
+
+  const closeSessionsForDivergenceAndAgents = (divergenceId: number) => {
+    closeSessionsForDivergence(divergenceId);
+    agentSessions.forEach((session) => {
+      if (session.targetType === "divergence" && session.targetId === divergenceId) {
+        void deleteAgentSession(session.id).catch((error) => {
+          console.warn("Failed to delete divergence agent session:", error);
+        });
+      }
+    });
+  };
+
+  const closeSessionsForWorkspaceDivergenceAndAgents = (workspaceDivergenceId: number) => {
+    closeSessionsForWorkspaceDivergence(workspaceDivergenceId);
+    agentSessions.forEach((session) => {
+      if (session.targetType === "workspace_divergence" && session.targetId === workspaceDivergenceId) {
+        void deleteAgentSession(session.id).catch((error) => {
+          console.warn("Failed to delete workspace divergence agent session:", error);
+        });
+      }
+    });
+  };
+
   // ── Global Error Tracking ──
   useGlobalErrorTracking();
 
@@ -303,6 +363,9 @@ function App() {
     projects,
     appSettings,
     runTask,
+    createAgentSession,
+    startAgentTurn,
+    getAgentSession,
     refreshAutomations,
     refreshDivergences,
     refreshWorkspaces,
@@ -341,9 +404,9 @@ function App() {
     refreshDivergences,
     refreshWorkspaces,
     refreshPortAllocations,
-    closeSessionsForProject,
-    closeSessionsForDivergence,
-    closeSessionsForWorkspaceDivergence,
+    closeSessionsForProject: closeSessionsForProjectAndAgents,
+    closeSessionsForDivergence: closeSessionsForDivergenceAndAgents,
+    closeSessionsForWorkspaceDivergence: closeSessionsForWorkspaceDivergenceAndAgents,
     handleCloseSession,
     sessionsRef,
     setSessions,
@@ -353,10 +416,9 @@ function App() {
   // ── Review Agent Session ──
   const { handleRunReviewAgent } = useReviewAgentSession({
     sessionsRef,
-    setSessions,
     setActiveSessionId,
-    sendCommandToSession,
-    appSettings,
+    createAgentSession,
+    startAgentTurn,
   });
 
   // ── Task Center Attachment ──
@@ -370,20 +432,156 @@ function App() {
     projectsById,
     appSettings,
     portAllocationByEntityKey,
+    agentSessions,
     setSessions,
     setActiveSessionId,
     sendCommandToSession,
   });
 
+  // Wrap handleSelectProject / handleSelectDivergence to also set sidebar mode
+  const handleSelectProject = (project: Project) => {
+    handleSelectProjectRaw(project);
+    setSidebarMode("projects");
+  };
+
+  const handleSelectDivergence = (divergence: Divergence) => {
+    handleSelectDivergenceRaw(divergence);
+    setSidebarMode("projects");
+  };
+
+  const workspaceSessions = useMemo(() => {
+    const next = new Map<string, WorkspaceSession>();
+    sessions.forEach((session, sessionId) => {
+      next.set(sessionId, session);
+    });
+    openAgentSessions.forEach((session, sessionId) => {
+      next.set(sessionId, session);
+    });
+    return next;
+  }, [openAgentSessions, sessions]);
+
+  const sidebarSessions = useMemo(() => {
+    const next = new Map<string, WorkspaceSession>();
+    sessions.forEach((session, sessionId) => {
+      next.set(sessionId, session);
+    });
+    agentSessions.forEach((session, sessionId) => {
+      next.set(sessionId, session);
+    });
+    return next;
+  }, [agentSessions, sessions]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+    if (workspaceSessions.has(activeSessionId)) {
+      return;
+    }
+    const nextActiveSessionId = workspaceSessions.keys().next().value ?? null;
+    setActiveSessionId(nextActiveSessionId);
+  }, [activeSessionId, setActiveSessionId, workspaceSessions]);
+
+  useEffect(() => {
+    if (activeSessionId || !appSettings.restoreTabsOnRestart || sessions.size > 0 || openAgentSessions.size === 0) {
+      return;
+    }
+    const nextActiveSessionId = openAgentSessions.keys().next().value ?? null;
+    if (nextActiveSessionId) {
+      setActiveSessionId(nextActiveSessionId);
+    }
+  }, [activeSessionId, openAgentSessions, appSettings.restoreTabsOnRestart, sessions.size, setActiveSessionId]);
+
+  const handleCreateAgentSession = async (input: {
+    provider: AgentProvider;
+    type: "project" | "divergence" | "workspace" | "workspace_divergence";
+    item: Project | Divergence | Workspace | WorkspaceDivergence;
+  }) => {
+    const path = "folderPath" in input.item ? input.item.folderPath : input.item.path;
+    const projectId = input.type === "project"
+      ? input.item.id
+      : input.type === "divergence"
+        ? (input.item as Divergence).projectId
+        : 0;
+    const workspaceOwnerId = input.type === "workspace"
+      ? input.item.id
+      : input.type === "workspace_divergence"
+        ? (input.item as WorkspaceDivergence).workspaceId
+        : undefined;
+    const existingConversationCount = Array.from(agentSessions.values()).filter((session) => (
+      session.provider === input.provider
+      && session.targetType === input.type
+      && session.targetId === input.item.id
+      && session.sessionRole === "default"
+    )).length;
+    const conversationSuffix = existingConversationCount > 0 ? ` ${existingConversationCount + 1}` : "";
+    const session = await createAgentSession({
+      provider: input.provider,
+      targetType: input.type,
+      targetId: input.item.id,
+      projectId,
+      workspaceOwnerId,
+      workspaceKey: buildWorkspaceKey(input.type, input.item.id),
+      sessionRole: "default",
+      model: getAgentRuntimeProviderDefaultModel(agentRuntimeCapabilities, input.provider) ?? undefined,
+      name: `${input.item.name} • ${input.provider}${conversationSuffix}`,
+      path,
+    });
+    setActiveSessionId(session.id);
+  };
+
+  const handleSelectWorkspaceSession = async (sessionId: string) => {
+    if (workspaceSessions.has(sessionId)) {
+      setActiveSessionId(sessionId);
+      return;
+    }
+
+    const agentSession = agentSessions.get(sessionId);
+    if (!agentSession) {
+      return;
+    }
+
+    if (!agentSession.isOpen) {
+      try {
+        await openAgentSession(sessionId);
+      } catch (error) {
+        console.warn("Failed to reopen agent session:", error);
+        return;
+      }
+    }
+    setActiveSessionId(sessionId);
+  };
+
+  const handleCloseWorkspaceSession = (sessionId: string) => {
+    if (sessionsRef.current.has(sessionId)) {
+      handleCloseSession(sessionId);
+      return;
+    }
+
+    const nextActiveSessionId = Array.from(workspaceSessions.keys()).find((id) => id !== sessionId) ?? null;
+    void closeAgentSession(sessionId).catch((error) => {
+      console.warn("Failed to close agent session:", error);
+    });
+    setActiveSessionId((current) => current === sessionId ? nextActiveSessionId : current);
+  };
+
+  const handleDeleteAgentConversation = (sessionId: string) => {
+    const nextActiveSessionId = Array.from(workspaceSessions.keys()).find((id) => id !== sessionId) ?? null;
+    void deleteAgentSession(sessionId).catch((error) => {
+      console.warn("Failed to delete agent session:", error);
+    });
+    setActiveSessionId((current) => current === sessionId ? nextActiveSessionId : current);
+  };
+
   // ── Keyboard Shortcuts ──
   useAppKeyboardShortcuts({
-    sessions,
+    sessions: workspaceSessions,
     activeSessionId,
     splitBySessionId,
     setSplitBySessionId,
     projects,
     createDivergenceFor,
-    handleCloseSession,
+    handleCloseSession: handleCloseWorkspaceSession,
     handleSplitSession,
     handleReconnectSession,
     toggleSidebar,
@@ -397,17 +595,6 @@ function App() {
     setShowSettings,
     setCreateDivergenceFor,
   });
-
-  // Wrap handleSelectProject / handleSelectDivergence to also set sidebar mode
-  const handleSelectProject = (project: Project) => {
-    handleSelectProjectRaw(project);
-    setSidebarMode("projects");
-  };
-
-  const handleSelectDivergence = (divergence: Divergence) => {
-    handleSelectDivergenceRaw(divergence);
-    setSidebarMode("projects");
-  };
 
   // Listen for mobile handshake events — auto-open Settings to Remote Access tab
   useEffect(() => {
@@ -449,7 +636,17 @@ function App() {
     appSettings.theme === "light"
       ? DEFAULT_EDITOR_THEME_LIGHT
       : DEFAULT_EDITOR_THEME_DARK;
-  const activeSession = activeSessionId ? sessions.get(activeSessionId) ?? null : null;
+  const activeWorkspaceSession = activeSessionId ? workspaceSessions.get(activeSessionId) ?? null : null;
+  const activeSession = activeWorkspaceSession && !isAgentSession(activeWorkspaceSession)
+    ? activeWorkspaceSession
+    : null;
+  const activeAgentSession = activeWorkspaceSession && isAgentSession(activeWorkspaceSession)
+    ? activeWorkspaceSession
+    : null;
+  const agentProviders = useMemo(() => {
+    const available = getAvailableAgentProviders(agentRuntimeCapabilities);
+    return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
+  }, [agentRuntimeCapabilities]);
 
   return (
     <div className="flex h-full w-full">
@@ -468,20 +665,25 @@ function App() {
           taskRunningCount={runningCount}
           projects={projects}
           divergencesByProject={divergencesByProject}
-          sessions={sessions}
+          sessions={sidebarSessions}
           activeSessionId={activeSessionId}
           createDivergenceFor={createDivergenceFor}
           onCreateDivergenceForChange={setCreateDivergenceFor}
           onSelectProject={handleSelectProject}
           onSelectDivergence={handleSelectDivergence}
-          onSelectSession={setActiveSessionId}
-          onCloseSession={handleCloseSession}
+          onSelectSession={(sessionId) => {
+            void handleSelectWorkspaceSession(sessionId);
+          }}
+          onCloseSession={handleCloseWorkspaceSession}
+          onDeleteAgentSession={handleDeleteAgentConversation}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onCreateDivergence={handleCreateDivergence}
           onCreateAdditionalSession={handleCreateAdditionalSession}
+          onCreateAgentSession={handleCreateAgentSession}
           onDeleteDivergence={handleDeleteDivergence}
+          agentProviders={agentProviders}
           isCollapsed={!isSidebarOpen}
           workspaces={workspaceList}
           membersByWorkspaceId={membersByWorkspaceId}
@@ -529,9 +731,10 @@ function App() {
             <GithubPrHub
               projects={projects}
               githubToken={appSettings.githubToken ?? ""}
-              agentCommandClaude={appSettings.agentCommandClaude}
-              agentCommandCodex={appSettings.agentCommandCodex}
-              claudeOAuthToken={appSettings.claudeOAuthToken ?? ""}
+              agentSessions={agentSessions}
+              createAgentSession={createAgentSession}
+              startAgentTurn={startAgentTurn}
+              deleteAgentSession={deleteAgentSession}
             />
           )}
           {workTab === "task_center" && (
@@ -570,15 +773,33 @@ function App() {
           )}
           {workTab === "debug" && <DebugConsolePanel />}
         </div>
+      ) : activeAgentSession ? (
+        <AgentSessionView
+          session={activeAgentSession}
+          sessionList={Array.from(workspaceSessions.values())}
+          activeSessionId={activeSessionId}
+          idleAttentionSessionIds={idleAttentionSessionIds}
+          capabilities={agentRuntimeCapabilities}
+          onSelectSession={(sessionId) => {
+            void handleSelectWorkspaceSession(sessionId);
+          }}
+          onCloseSession={handleCloseWorkspaceSession}
+          onUpdateModel={(sessionId, model) => updateAgentSession({ sessionId, model })}
+          onSendPrompt={startAgentTurn}
+          onRespondToRequest={respondToAgentRequest}
+          onStopSession={stopAgentSession}
+        />
       ) : (
         <MainArea
           projects={projects}
-          sessions={sessions}
+          sessions={workspaceSessions}
           idleAttentionSessionIds={idleAttentionSessionIds}
           activeSession={activeSession}
-          onCloseSession={handleCloseSession}
+          onCloseSession={handleCloseWorkspaceSession}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
-          onSelectSession={setActiveSessionId}
+          onSelectSession={(sessionId) => {
+            void handleSelectWorkspaceSession(sessionId);
+          }}
           onStatusChange={handleSessionStatusChange}
           onRegisterTerminalCommand={handleRegisterTerminalCommand}
           onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
@@ -613,7 +834,7 @@ function App() {
           <QuickSwitcher
             projects={projects}
             divergencesByProject={divergencesByProject}
-            sessions={sessions}
+            sessions={workspaceSessions}
             workspaces={workspaceList}
             workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
             onSelect={(type, item) => {
@@ -622,12 +843,12 @@ function App() {
               } else if (type === "divergence") {
                 handleSelectDivergence(item as Divergence);
               } else if (type === "workspace") {
-                handleSelectWorkspace(item as import("../entities").Workspace);
+                handleSelectWorkspace(item as Workspace);
               } else if (type === "workspace_divergence") {
-                handleSelectWorkspaceDivergence(item as import("../entities").WorkspaceDivergence);
+                handleSelectWorkspaceDivergence(item as WorkspaceDivergence);
               } else {
                 setSidebarMode("projects");
-                setActiveSessionId((item as TerminalSession).id);
+                void handleSelectWorkspaceSession((item as WorkspaceSession).id);
               }
               setShowQuickSwitcher(false);
             }}

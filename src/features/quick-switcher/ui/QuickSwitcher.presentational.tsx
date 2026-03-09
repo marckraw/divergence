@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { Divergence, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import type { Divergence, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import { isAgentSession } from "../../../entities";
 import {
   EmptyState,
   FAST_EASE_OUT,
@@ -69,22 +70,32 @@ function QuickSwitcherPresentational({
         ) : (
           <AnimatePresence initial={false}>
             {filteredItems.map((result, index) => (
-              <motion.div
-                key={`${result.type}-${result.type === "session" ? (result.item as TerminalSession).id : result.item.id}`}
-                layout={shouldReduceMotion ? undefined : "position"}
-                variants={itemVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                transition={itemTransition}
-                className={`flex items-center gap-3 px-3 py-2 rounded cursor-pointer transition-colors ${
-                  index === selectedIndex
-                    ? "bg-surface"
-                    : "hover:bg-surface/50"
-                }`}
-                onClick={() => onSelectResult(result)}
-                onMouseEnter={() => onHoverResult(index)}
-              >
+              (() => {
+                const sessionItem = result.type === "session"
+                  ? result.item as WorkspaceSession
+                  : null;
+                const agentSession = sessionItem && isAgentSession(sessionItem)
+                  ? sessionItem
+                  : null;
+                const isAgentItem = Boolean(agentSession);
+
+                return (
+                  <motion.div
+                    key={`${result.type}-${sessionItem ? sessionItem.id : result.item.id}`}
+                    layout={shouldReduceMotion ? undefined : "position"}
+                    variants={itemVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={itemTransition}
+                    className={`flex items-center gap-3 px-3 py-2 rounded cursor-pointer transition-colors ${
+                      index === selectedIndex
+                        ? "bg-surface"
+                        : "hover:bg-surface/50"
+                    }`}
+                    onClick={() => onSelectResult(result)}
+                    onMouseEnter={() => onHoverResult(index)}
+                  >
                 {result.type === "divergence" ? (
                   <svg
                     className="w-5 h-5 text-accent"
@@ -100,19 +111,35 @@ function QuickSwitcherPresentational({
                     />
                   </svg>
                 ) : result.type === "session" ? (
-                  <svg
-                    className="w-5 h-5 text-yellow"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
+                  isAgentItem ? (
+                    <svg
+                      className="w-5 h-5 text-accent"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 3h6m4 4v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7m3 0V5a2 2 0 012-2h4a2 2 0 012 2v2M9 11h6M9 15h4"
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="w-5 h-5 text-yellow"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                  )
                 ) : result.type === "workspace" ? (
                   <svg
                     className="w-5 h-5 text-blue"
@@ -162,7 +189,7 @@ function QuickSwitcherPresentational({
                     {result.type === "divergence"
                       ? (result.item as Divergence).branch
                       : result.type === "session"
-                        ? (result.item as TerminalSession).name
+                        ? sessionItem?.name
                         : result.type === "workspace_divergence"
                           ? (result.item as WorkspaceDivergence).branch
                           : result.item.name}
@@ -184,6 +211,11 @@ function QuickSwitcherPresentational({
                         : result.projectName}
                     </div>
                   )}
+                  {result.type === "session" && agentSession && (
+                    <div className="text-xs text-subtext truncate">
+                      {agentSession.provider} • {agentSession.model}
+                    </div>
+                  )}
                 </div>
 
                 <span
@@ -191,7 +223,9 @@ function QuickSwitcherPresentational({
                     result.type === "divergence"
                       ? "bg-accent/20 text-accent"
                       : result.type === "session"
-                        ? "bg-yellow/20 text-yellow"
+                        ? isAgentItem
+                          ? "bg-surface text-text"
+                          : "bg-yellow/20 text-yellow"
                         : result.type === "workspace"
                           ? "bg-blue/20 text-blue"
                           : result.type === "workspace_divergence"
@@ -199,9 +233,15 @@ function QuickSwitcherPresentational({
                             : "bg-surface text-subtext"
                   }`}
                 >
-                  {result.type === "workspace_divergence" ? "ws divergence" : result.type}
+                  {result.type === "workspace_divergence"
+                    ? "ws divergence"
+                    : result.type === "session" && agentSession
+                      ? `${agentSession.provider} agent`
+                      : result.type}
                 </span>
-              </motion.div>
+                  </motion.div>
+                );
+              })()
             ))}
           </AnimatePresence>
         )}

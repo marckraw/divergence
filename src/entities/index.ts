@@ -11,6 +11,40 @@ export type {
   SplitSessionState,
   TerminalSession,
 } from "./terminal-session";
+export type {
+  AgentActivity,
+  AgentActivityStatus,
+  AgentMessage,
+  AgentMessageRole,
+  AgentMessageStatus,
+  AgentProvider,
+  AgentRequest,
+  AgentRequestKind,
+  AgentRequestStatus,
+  AgentRuntimeStatus,
+  AgentSession,
+  AgentSessionRole,
+  AgentSessionSnapshot,
+  AgentSessionStatus,
+  AgentSessionTargetType,
+} from "./agent-session";
+export {
+  createAgentSessionLabel,
+  createEmptyAgentSessionSnapshot,
+  getAgentSessionTimestamp,
+} from "./agent-session";
+export type {
+  WorkspaceSession,
+  WorkspaceSessionKind,
+  WorkspaceSessionStatus,
+} from "./workspace-session";
+export {
+  getWorkspaceSessionKind,
+  getWorkspaceSessionTargetId,
+  getWorkspaceSessionTargetType,
+  isAgentSession,
+  isTerminalSession,
+} from "./workspace-session";
 export {
   areSplitPaneSizesEqual,
   buildEqualSplitPaneSizes,

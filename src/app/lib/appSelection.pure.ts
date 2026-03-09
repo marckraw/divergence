@@ -1,8 +1,8 @@
-import type { Project, TerminalSession } from "../../entities";
+import type { Project, WorkspaceSession } from "../../entities";
 
 export interface ResolveProjectForNewDivergenceInput {
   activeSessionId: string | null;
-  sessions: Map<string, TerminalSession>;
+  sessions: Map<string, WorkspaceSession>;
   projects: Project[];
 }
 

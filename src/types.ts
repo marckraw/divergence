@@ -9,10 +9,16 @@ export type {
   GitChangeStatus,
 } from "./entities";
 export type {
+  AgentProvider,
+  AgentSession,
+  AgentSessionRole,
+  AgentSessionSnapshot,
+  AgentSessionStatus,
   SplitOrientation,
   SplitPaneId,
   SplitSessionState,
   TerminalSession,
+  WorkspaceSession,
 } from "./entities";
 export type {
   TmuxSessionEntry,

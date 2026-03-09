@@ -1,16 +1,16 @@
 import type { KeyboardEvent, RefObject } from "react";
-import type { Divergence, Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import type { Divergence, Project, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
 import type { QuickSwitcherSearchResult } from "../lib/quickSwitcher.pure";
 
 export interface QuickSwitcherProps {
   projects: Project[];
   divergencesByProject: Map<number, Divergence[]>;
-  sessions: Map<string, TerminalSession>;
+  sessions: Map<string, WorkspaceSession>;
   workspaces?: Workspace[];
   workspaceDivergences?: WorkspaceDivergence[];
   onSelect: (
     type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
-    item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence
+    item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence
   ) => void;
   onClose: () => void;
 }

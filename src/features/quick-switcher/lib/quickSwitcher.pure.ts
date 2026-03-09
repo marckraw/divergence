@@ -1,8 +1,13 @@
-import type { Divergence, Project, TerminalSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import type { Divergence, Project, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import {
+  getWorkspaceSessionTargetId,
+  getWorkspaceSessionTargetType,
+  isAgentSession,
+} from "../../../entities";
 
 export interface QuickSwitcherSearchResult {
   type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence";
-  item: Project | Divergence | TerminalSession | Workspace | WorkspaceDivergence;
+  item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence;
   projectName?: string;
   workspaceName?: string;
 }
@@ -10,7 +15,7 @@ export interface QuickSwitcherSearchResult {
 export function buildQuickSwitcherSearchResults(
   projects: Project[],
   divergencesByProject: Map<number, Divergence[]>,
-  sessions: Map<string, TerminalSession>,
+  sessions: Map<string, WorkspaceSession>,
   workspaces?: Workspace[],
   workspaceDivergences?: WorkspaceDivergence[],
 ): QuickSwitcherSearchResult[] {
@@ -54,8 +59,10 @@ export function buildQuickSwitcherSearchResults(
   const sessionsList = Array.from(sessions.values()).sort((a, b) => a.name.localeCompare(b.name));
   for (const session of sessionsList) {
     const projectName = projectById.get(session.projectId)?.name;
-    const workspaceName = session.type === "divergence"
-      ? (divergencesByProject.get(session.projectId) ?? []).find((item) => item.id === session.targetId)?.branch
+    const targetType = getWorkspaceSessionTargetType(session);
+    const targetId = getWorkspaceSessionTargetId(session);
+    const workspaceName = targetType === "divergence"
+      ? (divergencesByProject.get(session.projectId) ?? []).find((item) => item.id === targetId)?.branch
       : projectName;
     items.push({
       type: "session",
@@ -88,11 +95,17 @@ export function filterQuickSwitcherSearchResults(
       );
     }
     if (result.type === "session") {
-      const session = result.item as TerminalSession;
+      const session = result.item as WorkspaceSession;
       return (
         name.includes(lowerQuery)
         || session.path.toLowerCase().includes(lowerQuery)
         || session.sessionRole.toLowerCase().includes(lowerQuery)
+        || (isAgentSession(session)
+          ? (
+            session.provider.toLowerCase().includes(lowerQuery)
+            || session.model.toLowerCase().includes(lowerQuery)
+          )
+          : false)
         || result.projectName?.toLowerCase().includes(lowerQuery)
         || result.workspaceName?.toLowerCase().includes(lowerQuery)
       );

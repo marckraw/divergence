@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Divergence, Project, TerminalSession } from "../../../types";
+import type { Divergence, Project, WorkspaceSession } from "../../../types";
 import {
   buildQuickSwitcherSearchResults,
   filterQuickSwitcherSearchResults,
@@ -27,7 +27,7 @@ const divergences = new Map<number, Divergence[]>([
   ],
 ]);
 
-const sessions = new Map<string, TerminalSession>([
+const sessions = new Map<string, WorkspaceSession>([
   ["divergence-10", {
     id: "divergence-10",
     type: "divergence",

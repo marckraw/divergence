@@ -12,6 +12,7 @@ export {
   IconButton,
   Kbd,
   LoadingSpinner,
+  Markdown,
   MenuButton,
   ModalFooter,
   ModalHeader,
@@ -50,6 +51,7 @@ export type {
   IconButtonProps,
   KbdProps,
   LoadingSpinnerProps,
+  MarkdownProps,
   ModalFooterProps,
   ModalHeaderProps,
   ModalShellProps,
@@ -69,6 +71,19 @@ export type {
 } from "./ui";
 
 export { cn } from "./lib/cn.pure";
+export {
+  AGENT_PROVIDER_ORDER,
+  DEFAULT_AGENT_PROVIDER,
+  getAvailableAgentProviders,
+  getDefaultAgentProvider,
+  getAgentProviderBadgeClass,
+  getAgentProviderIconClass,
+  getAgentProviderLabel,
+  getAgentRuntimeProviderDefaultModel,
+  getAgentRuntimeProviderDescriptor,
+  getAgentRuntimeProviderModelOptions,
+  indexAgentRuntimeProviders,
+} from "./lib/agentProviders.pure";
 
 export {
   FAST_EASE_OUT,
@@ -176,3 +191,46 @@ export {
   type PostNotificationInput,
   type PostNotificationResult,
 } from "./api/cloudNotifications.api";
+export {
+  createAgentRuntimeSession,
+  deleteAgentRuntimeSession,
+  getAgentRuntimeCapabilities,
+  getAgentRuntimeSession,
+  listAgentRuntimeSessions,
+  onAgentRuntimeSessionUpdated,
+  refreshAgentRuntimeCapabilities,
+  respondAgentRuntimeRequest,
+  startAgentRuntimeTurn,
+  stopAgentRuntimeSession,
+  updateAgentRuntimeSession,
+} from "./api/agentRuntime.api";
+export type {
+  AgentRuntimeActivity,
+  AgentRuntimeActivityStatus,
+  AgentRuntimeCapabilities,
+  AgentRuntimeMessage,
+  AgentRuntimeMessageRole,
+  AgentRuntimeMessageStatus,
+  AgentRuntimeProvider,
+  AgentRuntimeProviderDescriptor,
+  AgentRuntimeProviderFeatures,
+  AgentRuntimeProviderReadiness,
+  AgentRuntimeProviderReadinessStatus,
+  AgentRuntimeProviderTransport,
+  AgentRuntimeRequest,
+  AgentRuntimeRequestKind,
+  AgentRuntimeRequestOption,
+  AgentRuntimeRequestQuestion,
+  AgentRuntimeRequestStatus,
+  AgentRuntimeModelOption,
+  AgentRuntimeSessionSnapshot,
+  AgentRuntimeSessionRole,
+  AgentRuntimeSessionStatus,
+  AgentRuntimeSessionUpdatedEvent,
+  AgentRuntimeStatus,
+  AgentRuntimeTargetType,
+  CreateAgentSessionInput,
+  RespondAgentRequestInput,
+  StartAgentTurnInput,
+  UpdateAgentSessionInput,
+} from "./api/agentRuntime.types";

@@ -1,4 +1,4 @@
-import type { Project, Divergence, TerminalSession, Workspace, WorkspaceMember, WorkspaceDivergence } from "../../../entities";
+import type { AgentProvider, Project, Divergence, WorkspaceSession, Workspace, WorkspaceMember, WorkspaceDivergence } from "../../../entities";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../../features/work-sidebar";
 
 export interface SidebarProps {
@@ -10,7 +10,7 @@ export interface SidebarProps {
   taskRunningCount: number;
   projects: Project[];
   divergencesByProject: Map<number, Divergence[]>;
-  sessions: Map<string, TerminalSession>;
+  sessions: Map<string, WorkspaceSession>;
   activeSessionId: string | null;
   createDivergenceFor: Project | null;
   onCreateDivergenceForChange: (project: Project | null) => void;
@@ -18,6 +18,7 @@ export interface SidebarProps {
   onSelectDivergence: (divergence: Divergence) => void;
   onSelectSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
+  onDeleteAgentSession: (sessionId: string) => void;
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   onAddProject: (name: string, path: string) => Promise<void>;
   onRemoveProject: (id: number) => Promise<void>;
@@ -26,7 +27,13 @@ export interface SidebarProps {
     type: "project" | "divergence",
     item: Project | Divergence
   ) => void;
+  onCreateAgentSession: (input: {
+    provider: AgentProvider;
+    type: "project" | "divergence" | "workspace" | "workspace_divergence";
+    item: Project | Divergence | Workspace | WorkspaceDivergence;
+  }) => Promise<void>;
   onDeleteDivergence: (divergence: Divergence, origin: string) => Promise<void>;
+  agentProviders: AgentProvider[];
   isCollapsed: boolean;
   workspaces: Workspace[];
   membersByWorkspaceId: Map<number, WorkspaceMember[]>;

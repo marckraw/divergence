@@ -9,6 +9,8 @@ import {
   ContextMenuTrigger,
   EmptyState,
   ErrorBanner,
+  getAgentProviderBadgeClass,
+  getAgentProviderLabel,
   IconButton,
   SegmentedControl,
   StatusIndicator,
@@ -27,6 +29,7 @@ import {
 } from "../lib/sidebar.pure";
 import type { SidebarPresentationalProps } from "./Sidebar.types";
 import type { WorkSidebarTab } from "../../../features/work-sidebar";
+import { isAgentSession } from "../../../entities";
 
 const WORK_NAV_ITEMS: Array<{ id: WorkSidebarTab; label: string }> = [
   { id: "inbox", label: "Inbox" },
@@ -54,11 +57,13 @@ function SidebarPresentational({
   onSelectDivergence,
   onSelectSession,
   onCloseSession,
+  onDeleteAgentSession,
   onCloseSessionAndKillTmux,
   onCreateAdditionalSession,
   onRemoveProject,
   onCreateDivergence,
   isCollapsed,
+  onCreateAgentSession,
   expandedProjects,
   deletingDivergences,
   deleteError,
@@ -68,6 +73,7 @@ function SidebarPresentational({
   onToggleProjectExpand,
   onToggleAllProjects,
   onDeleteDivergenceFromMenu,
+  agentProviders,
   workspaces,
   membersByWorkspaceId,
   onSelectWorkspace,
@@ -257,6 +263,14 @@ function SidebarPresentational({
                             <ContextMenuItem onSelect={() => onSelectWorkspace(workspace)}>
                               Open Terminal
                             </ContextMenuItem>
+                            {agentProviders.map((provider) => (
+                              <ContextMenuItem
+                                key={provider}
+                                onSelect={() => { void onCreateAgentSession({ provider, type: "workspace", item: workspace }); }}
+                              >
+                                Open {getAgentProviderLabel(provider)} Agent
+                              </ContextMenuItem>
+                            ))}
                             <ContextMenuItem onSelect={() => onOpenWorkspaceSettings(workspace)}>
                               Settings
                             </ContextMenuItem>
@@ -310,6 +324,14 @@ function SidebarPresentational({
                                       <ContextMenuItem onSelect={() => onSelectWorkspaceDivergence(wd)}>
                                         Open Terminal
                                       </ContextMenuItem>
+                                      {agentProviders.map((provider) => (
+                                        <ContextMenuItem
+                                          key={provider}
+                                          onSelect={() => { void onCreateAgentSession({ provider, type: "workspace_divergence", item: wd }); }}
+                                        >
+                                          Open {getAgentProviderLabel(provider)} Agent
+                                        </ContextMenuItem>
+                                      ))}
                                       <ContextMenuSeparator />
                                       <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onDeleteWorkspaceDivergence(wd); }}>
                                         Delete
@@ -438,6 +460,14 @@ function SidebarPresentational({
                         <ContextMenuItem onSelect={() => onCreateAdditionalSession("project", project)}>
                           New Session
                         </ContextMenuItem>
+                              {agentProviders.map((provider) => (
+                                <ContextMenuItem
+                                  key={provider}
+                                  onSelect={() => { void onCreateAgentSession({ provider, type: "project", item: project }); }}
+                                >
+                                  Open {getAgentProviderLabel(provider)} Agent
+                                </ContextMenuItem>
+                              ))}
                         <ContextMenuItem onSelect={() => onCreateDivergenceForChange(project)}>
                           Create Divergence
                         </ContextMenuItem>
@@ -508,6 +538,14 @@ function SidebarPresentational({
                                       <ContextMenuItem onSelect={() => onCreateAdditionalSession("divergence", divergence)}>
                                         New Session
                                       </ContextMenuItem>
+                                        {agentProviders.map((provider) => (
+                                          <ContextMenuItem
+                                            key={provider}
+                                            onSelect={() => { void onCreateAgentSession({ provider, type: "divergence", item: divergence }); }}
+                                          >
+                                            Open {getAgentProviderLabel(provider)} Agent
+                                          </ContextMenuItem>
+                                        ))}
                                       <ContextMenuSeparator />
                                       <ContextMenuItem
                                         className="text-red focus:text-red"
@@ -525,7 +563,7 @@ function SidebarPresentational({
                                           <ContextMenuTrigger asChild>
                                             <Button
                                               type="button"
-                                              className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                                              className={`w-full justify-start text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
                                                 isSessionItemActive(activeSessionId, session.id)
                                                   ? "bg-surface text-text"
                                                   : "text-subtext hover:text-text hover:bg-surface/50"
@@ -535,19 +573,56 @@ function SidebarPresentational({
                                               size="xs"
                                             >
                                               <StatusIndicator status={session.status} />
+                                              {isAgentSession(session) && (
+                                                <span className={`text-[9px] uppercase px-1 py-0.5 rounded ${getAgentProviderBadgeClass(session.provider)}`}>
+                                                  {getAgentProviderLabel(session.provider)}
+                                                </span>
+                                              )}
+                                              {isAgentSession(session) && (
+                                                <span className="text-[9px] px-1 py-0.5 rounded bg-surface text-subtext">
+                                                  {session.model}
+                                                </span>
+                                              )}
+                                              {isAgentSession(session) && !session.isOpen && (
+                                                <span className="text-[9px] uppercase px-1 py-0.5 rounded border border-surface bg-main text-subtext">
+                                                  saved
+                                                </span>
+                                              )}
                                               <span className="truncate">
-                                                {session.sessionRole === "default" ? "default" : session.name}
+                                                {isAgentSession(session) || session.sessionRole !== "default"
+                                                  ? session.name
+                                                  : "default"}
                                               </span>
                                             </Button>
                                           </ContextMenuTrigger>
                                           <ContextMenuContent>
-                                            <ContextMenuItem className="text-red focus:text-red" onSelect={() => onCloseSession(session.id)}>
-                                              Close Session
-                                            </ContextMenuItem>
-                                            {session.useTmux && (
-                                              <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onCloseSessionAndKillTmux(session.id); }}>
-                                                Close Session + Kill Tmux
-                                              </ContextMenuItem>
+                                            {isAgentSession(session) ? (
+                                              <>
+                                                {session.isOpen ? (
+                                                  <ContextMenuItem onSelect={() => onCloseSession(session.id)}>
+                                                    Close Tab
+                                                  </ContextMenuItem>
+                                                ) : (
+                                                  <ContextMenuItem onSelect={() => onSelectSession(session.id)}>
+                                                    Open Conversation
+                                                  </ContextMenuItem>
+                                                )}
+                                                <ContextMenuSeparator />
+                                                <ContextMenuItem className="text-red focus:text-red" onSelect={() => onDeleteAgentSession(session.id)}>
+                                                  Delete Conversation
+                                                </ContextMenuItem>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <ContextMenuItem className="text-red focus:text-red" onSelect={() => onCloseSession(session.id)}>
+                                                  Close Session
+                                                </ContextMenuItem>
+                                                {session.useTmux && (
+                                                  <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onCloseSessionAndKillTmux(session.id); }}>
+                                                    Close Session + Kill Tmux
+                                                  </ContextMenuItem>
+                                                )}
+                                              </>
                                             )}
                                           </ContextMenuContent>
                                         </ContextMenu>
@@ -562,13 +637,13 @@ function SidebarPresentational({
                       )}
                     </AnimatePresence>
                     {projectSessions.length > 0 && (
-                      <div className="ml-8 mt-1 space-y-0.5">
+                      <div className="ml-10 mt-1 space-y-0.5">
                         {projectSessions.map((session) => (
                           <ContextMenu key={session.id}>
                             <ContextMenuTrigger asChild>
                               <Button
                                 type="button"
-                                className={`w-full text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
+                                className={`w-full justify-start text-left flex items-center gap-2 px-2 py-1 rounded text-xs transition-colors ${
                                   isSessionItemActive(activeSessionId, session.id)
                                     ? "bg-surface text-text"
                                     : "text-subtext hover:text-text hover:bg-surface/50"
@@ -578,19 +653,56 @@ function SidebarPresentational({
                                 size="xs"
                               >
                                 <StatusIndicator status={session.status} />
+                                {isAgentSession(session) && (
+                                <span className={`text-[9px] uppercase px-1 py-0.5 rounded ${getAgentProviderBadgeClass(session.provider)}`}>
+                                    {getAgentProviderLabel(session.provider)}
+                                </span>
+                              )}
+                                {isAgentSession(session) && (
+                                  <span className="text-[9px] px-1 py-0.5 rounded bg-surface text-subtext">
+                                    {session.model}
+                                  </span>
+                                )}
+                                {isAgentSession(session) && !session.isOpen && (
+                                  <span className="text-[9px] uppercase px-1 py-0.5 rounded border border-surface bg-main text-subtext">
+                                    saved
+                                  </span>
+                                )}
                                 <span className="truncate">
-                                  {session.sessionRole === "default" ? "default" : session.name}
+                                  {isAgentSession(session) || session.sessionRole !== "default"
+                                    ? session.name
+                                    : "default"}
                                 </span>
                               </Button>
                             </ContextMenuTrigger>
                             <ContextMenuContent>
-                              <ContextMenuItem className="text-red focus:text-red" onSelect={() => onCloseSession(session.id)}>
-                                Close Session
-                              </ContextMenuItem>
-                              {session.useTmux && (
-                                <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onCloseSessionAndKillTmux(session.id); }}>
-                                  Close Session + Kill Tmux
-                                </ContextMenuItem>
+                              {isAgentSession(session) ? (
+                                <>
+                                  {session.isOpen ? (
+                                    <ContextMenuItem onSelect={() => onCloseSession(session.id)}>
+                                      Close Tab
+                                    </ContextMenuItem>
+                                  ) : (
+                                    <ContextMenuItem onSelect={() => onSelectSession(session.id)}>
+                                      Open Conversation
+                                    </ContextMenuItem>
+                                  )}
+                                  <ContextMenuSeparator />
+                                  <ContextMenuItem className="text-red focus:text-red" onSelect={() => onDeleteAgentSession(session.id)}>
+                                    Delete Conversation
+                                  </ContextMenuItem>
+                                </>
+                              ) : (
+                                <>
+                                  <ContextMenuItem className="text-red focus:text-red" onSelect={() => onCloseSession(session.id)}>
+                                    Close Session
+                                  </ContextMenuItem>
+                                  {session.useTmux && (
+                                    <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onCloseSessionAndKillTmux(session.id); }}>
+                                      Close Session + Kill Tmux
+                                    </ContextMenuItem>
+                                  )}
+                                </>
                               )}
                             </ContextMenuContent>
                           </ContextMenu>

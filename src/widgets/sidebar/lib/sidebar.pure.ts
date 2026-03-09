@@ -1,4 +1,9 @@
-import type { Divergence, Project, TerminalSession } from "../../../entities";
+import type { Divergence, Project, WorkspaceSession } from "../../../entities";
+import {
+  getWorkspaceSessionTargetId,
+  getWorkspaceSessionTargetType,
+  isAgentSession,
+} from "../../../entities";
 
 export type SessionType = "project" | "divergence" | "workspace" | "workspace_divergence";
 
@@ -46,10 +51,10 @@ export function toggleAllExpandedProjects(
 }
 
 export function getSessionStatus(
-  sessions: Map<string, TerminalSession>,
+  sessions: Map<string, WorkspaceSession>,
   type: SessionType,
   id: number
-): TerminalSession["status"] | null {
+): WorkspaceSession["status"] | null {
   const workspaceSessions = getSessionsForWorkspace(sessions, type, id);
   if (workspaceSessions.some((session) => session.status === "busy")) {
     return "busy";
@@ -64,13 +69,22 @@ export function getSessionStatus(
 }
 
 export function getSessionsForWorkspace(
-  sessions: Map<string, TerminalSession>,
+  sessions: Map<string, WorkspaceSession>,
   type: SessionType,
   id: number
-): TerminalSession[] {
+): WorkspaceSession[] {
   return Array.from(sessions.values())
-    .filter((session) => session.type === type && session.targetId === id)
+    .filter((session) => getWorkspaceSessionTargetType(session) === type && getWorkspaceSessionTargetId(session) === id)
     .sort((a, b) => {
+      if (isAgentSession(a) && isAgentSession(b)) {
+        if (a.isOpen !== b.isOpen) {
+          return a.isOpen ? -1 : 1;
+        }
+        return b.updatedAtMs - a.updatedAtMs;
+      }
+      if (isAgentSession(a) !== isAgentSession(b)) {
+        return isAgentSession(a) ? 1 : -1;
+      }
       if (a.sessionRole !== b.sessionRole) {
         return a.sessionRole === "default" ? -1 : 1;
       }
@@ -80,7 +94,7 @@ export function getSessionsForWorkspace(
 
 export function isSessionActive(
   activeSessionId: string | null,
-  sessions: Map<string, TerminalSession>,
+  sessions: Map<string, WorkspaceSession>,
   type: SessionType,
   id: number
 ): boolean {
@@ -91,7 +105,7 @@ export function isSessionActive(
   if (!active) {
     return false;
   }
-  return active.type === type && active.targetId === id;
+  return getWorkspaceSessionTargetType(active) === type && getWorkspaceSessionTargetId(active) === id;
 }
 
 export function isSessionItemActive(activeSessionId: string | null, sessionId: string): boolean {
