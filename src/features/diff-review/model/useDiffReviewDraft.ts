@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ChangesMode } from "../../../entities";
+import { getDefaultAgentProvider } from "../../../shared";
 import type {
   DiffReviewAgent,
   DiffReviewAnchor,
@@ -18,7 +19,7 @@ interface DraftMapValue {
   agent: DiffReviewAgent;
 }
 
-const DEFAULT_AGENT: DiffReviewAgent = "claude";
+const DEFAULT_AGENT: DiffReviewAgent = getDefaultAgentProvider();
 
 function getDraftKey(workspacePath: string, mode: ChangesMode): string {
   return `${workspacePath}::${mode}`;

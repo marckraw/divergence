@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
-import type { Project, TerminalSession, SplitSessionState } from "../../entities";
+import type { Project, SplitSessionState, WorkspaceSession } from "../../entities";
+import { isAgentSession } from "../../entities";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../features/work-sidebar";
 import {
   closeFocusedSplitPane,
@@ -11,7 +12,7 @@ import { resolveAppShortcut } from "../lib/appShortcuts.pure";
 import { resolveProjectForNewDivergence } from "../lib/appSelection.pure";
 
 interface UseAppKeyboardShortcutsParams {
-  sessions: Map<string, TerminalSession>;
+  sessions: Map<string, WorkspaceSession>;
   activeSessionId: string | null;
   splitBySessionId: Map<string, SplitSessionState>;
   setSplitBySessionId: React.Dispatch<React.SetStateAction<Map<string, SplitSessionState>>>;
@@ -140,11 +141,19 @@ export function useAppKeyboardShortcuts({
       }
       case "split_terminal":
         if (activeSessionId) {
+          const activeSession = sessions.get(activeSessionId);
+          if (!activeSession || isAgentSession(activeSession)) {
+            return;
+          }
           handleSplitSession(activeSessionId, action.orientation);
         }
         return;
       case "reconnect_terminal":
         if (activeSessionId) {
+          const activeSession = sessions.get(activeSessionId);
+          if (!activeSession || isAgentSession(activeSession)) {
+            return;
+          }
           handleReconnectSession(activeSessionId);
         }
         return;

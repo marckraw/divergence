@@ -1,3 +1,5 @@
+import type { AgentRuntimeProvider } from "../../../shared";
+
 export type BackgroundTaskKind =
   | "create_divergence"
   | "delete_divergence"
@@ -26,6 +28,8 @@ export interface BackgroundTaskTarget {
   path?: string;
   label: string;
   tmuxSessionName?: string;
+  agentSessionId?: string;
+  agentProvider?: AgentRuntimeProvider;
 }
 
 export interface BackgroundTask {

@@ -3,10 +3,12 @@ import {
   formatRunStatus,
 } from "../../../entities/automation";
 import {
+  AGENT_PROVIDER_ORDER,
   Button,
   ErrorBanner,
   EmptyState,
   FormField,
+  getAgentProviderLabel,
   ModalFooter,
   ModalHeader,
   ModalShell,
@@ -220,8 +222,11 @@ function AutomationEditorModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="claude">Claude</SelectItem>
-                <SelectItem value="codex">Codex</SelectItem>
+                {AGENT_PROVIDER_ORDER.map((provider) => (
+                  <SelectItem key={provider} value={provider}>
+                    {getAgentProviderLabel(provider)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </FormField>

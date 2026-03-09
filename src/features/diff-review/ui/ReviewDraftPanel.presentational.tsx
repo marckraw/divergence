@@ -1,5 +1,17 @@
 import { buildAnchorLabel } from "../lib/diffReview.pure";
-import { Button, EmptyState, ErrorBanner, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Textarea } from "../../../shared";
+import {
+  AGENT_PROVIDER_ORDER,
+  Button,
+  EmptyState,
+  ErrorBanner,
+  getAgentProviderLabel,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+} from "../../../shared";
 import type { ReviewDraftPanelPresentationalProps } from "./ReviewDraftPanel.types";
 
 function ReviewDraftPanelPresentational({
@@ -88,8 +100,11 @@ function ReviewDraftPanelPresentational({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="claude">Claude</SelectItem>
-              <SelectItem value="codex">Codex</SelectItem>
+              {AGENT_PROVIDER_ORDER.map((provider) => (
+                <SelectItem key={provider} value={provider}>
+                  {getAgentProviderLabel(provider)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

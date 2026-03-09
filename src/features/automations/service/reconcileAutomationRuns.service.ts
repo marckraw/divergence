@@ -12,6 +12,29 @@ import {
   killAutomationTmuxSession,
 } from "../api/tmuxAutomation.api";
 import { parseAutomationResult } from "../lib/tmuxAutomation.pure";
+import {
+  getAgentRuntimeSession,
+  type AgentRuntimeProvider,
+  type AgentRuntimeSessionSnapshot,
+} from "../../../shared";
+
+interface AutomationRunRuntimeDetails {
+  runtime?: string;
+  agentSessionId?: string;
+  provider?: AgentRuntimeProvider;
+}
+
+function parseRunRuntimeDetails(detailsJson: string | null): AutomationRunRuntimeDetails | null {
+  if (!detailsJson?.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(detailsJson) as AutomationRunRuntimeDetails;
+  } catch {
+    return null;
+  }
+}
 
 export async function reconcileAutomationRuns(): Promise<void> {
   const runningRuns = await listRunningAutomationRuns();
@@ -26,17 +49,27 @@ export async function reconcileAutomationRuns(): Promise<void> {
   }
 
   for (const run of runningRuns) {
-    if (!run.tmuxSessionName || !run.resultFilePath) {
-      // Legacy run without tmux info — mark as error
-      await updateAutomationRun(run.id, {
-        status: "error",
-        endedAtMs: Date.now(),
-        error: "Process lost during app restart (no tmux session info).",
-      });
-      continue;
-    }
-
     try {
+      const runtimeDetails = parseRunRuntimeDetails(run.detailsJson);
+      if (runtimeDetails?.runtime === "agent" && runtimeDetails.agentSessionId) {
+        await reconcileAgentRuntimeRun(
+          run.id,
+          run.automationId,
+          runtimeDetails.agentSessionId,
+          automationById,
+        );
+        continue;
+      }
+
+      if (!run.tmuxSessionName || !run.resultFilePath) {
+        await updateAutomationRun(run.id, {
+          status: "error",
+          endedAtMs: Date.now(),
+          error: "Process lost during app restart (no recoverable runtime metadata).",
+        });
+        continue;
+      }
+
       await reconcileSingleRun(
         run.id,
         run.automationId,
@@ -54,6 +87,38 @@ export async function reconcileAutomationRuns(): Promise<void> {
       });
     }
   }
+}
+
+async function reconcileAgentRuntimeRun(
+  runId: number,
+  automationId: number,
+  agentSessionId: string,
+  automationById: Map<number, Automation>,
+): Promise<void> {
+  const session = await getAgentRuntimeSession(agentSessionId);
+  const automation = automationById.get(automationId);
+
+  if (!session) {
+    const endedAtMs = Date.now();
+    await updateAutomationRun(runId, {
+      status: "error",
+      endedAtMs,
+      error: "Automation agent session was missing on restart.",
+    });
+    await markAutomationRunSchedule(automationId, {
+      lastRunAtMs: endedAtMs,
+      nextRunAtMs: automation
+        ? computeNextScheduledRunAtMs(automation, endedAtMs)
+        : null,
+    });
+    return;
+  }
+
+  if (session.runtimeStatus === "running" || session.runtimeStatus === "waiting") {
+    return;
+  }
+
+  await finalizeAgentRuntimeRun(runId, automationId, session, automationById);
 }
 
 async function reconcileSingleRun(
@@ -173,4 +238,50 @@ async function reconcileSingleRun(
       // Best-effort cleanup
     }
   }
+}
+
+async function finalizeAgentRuntimeRun(
+  runId: number,
+  automationId: number,
+  session: AgentRuntimeSessionSnapshot,
+  automationById: Map<number, Automation>,
+): Promise<void> {
+  const automation = automationById.get(automationId);
+  const endedAtMs = Date.now();
+  const output = [...session.messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.content.trim().length > 0)
+    ?.content;
+
+  if (session.runtimeStatus === "error" || session.runtimeStatus === "stopped") {
+    await updateAutomationRun(runId, {
+      status: "error",
+      endedAtMs,
+      error: session.errorMessage ?? "Automation agent session failed.",
+      detailsJson: JSON.stringify({
+        runtime: "agent",
+        agentSessionId: session.id,
+        provider: session.provider,
+        output,
+      }),
+    });
+  } else {
+    await updateAutomationRun(runId, {
+      status: "success",
+      endedAtMs,
+      detailsJson: JSON.stringify({
+        runtime: "agent",
+        agentSessionId: session.id,
+        provider: session.provider,
+        output,
+      }),
+    });
+  }
+
+  await markAutomationRunSchedule(automationId, {
+    lastRunAtMs: endedAtMs,
+    nextRunAtMs: automation
+      ? computeNextScheduledRunAtMs(automation, endedAtMs)
+      : null,
+  });
 }

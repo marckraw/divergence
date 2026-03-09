@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  getAgentRuntimeCapabilities,
+  listAgentRuntimeSessions,
   recordDebugEvent,
   type DebugEvent,
   useDebugEvents,
@@ -37,6 +39,22 @@ function buildTmuxDiagnosticsDetails(): Promise<string> {
       `login_tmux_tmpdir=${diag.login_shell_tmux_tmpdir ?? "unset"}`,
     ].join("\n");
   });
+}
+
+function buildAgentRuntimeSnapshotDetails(): Promise<{
+  details: string;
+  sessionCount: number;
+}> {
+  return Promise.all([
+    getAgentRuntimeCapabilities(),
+    listAgentRuntimeSessions(),
+  ]).then(([capabilities, sessions]) => ({
+    details: JSON.stringify({
+      capabilities,
+      sessions,
+    }, null, 2),
+    sessionCount: sessions.length,
+  }));
 }
 
 function DebugConsolePanelContainer() {
@@ -101,6 +119,29 @@ function DebugConsolePanelContainer() {
     }
   }, []);
 
+  const handleRefreshAgentRuntimeSnapshot = useCallback(async () => {
+    try {
+      const snapshot = await buildAgentRuntimeSnapshotDetails();
+      recordDebugEvent({
+        level: "info",
+        category: "agent_runtime",
+        message: "Manual agent runtime snapshot captured",
+        details: snapshot.details,
+        metadata: {
+          sessionCount: snapshot.sessionCount,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      recordDebugEvent({
+        level: "error",
+        category: "agent_runtime",
+        message: "Manual agent runtime snapshot failed",
+        details: message,
+      });
+    }
+  }, []);
+
   const handleCopyJson = useCallback(async () => {
     const payload = JSON.stringify(filteredEvents, null, 2);
     try {
@@ -159,6 +200,7 @@ function DebugConsolePanelContainer() {
       onResetFilters={handleResetFilters}
       onInspectEvent={handleInspectEvent}
       onCloseInspectModal={handleCloseInspectModal}
+      onRefreshAgentRuntimeSnapshot={handleRefreshAgentRuntimeSnapshot}
       onRefreshTmuxDiagnostics={handleRefreshTmuxDiagnostics}
       onCopyJson={handleCopyJson}
       onClear={handleClear}

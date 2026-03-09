@@ -63,7 +63,7 @@ export const automations = sqliteTable(
     projectId: integer("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    agent: text("agent", { enum: ["claude", "codex"] }).notNull(),
+    agent: text("agent", { enum: ["claude", "codex", "cursor", "gemini"] }).notNull(),
     prompt: text("prompt").notNull(),
     intervalHours: integer("interval_hours").notNull(),
     runMode: text("run_mode", { enum: ["schedule", "event"] }).notNull().default("schedule"),

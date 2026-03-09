@@ -7,6 +7,7 @@ import type {
   SplitPaneId,
   SplitSessionState,
   TerminalSession,
+  WorkspaceSession,
 } from "../../../entities";
 import type { PromptQueueItemRow } from "../../../entities/prompt-queue";
 import type { WorkspaceMember } from "../../../entities/workspace";
@@ -25,7 +26,7 @@ import type { LinearWorkflowState } from "../../../shared";
 
 export interface MainAreaProps {
   projects: Project[];
-  sessions: Map<string, TerminalSession>;
+  sessions: Map<string, WorkspaceSession>;
   idleAttentionSessionIds: Set<string>;
   activeSession: TerminalSession | null;
   onCloseSession: (sessionId: string) => void;
@@ -72,7 +73,7 @@ export interface MainAreaOpenDiff {
 }
 
 export interface MainAreaPresentationalProps extends MainAreaProps {
-  sessionList: TerminalSession[];
+  sessionList: WorkspaceSession[];
   activeProject: Project | null;
   activeSplit: SplitSessionState | null;
   activeRootPath: string | null;

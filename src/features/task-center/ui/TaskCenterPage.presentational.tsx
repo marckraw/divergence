@@ -199,10 +199,19 @@ function TaskInspectModal({
               <div className="text-subtext">Started</div>
               <div className="mt-1 text-text">{formatDateTime(task.startedAtMs ?? task.createdAtMs)}</div>
             </div>
-            {task.target.tmuxSessionName && (
+            {(task.target.tmuxSessionName || task.target.agentSessionId) && (
               <div className="rounded border border-surface bg-main p-3 sm:col-span-2">
-                <div className="text-subtext">Tmux session</div>
-                <div className="mt-1 text-text font-mono break-all select-all">{task.target.tmuxSessionName}</div>
+                <div className="text-subtext">
+                  {task.target.agentSessionId ? "Agent session" : "Tmux session"}
+                </div>
+                <div className="mt-1 text-text font-mono break-all select-all">
+                  {task.target.agentSessionId ?? task.target.tmuxSessionName}
+                </div>
+                {task.target.agentProvider && (
+                  <div className="mt-1 text-[11px] uppercase tracking-wide text-subtext">
+                    {task.target.agentProvider}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -245,7 +254,7 @@ function TaskInspectModal({
             )}
           </div>
 
-          {task.kind === "automation_run" && task.target.tmuxSessionName && onAttachToAutomationSession && (
+          {task.kind === "automation_run" && (task.target.tmuxSessionName || task.target.agentSessionId) && onAttachToAutomationSession && (
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-surface">
               <Button
                 onClick={() => {
@@ -256,10 +265,12 @@ function TaskInspectModal({
                 size="sm"
                 className="border-accent/50 text-accent hover:bg-accent/10"
               >
-                View Terminal
+                {task.target.agentSessionId ? "View Agent" : "View Terminal"}
               </Button>
               <span className="text-[11px] text-subtext">
-                Attach to the agent's tmux session
+                {task.target.agentSessionId
+                  ? "Open the automation agent session"
+                  : "Attach to the agent's tmux session"}
               </span>
             </div>
           )}

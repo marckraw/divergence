@@ -9,6 +9,7 @@ export { default as ModalPanel } from "./ModalPanel.presentational";
 export { default as ModalShell } from "./ModalShell.presentational";
 export { default as TextInput } from "./TextInput.presentational";
 export { default as Textarea } from "./Textarea.presentational";
+export { default as Markdown } from "./Markdown.presentational";
 export {
   Select,
   SelectContent,
@@ -113,6 +114,7 @@ export type { PanelProps } from "./Panel.presentational";
 export type { SectionHeaderProps } from "./SectionHeader.presentational";
 export type { TextInputProps } from "./TextInput.presentational";
 export type { TextareaProps } from "./Textarea.presentational";
+export type { MarkdownProps } from "./Markdown.presentational";
 export type { SelectProps, SelectTriggerProps } from "./Select.presentational";
 export type { BadgeProps } from "./Badge.presentational";
 export type { ButtonSize, ButtonVariant } from "./button.styles";

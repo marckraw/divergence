@@ -1,3 +1,4 @@
+import type { AgentRuntimeProvider } from "../../../shared";
 import type { BackgroundTask, BackgroundTaskPhaseEvent } from "../model/task.types";
 
 // ── Hydration types ─────────────────────────────────────────────────────────
@@ -10,8 +11,15 @@ export interface AutomationRunHydrationInput {
   startedAtMs: number | null;
   endedAtMs: number | null;
   error: string | null;
+  detailsJson?: string | null;
   tmuxSessionName: string | null;
   logFilePath: string | null;
+}
+
+interface AutomationRunDetails {
+  runtime?: string;
+  agentSessionId?: string;
+  provider?: AgentRuntimeProvider;
 }
 
 export interface AutomationHydrationLookup {
@@ -46,6 +54,8 @@ export function automationRunToBackgroundTask(
     phaseEvents.push({ phase, atMs: run.endedAtMs });
   }
 
+  const details = parseAutomationRunDetails(run.detailsJson);
+
   return {
     id: `db-automation-run-${run.id}`,
     kind: "automation_run",
@@ -62,6 +72,8 @@ export function automationRunToBackgroundTask(
       path: project?.path,
       label: `${projectName} / ${automationName}`,
       tmuxSessionName: run.tmuxSessionName ?? undefined,
+      agentSessionId: details?.agentSessionId,
+      agentProvider: details?.provider,
     },
     createdAtMs,
     startedAtMs: run.startedAtMs ?? undefined,
@@ -70,6 +82,19 @@ export function automationRunToBackgroundTask(
     phaseEvents: phaseEvents.length > 0 ? phaseEvents : undefined,
     dbRunId: run.id,
   };
+}
+
+function parseAutomationRunDetails(raw: string | null | undefined): AutomationRunDetails | null {
+  if (!raw?.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as AutomationRunDetails;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 const HYDRATABLE_STATUSES = new Set(["success", "error"]);
@@ -153,4 +178,3 @@ export function getRecentTasks(tasks: BackgroundTask[], maxRecentTasks: number):
     .sort((a, b) => (b.endedAtMs ?? b.createdAtMs) - (a.endedAtMs ?? a.createdAtMs))
     .slice(0, maxRecentTasks);
 }
-

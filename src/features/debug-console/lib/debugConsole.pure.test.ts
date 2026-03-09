@@ -59,6 +59,12 @@ describe("debugConsole.pure", () => {
         category: "app",
         message: "Unhandled promise rejection",
       }),
+      makeEvent({
+        id: "4",
+        level: "info",
+        category: "agent_runtime",
+        message: "Manual agent runtime snapshot captured",
+      }),
     ];
 
     expect(
@@ -68,7 +74,7 @@ describe("debugConsole.pure", () => {
         searchQuery: "",
         onlyFailureOrStuck: false,
       }).map((event) => event.id)
-    ).toEqual(["1", "2", "3"]);
+    ).toEqual(["1", "2", "3", "4"]);
 
     expect(
       filterDebugEvents(events, {
@@ -87,6 +93,15 @@ describe("debugConsole.pure", () => {
         onlyFailureOrStuck: true,
       }).map((event) => event.id)
     ).toEqual(["2"]);
+
+    expect(
+      filterDebugEvents(events, {
+        level: "all",
+        category: "agent_runtime",
+        searchQuery: "snapshot",
+        onlyFailureOrStuck: false,
+      }).map((event) => event.id)
+    ).toEqual(["4"]);
   });
 
   it("counts events by level", () => {

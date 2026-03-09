@@ -9,10 +9,12 @@ import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
 import { PromptQueuePanel } from "../../../features/prompt-queue";
 import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
-import { FAST_EASE_OUT, SOFT_SPRING, getContentSwapVariants } from "../../../shared";
-import { IconButton, Kbd, TabButton, ToolbarButton } from "../../../shared";
+import { isTerminalSession } from "../../../entities";
+import { FAST_EASE_OUT, getContentSwapVariants } from "../../../shared";
+import { Kbd, TabButton, ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
 import type { MainAreaPresentationalProps } from "./MainArea.types";
+import WorkspaceSessionTabsPresentational from "../../workspace-session-tabs";
 
 function MainAreaPresentational({
   projects,
@@ -111,7 +113,6 @@ function MainAreaPresentational({
   renderSession,
 }: MainAreaPresentationalProps) {
   const shouldReduceMotion = useReducedMotion();
-  const tabTransition = shouldReduceMotion ? FAST_EASE_OUT : SOFT_SPRING;
   const panelVariants = useMemo(
     () => getContentSwapVariants(shouldReduceMotion),
     [shouldReduceMotion]
@@ -121,6 +122,7 @@ function MainAreaPresentational({
     : { type: "spring", stiffness: 240, damping: 28, mass: 0.9 };
   const activePaneCount = activeSplit?.paneIds.length ?? 1;
   const canAddSplitPane = Boolean(activeSession) && activePaneCount < 3;
+  const terminalSessionList = sessionList.filter(isTerminalSession);
 
   return (
     <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
@@ -154,115 +156,13 @@ function MainAreaPresentational({
         </ToolbarButton>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
-            {sessionList.length === 0 ? (
-              <span className="text-xs text-subtext">No terminal open</span>
-            ) : (
-              sessionList.map((session, index) => (
-                (() => {
-                  const isActive = session.id === activeSession?.id;
-                  const needsAttention = idleAttentionSessionIds.has(session.id) && !isActive;
-                  return (
-                    <motion.div
-                      key={session.id}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded cursor-pointer text-sm transition-colors ${
-                        isActive
-                          ? "bg-main text-text"
-                          : needsAttention
-                            ? "bg-yellow/10 text-text ring-1 ring-yellow/50 shadow-[0_0_0_1px_rgba(255,200,0,0.18)] hover:bg-yellow/15"
-                            : "text-subtext hover:text-text hover:bg-surface/50"
-                      }`}
-                      onClick={() => onSelectSession(session.id)}
-                      layout={shouldReduceMotion ? undefined : "position"}
-                      transition={tabTransition}
-                    >
-                      <span className="text-xs text-subtext">{index + 1}</span>
-
-                      <div
-                        className={`w-2 h-2 rounded-full transition-colors ${
-                          needsAttention
-                            ? "bg-yellow animate-pulse"
-                            : session.status === "busy"
-                              ? "bg-yellow animate-pulse"
-                              : session.status === "active"
-                                ? "bg-accent"
-                                : "bg-subtext/50"
-                        }`}
-                      />
-
-                      {session.type === "divergence" ? (
-                        <svg
-                          className="w-3 h-3 text-accent"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                          />
-                        </svg>
-                      ) : (
-                        <svg
-                          className="w-3 h-3"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                          />
-                        </svg>
-                      )}
-
-                      <span className="truncate max-w-32">{session.name}</span>
-
-                      {needsAttention && (
-                        <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-yellow/20 text-yellow border border-yellow/40">
-                          ready
-                        </span>
-                      )}
-
-                      {session.useTmux && (
-                        <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">
-                          tmux
-                        </span>
-                      )}
-
-                      <IconButton
-                        className="w-4 h-4 text-subtext hover:text-red rounded"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onCloseSession(session.id);
-                        }}
-                        variant="ghost"
-                        size="xs"
-                        label={`Close session ${session.name}`}
-                        icon={(
-                          <svg
-                            className="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        )}
-                      />
-                    </motion.div>
-                  );
-                })()
-              ))
-            )}
+            <WorkspaceSessionTabsPresentational
+              sessionList={sessionList}
+              activeSessionId={activeSession?.id ?? null}
+              idleAttentionSessionIds={idleAttentionSessionIds}
+              onSelectSession={onSelectSession}
+              onCloseSession={onCloseSession}
+            />
           </div>
         </div>
 
@@ -546,7 +446,7 @@ function MainAreaPresentational({
                           divergencesByProject={divergencesByProject}
                           projectsLoading={projectsLoading}
                           divergencesLoading={divergencesLoading}
-                          appSessions={sessionList}
+                          appSessions={terminalSessionList}
                           onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
                         />
                       </motion.div>

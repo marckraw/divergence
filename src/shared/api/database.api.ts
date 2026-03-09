@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { getMigration13RecoveryAction } from "../lib/databaseMigrations.pure";
 
 // ── Migration types ────────────────────────────────────────────────────────
 
@@ -24,6 +25,52 @@ async function safeAddColumn(database: Database, sql: string): Promise<void> {
     if (msg.includes("duplicate column name")) return;
     throw err;
   }
+}
+
+async function tableExists(database: Database, tableName: string): Promise<boolean> {
+  const rows = await database.select<{ name: string }[]>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = $1 LIMIT 1",
+    [tableName],
+  );
+  return rows.length > 0;
+}
+
+async function recoverInterruptedMigration13(
+  database: Database,
+  currentVersion: number,
+): Promise<number> {
+  const hasAutomations = await tableExists(database, "automations");
+  const hasAutomationsV13 = await tableExists(database, "automations_v13");
+  const action = getMigration13RecoveryAction({
+    currentVersion,
+    hasAutomations,
+    hasAutomationsV13,
+  });
+
+  if (action === "none") {
+    return currentVersion;
+  }
+
+  if (action === "drop_stale_v13") {
+    await database.execute("DROP TABLE IF EXISTS automations_v13");
+    return currentVersion;
+  }
+
+  await database.execute("PRAGMA foreign_keys = OFF");
+  try {
+    await database.execute("ALTER TABLE automations_v13 RENAME TO automations");
+    await database.execute(
+      "CREATE INDEX IF NOT EXISTS idx_automations_project_id ON automations(project_id)",
+    );
+    await database.execute(
+      "CREATE INDEX IF NOT EXISTS idx_automations_run_mode ON automations(run_mode)",
+    );
+    await database.execute("INSERT INTO _schema_version (version) VALUES ($1)", [13]);
+  } finally {
+    await database.execute("PRAGMA foreign_keys = ON");
+  }
+
+  return 13;
 }
 
 // ── Migrations ─────────────────────────────────────────────────────────────
@@ -69,7 +116,7 @@ const MIGRATIONS: Migration[] = [
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL,
           project_id INTEGER NOT NULL,
-          agent TEXT NOT NULL CHECK(agent IN ('claude', 'codex')),
+          agent TEXT NOT NULL CHECK(agent IN ('claude', 'codex', 'cursor', 'gemini')),
           prompt TEXT NOT NULL,
           interval_hours INTEGER NOT NULL,
           run_mode TEXT NOT NULL DEFAULT 'schedule' CHECK(run_mode IN ('schedule', 'event')),
@@ -339,6 +386,53 @@ const MIGRATIONS: Migration[] = [
       },
     ],
   },
+  {
+    version: 13,
+    description: "Expand automation agent enum for Cursor and Gemini",
+    statements: [
+      { sql: "PRAGMA foreign_keys = OFF" },
+      {
+        sql: `CREATE TABLE IF NOT EXISTS automations_v13 (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          project_id INTEGER NOT NULL,
+          agent TEXT NOT NULL CHECK(agent IN ('claude', 'codex', 'cursor', 'gemini')),
+          prompt TEXT NOT NULL,
+          interval_hours INTEGER NOT NULL,
+          run_mode TEXT NOT NULL DEFAULT 'schedule' CHECK(run_mode IN ('schedule', 'event')),
+          source_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+          target_project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+          trigger_type TEXT CHECK(trigger_type IN ('github_pr_merged')),
+          trigger_config_json TEXT,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          keep_session_alive INTEGER NOT NULL DEFAULT 0,
+          last_run_at_ms INTEGER,
+          next_run_at_ms INTEGER,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )`,
+      },
+      {
+        sql: `INSERT INTO automations_v13 (
+          id, name, project_id, agent, prompt, interval_hours, run_mode, source_project_id,
+          target_project_id, trigger_type, trigger_config_json, enabled, keep_session_alive,
+          last_run_at_ms, next_run_at_ms, created_at_ms, updated_at_ms, workspace_id
+        )
+        SELECT
+          id, name, project_id, agent, prompt, interval_hours, run_mode, source_project_id,
+          target_project_id, trigger_type, trigger_config_json, enabled, keep_session_alive,
+          last_run_at_ms, next_run_at_ms, created_at_ms, updated_at_ms, workspace_id
+        FROM automations`,
+      },
+      { sql: "DROP TABLE automations" },
+      { sql: "ALTER TABLE automations_v13 RENAME TO automations" },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_automations_project_id ON automations(project_id)" },
+      { sql: "CREATE INDEX IF NOT EXISTS idx_automations_run_mode ON automations(run_mode)" },
+      { sql: "PRAGMA foreign_keys = ON" },
+    ],
+  },
 ];
 
 // ── Migration runner ───────────────────────────────────────────────────────
@@ -351,7 +445,8 @@ async function runMigrations(database: Database): Promise<void> {
   const rows = await database.select<{ version: number }[]>(
     "SELECT version FROM _schema_version ORDER BY version DESC LIMIT 1",
   );
-  const currentVersion = rows.length > 0 ? rows[0].version : 0;
+  let currentVersion = rows.length > 0 ? rows[0].version : 0;
+  currentVersion = await recoverInterruptedMigration13(database, currentVersion);
 
   for (const migration of MIGRATIONS) {
     if (migration.version <= currentVersion) continue;

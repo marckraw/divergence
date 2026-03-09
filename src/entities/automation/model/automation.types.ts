@@ -1,6 +1,7 @@
 export type { Automation, AutomationRun } from "../../../shared/api/schema.types";
+import type { AgentRuntimeProvider } from "../../../shared";
 
-export type AutomationAgent = "claude" | "codex";
+export type AutomationAgent = AgentRuntimeProvider;
 export type AutomationRunMode = "schedule" | "event";
 export type AutomationTriggerType = "github_pr_merged";
 

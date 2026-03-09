@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import type { Project } from "../../../entities";
+import type { AgentSessionSnapshot, Project } from "../../../entities";
+import type { CreateAgentSessionInput } from "../../../shared";
 import { useGithubPrChat } from "../model/useGithubPrChat";
 import { useGithubPrHub } from "../model/useGithubPrHub";
 import type { GithubPullRequestMergeMethod } from "../model/githubPrHub.types";
@@ -9,17 +10,19 @@ import GithubPrHubPresentational from "./GithubPrHub.presentational";
 interface GithubPrHubContainerProps {
   projects: Project[];
   githubToken: string;
-  agentCommandClaude: string;
-  agentCommandCodex: string;
-  claudeOAuthToken: string;
+  agentSessions: Map<string, AgentSessionSnapshot>;
+  createAgentSession: (input: CreateAgentSessionInput) => Promise<{ id: string }>;
+  startAgentTurn: (sessionId: string, prompt: string) => Promise<void>;
+  deleteAgentSession: (sessionId: string) => Promise<void>;
 }
 
 function GithubPrHubContainer({
   projects,
   githubToken,
-  agentCommandClaude,
-  agentCommandCodex,
-  claudeOAuthToken,
+  agentSessions,
+  createAgentSession,
+  startAgentTurn,
+  deleteAgentSession,
 }: GithubPrHubContainerProps) {
   const {
     projectTargets,
@@ -70,9 +73,10 @@ function GithubPrHubContainer({
     detail,
     detailFiles,
     selectedFilePath,
-    agentCommandClaude,
-    agentCommandCodex,
-    claudeOAuthToken,
+    agentSessions,
+    createAgentSession,
+    startAgentTurn,
+    deleteAgentSession,
   });
 
   const handleOpenGithubUrl = useCallback((url: string) => {

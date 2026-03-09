@@ -1,6 +1,7 @@
 import type { ChangesMode } from "../../../entities";
+import type { AgentRuntimeProvider } from "../../../shared";
 
-export type DiffReviewAgent = "claude" | "codex";
+export type DiffReviewAgent = AgentRuntimeProvider;
 
 export type DiffReviewLineKind = "added" | "removed" | "range" | "file";
 

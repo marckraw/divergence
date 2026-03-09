@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Automation } from "../../../entities/automation";
+import { getDefaultAgentProvider } from "../../../shared";
 import {
   doesAutomationMatchGithubMergedEvent,
   parseGithubTriggerBaseBranches,
@@ -10,7 +11,7 @@ function makeAutomation(overrides: Partial<Automation>): Automation {
     id: 1,
     name: "sync landing",
     projectId: 1,
-    agent: "claude",
+    agent: getDefaultAgentProvider(),
     prompt: "sync docs",
     intervalHours: 1,
     runMode: "event",

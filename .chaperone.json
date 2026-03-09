@@ -219,6 +219,42 @@
         "message": "src/lib is retired; move utilities to app/shared/entities/features/widgets lib folders"
       },
       {
+        "type": "regex",
+        "id": "warn-no-hardcoded-agent-provider-unions-outside-runtime-types",
+        "severity": "warning",
+        "files": "src/{app,widgets,features,entities}/**/*.{ts,tsx}",
+        "pattern": "\"claude\"\\s*\\|\\s*\"codex\"",
+        "message": "Do not hardcode narrow claude|codex provider unions in app/widgets/features/entities code. Use shared AgentRuntimeProvider-based types."
+      },
+      {
+        "type": "regex",
+        "id": "warn-no-hardcoded-agent-provider-select-items",
+        "severity": "warning",
+        "files": "src/{app,widgets,features,entities}/**/*.tsx",
+        "pattern": "(?:<SelectItem\\s+value=\\\"(?:claude|codex)\\\"|<option\\s+value=\\\"(?:claude|codex)\\\")",
+        "message": "Provider selectors should render from shared provider metadata instead of hardcoded claude/codex options."
+      },
+      {
+        "type": "regex",
+        "id": "warn-no-hardcoded-agent-provider-defaults",
+        "severity": "warning",
+        "files": "src/{app,widgets,features,entities}/**/*.{ts,tsx}",
+        "exclude": [
+          "src/**/*.test.ts",
+          "src/**/*.pure.test.ts"
+        ],
+        "pattern": "(?:DEFAULT_(?:AGENT|PROVIDER)[A-Z_]*\\s*=\\s*\\\"(?:claude|codex|cursor|gemini)\\\"|\\b(?:agent|selectedAgent)\\s*:\\s*\\\"(?:claude|codex|cursor|gemini)\\\")",
+        "message": "Provider defaults should come from shared provider helpers instead of hardcoded string literals."
+      },
+      {
+        "type": "regex",
+        "id": "no-legacy-agent-runtime-capability-fields",
+        "severity": "error",
+        "files": "src/**/*.{ts,tsx}",
+        "pattern": "\\b(?:claudeCliSupported|codexCliSupported|codexAppServerSupported|modelOptionsByProvider|defaultModelByProvider)\\b",
+        "message": "Legacy hardcoded agent-runtime capability fields are retired. Use the provider descriptor registry instead."
+      },
+      {
         "type": "package-fields",
         "id": "pure-function-check-wired-into-unit-tests",
         "severity": "error",

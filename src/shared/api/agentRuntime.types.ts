@@ -1,0 +1,173 @@
+export type AgentRuntimeProvider = "claude" | "codex" | "cursor" | "gemini";
+
+export type AgentRuntimeSessionRole = "default" | "review-agent" | "manual";
+
+export type AgentRuntimeTargetType =
+  | "project"
+  | "divergence"
+  | "workspace"
+  | "workspace_divergence";
+
+export type AgentRuntimeSessionStatus = "idle" | "active" | "busy";
+
+export type AgentRuntimeStatus = "idle" | "running" | "waiting" | "error" | "stopped";
+
+export type AgentRuntimeMessageRole = "user" | "assistant" | "system";
+
+export type AgentRuntimeMessageStatus = "streaming" | "done" | "error";
+
+export type AgentRuntimeActivityStatus = "running" | "completed" | "error";
+
+export type AgentRuntimeRequestKind = "approval" | "user-input";
+
+export type AgentRuntimeRequestStatus = "open" | "resolved";
+
+export interface AgentRuntimeRequestOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export interface AgentRuntimeRequestQuestion {
+  id: string;
+  header: string;
+  question: string;
+  isOther: boolean;
+  isSecret: boolean;
+  options?: AgentRuntimeRequestOption[];
+}
+
+export interface AgentRuntimeModelOption {
+  slug: string;
+  label: string;
+}
+
+export type AgentRuntimeProviderTransport = "cli-headless" | "app-server";
+
+export type AgentRuntimeProviderReadinessStatus = "ready" | "partial" | "setup-required";
+
+export interface AgentRuntimeProviderFeatures {
+  streaming: boolean;
+  resume: boolean;
+  structuredRequests: boolean;
+  usageInspection: boolean;
+  providerExtras: boolean;
+}
+
+export interface AgentRuntimeProviderReadiness {
+  status: AgentRuntimeProviderReadinessStatus;
+  summary: string;
+  details: string[];
+  binaryCandidates: string[];
+  detectedCommand?: string | null;
+  authStatus: "authenticated" | "missing" | "unknown";
+}
+
+export interface AgentRuntimeProviderDescriptor {
+  id: AgentRuntimeProvider;
+  label: string;
+  transport: AgentRuntimeProviderTransport;
+  defaultModel: string;
+  modelOptions: AgentRuntimeModelOption[];
+  readiness: AgentRuntimeProviderReadiness;
+  features: AgentRuntimeProviderFeatures;
+}
+
+export interface AgentRuntimeCapabilities {
+  placeholderSessionsSupported: boolean;
+  liveStreamingSupported: boolean;
+  persistentSnapshotsSupported: boolean;
+  providers: AgentRuntimeProviderDescriptor[];
+}
+
+export interface AgentRuntimeMessage {
+  id: string;
+  role: AgentRuntimeMessageRole;
+  content: string;
+  status: AgentRuntimeMessageStatus;
+  createdAtMs: number;
+}
+
+export interface AgentRuntimeActivity {
+  id: string;
+  kind: string;
+  title: string;
+  status: AgentRuntimeActivityStatus;
+  details?: string;
+  startedAtMs: number;
+  completedAtMs?: number;
+}
+
+export interface AgentRuntimeRequest {
+  id: string;
+  kind: AgentRuntimeRequestKind;
+  title: string;
+  description?: string;
+  options?: AgentRuntimeRequestOption[];
+  questions?: AgentRuntimeRequestQuestion[];
+  status: AgentRuntimeRequestStatus;
+  openedAtMs: number;
+  resolvedAtMs?: number;
+}
+
+export interface AgentRuntimeSessionSnapshot {
+  id: string;
+  provider: AgentRuntimeProvider;
+  model: string;
+  targetType: AgentRuntimeTargetType;
+  targetId: number;
+  projectId: number;
+  workspaceOwnerId?: number;
+  workspaceKey: string;
+  sessionRole: AgentRuntimeSessionRole;
+  name: string;
+  path: string;
+  status: AgentRuntimeSessionStatus;
+  runtimeStatus: AgentRuntimeStatus;
+  isOpen: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
+  threadId?: string;
+  messages: AgentRuntimeMessage[];
+  activities: AgentRuntimeActivity[];
+  pendingRequest: AgentRuntimeRequest | null;
+  errorMessage?: string | null;
+}
+
+export interface CreateAgentSessionInput {
+  provider: AgentRuntimeProvider;
+  targetType: AgentRuntimeTargetType;
+  targetId: number;
+  projectId: number;
+  workspaceOwnerId?: number;
+  workspaceKey: string;
+  sessionRole?: AgentRuntimeSessionRole;
+  model?: string;
+  name: string;
+  path: string;
+}
+
+export interface StartAgentTurnInput {
+  sessionId: string;
+  prompt: string;
+  claudeOAuthToken?: string;
+  automationMode?: boolean;
+}
+
+export interface RespondAgentRequestInput {
+  sessionId: string;
+  requestId: string;
+  decision?: string;
+  answers?: string[];
+}
+
+export interface UpdateAgentSessionInput {
+  sessionId: string;
+  isOpen?: boolean;
+  model?: string;
+}
+
+export interface AgentRuntimeSessionUpdatedEvent {
+  sessionId: string;
+  snapshot: AgentRuntimeSessionSnapshot;
+}
