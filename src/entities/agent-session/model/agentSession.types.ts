@@ -1,7 +1,9 @@
 import type {
   AgentRuntimeAttachment,
+  AgentRuntimeDebugEvent,
   AgentRuntimeInteractionMode,
   AgentRuntimeProvider,
+  AgentRuntimeSessionNameMode,
 } from "../../../shared";
 
 export type AgentProvider = AgentRuntimeProvider;
@@ -86,6 +88,7 @@ export interface AgentSession {
   workspaceOwnerId?: number;
   workspaceKey: string;
   sessionRole: AgentSessionRole;
+  nameMode: AgentRuntimeSessionNameMode;
   name: string;
   path: string;
   status: AgentSessionStatus;
@@ -98,6 +101,10 @@ export interface AgentSession {
 }
 
 export interface AgentSessionSnapshot extends AgentSession {
+  currentTurnStartedAtMs?: number | null;
+  lastRuntimeEventAtMs?: number | null;
+  runtimePhase?: string | null;
+  runtimeEvents: AgentRuntimeDebugEvent[];
   messages: AgentMessage[];
   activities: AgentActivity[];
   pendingRequest: AgentRequest | null;

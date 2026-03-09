@@ -25,6 +25,7 @@ use uuid::Uuid;
 
 const SESSION_UPDATED_EVENT_NAME: &str = "agent-runtime-session-updated";
 const MAX_ACTIVITY_DETAILS_LENGTH: usize = 16_000;
+const MAX_RUNTIME_EVENTS: usize = 48;
 const DEFAULT_CLAUDE_MODEL: &str = "sonnet";
 const DEFAULT_CODEX_MODEL: &str = "gpt-5.4";
 const DEFAULT_CURSOR_MODEL: &str = "auto";
@@ -136,6 +137,14 @@ pub enum AgentSessionRole {
     Manual,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentSessionNameMode {
+    Default,
+    Auto,
+    Manual,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentSessionStatus {
@@ -222,6 +231,17 @@ pub struct AgentActivity {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AgentRuntimeDebugEvent {
+    pub id: String,
+    pub at_ms: i64,
+    pub phase: String,
+    pub message: String,
+    #[serde(default)]
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AgentRequestOption {
     pub id: String,
     pub label: String,
@@ -282,6 +302,8 @@ pub struct AgentSessionSnapshot {
     pub workspace_owner_id: Option<i64>,
     pub workspace_key: String,
     pub session_role: AgentSessionRole,
+    #[serde(default = "default_agent_session_name_mode")]
+    pub name_mode: AgentSessionNameMode,
     pub name: String,
     pub path: String,
     pub status: AgentSessionStatus,
@@ -291,6 +313,14 @@ pub struct AgentSessionSnapshot {
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
     pub thread_id: Option<String>,
+    #[serde(default)]
+    pub current_turn_started_at_ms: Option<i64>,
+    #[serde(default)]
+    pub last_runtime_event_at_ms: Option<i64>,
+    #[serde(default)]
+    pub runtime_phase: Option<String>,
+    #[serde(default)]
+    pub runtime_events: Vec<AgentRuntimeDebugEvent>,
     pub messages: Vec<AgentMessage>,
     pub activities: Vec<AgentActivity>,
     pub pending_request: Option<AgentRequest>,
@@ -307,6 +337,7 @@ pub struct CreateAgentSessionInput {
     pub workspace_owner_id: Option<i64>,
     pub workspace_key: String,
     pub session_role: Option<AgentSessionRole>,
+    pub name_mode: Option<AgentSessionNameMode>,
     pub model: Option<String>,
     pub name: String,
     pub path: String,
@@ -357,6 +388,8 @@ pub struct UpdateAgentSessionInput {
     pub session_id: String,
     pub is_open: Option<bool>,
     pub model: Option<String>,
+    pub name: Option<String>,
+    pub name_mode: Option<AgentSessionNameMode>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -500,6 +533,16 @@ impl AgentRuntimeState {
             workspace_owner_id: input.workspace_owner_id,
             workspace_key: input.workspace_key.trim().to_string(),
             session_role: input.session_role.unwrap_or(AgentSessionRole::Default),
+            name_mode: input.name_mode.unwrap_or_else(|| {
+                if matches!(
+                    input.session_role.unwrap_or(AgentSessionRole::Default),
+                    AgentSessionRole::ReviewAgent | AgentSessionRole::Manual
+                ) {
+                    AgentSessionNameMode::Manual
+                } else {
+                    AgentSessionNameMode::Default
+                }
+            }),
             name: input.name.trim().to_string(),
             path: input.path.trim().to_string(),
             status: AgentSessionStatus::Idle,
@@ -508,6 +551,10 @@ impl AgentRuntimeState {
             created_at_ms: now,
             updated_at_ms: now,
             thread_id: None,
+            current_turn_started_at_ms: None,
+            last_runtime_event_at_ms: None,
+            runtime_phase: None,
+            runtime_events: Vec::new(),
             messages: Vec::new(),
             activities: Vec::new(),
             pending_request: None,
@@ -596,6 +643,10 @@ impl AgentRuntimeState {
             session.status = AgentSessionStatus::Busy;
             session.runtime_status = AgentRuntimeStatus::Running;
             session.updated_at_ms = now;
+            session.current_turn_started_at_ms = Some(now);
+            session.last_runtime_event_at_ms = Some(now);
+            session.runtime_phase = Some("Queued turn".to_string());
+            session.runtime_events.clear();
             session.pending_request = None;
             session.error_message = None;
             session.messages.push(AgentMessage {
@@ -618,6 +669,12 @@ impl AgentRuntimeState {
                     attachments: None,
                 });
             }
+            push_runtime_event(
+                session,
+                "Queued turn",
+                "Prompt accepted and waiting for provider runtime startup.",
+                None,
+            );
             Ok(())
         })?;
         self.emit_snapshot_update(&app, &snapshot);
@@ -656,6 +713,13 @@ impl AgentRuntimeState {
             session.status = AgentSessionStatus::Idle;
             session.runtime_status = AgentRuntimeStatus::Stopped;
             session.updated_at_ms = now_ms();
+            session.runtime_phase = Some("Stopped".to_string());
+            push_runtime_event(
+                session,
+                "Stopped",
+                "Agent turn was stopped by the user.",
+                None,
+            );
             session.pending_request = None;
             Ok(())
         })?;
@@ -693,7 +757,9 @@ impl AgentRuntimeState {
     ) -> Result<AgentSessionSnapshot, String> {
         let has_open_update = input.is_open.is_some();
         let has_model_update = input.model.is_some();
-        if !has_open_update && !has_model_update {
+        let has_name_update = input.name.is_some();
+        let has_name_mode_update = input.name_mode.is_some();
+        if !has_open_update && !has_model_update && !has_name_update && !has_name_mode_update {
             return self
                 .get_session(&input.session_id)?
                 .ok_or_else(|| format!("Agent session not found: {}", input.session_id));
@@ -712,6 +778,18 @@ impl AgentRuntimeState {
 
             if let Some(model) = input.model.as_deref() {
                 session.model = normalize_agent_model(&session.provider, Some(model));
+            }
+
+            if let Some(name) = input.name.as_deref() {
+                let trimmed_name = name.trim();
+                if trimmed_name.is_empty() {
+                    return Err("Session name cannot be empty.".to_string());
+                }
+                session.name = trimmed_name.to_string();
+            }
+
+            if let Some(name_mode) = input.name_mode {
+                session.name_mode = name_mode;
             }
 
             session.updated_at_ms = now_ms();
@@ -847,6 +925,13 @@ impl AgentRuntimeState {
             session.status = AgentSessionStatus::Idle;
             session.runtime_status = AgentRuntimeStatus::Error;
             session.updated_at_ms = now_ms();
+            session.runtime_phase = Some("Errored".to_string());
+            push_runtime_event(
+                session,
+                "Errored",
+                error_message,
+                None,
+            );
             session.pending_request = None;
             session.error_message = Some(error_message.to_string());
             Ok(())
@@ -867,6 +952,12 @@ impl AgentRuntimeState {
             session.pending_request = Some(request.clone());
             session.runtime_status = AgentRuntimeStatus::Waiting;
             session.updated_at_ms = now_ms();
+            push_runtime_event(
+                session,
+                "Waiting on input",
+                &request.title,
+                request.description.clone(),
+            );
             Ok(())
         })?;
         self.emit_snapshot_update(app, &snapshot);
@@ -882,6 +973,28 @@ impl AgentRuntimeState {
             session.pending_request = None;
             session.runtime_status = AgentRuntimeStatus::Running;
             session.updated_at_ms = now_ms();
+            push_runtime_event(
+                session,
+                "Resumed turn",
+                "Pending request resolved. Provider runtime resumed.",
+                None,
+            );
+            Ok(())
+        })?;
+        self.emit_snapshot_update(app, &snapshot);
+        Ok(snapshot)
+    }
+
+    fn emit_runtime_event(
+        &self,
+        app: &AppHandle,
+        session_id: &str,
+        phase: &str,
+        message: &str,
+        details: Option<String>,
+    ) -> Result<AgentSessionSnapshot, String> {
+        let snapshot = self.mutate_session(session_id, |session| {
+            push_runtime_event(session, phase, message, details);
             Ok(())
         })?;
         self.emit_snapshot_update(app, &snapshot);
@@ -1131,6 +1244,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_agent_session_name_mode() -> AgentSessionNameMode {
+    AgentSessionNameMode::Default
+}
+
 fn load_persisted_sessions(path: &Path) -> HashMap<String, AgentSessionSnapshot> {
     let Ok(raw) = fs::read_to_string(path) else {
         return HashMap::new();
@@ -1151,6 +1268,15 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
     if session.model.trim().is_empty() {
         session.model = default_model_for_provider(&session.provider).to_string();
     }
+    if matches!(session.session_role, AgentSessionRole::ReviewAgent | AgentSessionRole::Manual)
+        && !matches!(session.name_mode, AgentSessionNameMode::Manual)
+    {
+        session.name_mode = AgentSessionNameMode::Manual;
+    }
+    if session.runtime_events.len() > MAX_RUNTIME_EVENTS {
+        let keep_from = session.runtime_events.len() - MAX_RUNTIME_EVENTS;
+        session.runtime_events = session.runtime_events.split_off(keep_from);
+    }
     if matches!(
         session.runtime_status,
         AgentRuntimeStatus::Running | AgentRuntimeStatus::Waiting
@@ -1158,11 +1284,61 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
         session.status = AgentSessionStatus::Idle;
         session.runtime_status = AgentRuntimeStatus::Stopped;
         session.pending_request = None;
+        session.runtime_phase = Some("Interrupted".to_string());
         if session.error_message.is_none() {
             session.error_message = Some("Agent runtime was interrupted when Divergence closed.".to_string());
         }
+        if session.current_turn_started_at_ms.is_some() {
+            let at_ms = session
+                .last_runtime_event_at_ms
+                .unwrap_or(session.updated_at_ms);
+            session.last_runtime_event_at_ms = Some(at_ms);
+            session.runtime_events.push(AgentRuntimeDebugEvent {
+                id: format!("runtime-event-{}", Uuid::new_v4()),
+                at_ms,
+                phase: "Interrupted".to_string(),
+                message: "Agent runtime was interrupted when Divergence closed.".to_string(),
+                details: None,
+            });
+            if session.runtime_events.len() > MAX_RUNTIME_EVENTS {
+                let overflow = session.runtime_events.len() - MAX_RUNTIME_EVENTS;
+                session.runtime_events.drain(0..overflow);
+            }
+        }
     }
     session
+}
+
+fn push_runtime_event(
+    session: &mut AgentSessionSnapshot,
+    phase: &str,
+    message: &str,
+    details: Option<String>,
+) {
+    let at_ms = now_ms();
+    session.runtime_phase = Some(phase.to_string());
+    session.last_runtime_event_at_ms = Some(at_ms);
+    session.updated_at_ms = at_ms;
+    if let Some(last_event) = session.runtime_events.last_mut() {
+        if last_event.phase == phase && last_event.message == message {
+            last_event.at_ms = at_ms;
+            if details.is_some() {
+                last_event.details = details;
+            }
+            return;
+        }
+    }
+    session.runtime_events.push(AgentRuntimeDebugEvent {
+        id: format!("runtime-event-{}", Uuid::new_v4()),
+        at_ms,
+        phase: phase.to_string(),
+        message: message.to_string(),
+        details,
+    });
+    if session.runtime_events.len() > MAX_RUNTIME_EVENTS {
+        let overflow = session.runtime_events.len() - MAX_RUNTIME_EVENTS;
+        session.runtime_events.drain(0..overflow);
+    }
 }
 
 fn read_provider_thread_id(value: &Value) -> Option<String> {

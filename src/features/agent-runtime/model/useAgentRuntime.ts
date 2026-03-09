@@ -52,7 +52,13 @@ interface UseAgentRuntimeResult {
     requestId: string,
     input: { decision?: string; answers?: string[] }
   ) => Promise<void>;
-  updateSession: (input: { sessionId: string; isOpen?: boolean; model?: string }) => Promise<void>;
+  updateSession: (input: {
+    sessionId: string;
+    isOpen?: boolean;
+    model?: string;
+    name?: string;
+    nameMode?: "default" | "auto" | "manual";
+  }) => Promise<void>;
   openSession: (sessionId: string) => Promise<void>;
   closeSession: (sessionId: string) => Promise<void>;
   stopSession: (sessionId: string) => Promise<void>;
@@ -223,7 +229,13 @@ export function useAgentRuntime({
   }, []);
 
   const updateSession = useCallback(async (
-    input: { sessionId: string; isOpen?: boolean; model?: string }
+    input: {
+      sessionId: string;
+      isOpen?: boolean;
+      model?: string;
+      name?: string;
+      nameMode?: "default" | "auto" | "manual";
+    }
   ): Promise<void> => {
     const snapshot = mapAgentRuntimeSnapshot(await updateAgentRuntimeSession(input));
     setAgentSessions((previous) => {

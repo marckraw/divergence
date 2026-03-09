@@ -17,6 +17,7 @@ function makeSession(partial: Partial<AgentSession> = {}): AgentSession {
     projectId: partial.projectId ?? 1,
     workspaceKey: partial.workspaceKey ?? "project:1",
     sessionRole: partial.sessionRole ?? "default",
+    nameMode: partial.nameMode ?? "default",
     name: partial.name ?? "Claude",
     path: partial.path ?? "/tmp/project",
     status: partial.status ?? "idle",
@@ -36,6 +37,10 @@ describe("createEmptyAgentSessionSnapshot", () => {
 
     expect(snapshot.messages).toEqual([]);
     expect(snapshot.activities).toEqual([]);
+    expect(snapshot.currentTurnStartedAtMs).toBeNull();
+    expect(snapshot.lastRuntimeEventAtMs).toBeNull();
+    expect(snapshot.runtimePhase).toBeNull();
+    expect(snapshot.runtimeEvents).toEqual([]);
     expect(snapshot.pendingRequest).toBeNull();
     expect(snapshot.errorMessage).toBeNull();
   });

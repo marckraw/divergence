@@ -46,6 +46,7 @@ export interface AgentSessionViewProps {
 }
 
 export interface AgentSessionViewPresentationalProps extends AgentSessionViewProps {
+  nowMs: number;
   draft: AgentSessionComposerDraft;
   isSubmitting: boolean;
   isStagingAttachment: boolean;

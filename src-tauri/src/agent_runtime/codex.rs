@@ -9,6 +9,13 @@ impl AgentRuntimeState {
         session_id: &str,
         turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Launching provider",
+            "Starting Codex App Server.",
+            Some(session.model.clone()),
+        )?;
         let mut command = Command::new("codex");
         command
             .arg("app-server")
@@ -44,6 +51,13 @@ impl AgentRuntimeState {
                     writer: writer_tx.clone(),
                 },
             },
+        )?;
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Initializing provider",
+            "Codex App Server started. Initializing session.",
+            None,
         )?;
 
         let writer_task = tokio::spawn(async move {
@@ -98,6 +112,13 @@ impl AgentRuntimeState {
         });
 
         let mut next_request_id = 1_u64;
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Initializing provider",
+            "Sending initialize handshake to Codex App Server.",
+            None,
+        )?;
         send_codex_request(
             &writer_tx,
             &pending_responses,
@@ -117,6 +138,17 @@ impl AgentRuntimeState {
         .await?;
         send_codex_message(&writer_tx, json!({ "method": "initialized" }))?;
 
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Preparing thread",
+            if session.thread_id.is_some() {
+                "Resuming existing Codex thread."
+            } else {
+                "Starting new Codex thread."
+            },
+            None,
+        )?;
         let thread_response = if let Some(thread_id) = session.thread_id.as_deref() {
             send_codex_request(
                 &writer_tx,
@@ -153,6 +185,12 @@ impl AgentRuntimeState {
         if let Some(thread_id) = read_codex_thread_id_from_response(&thread_response) {
             let snapshot = self.mutate_session(session_id, |current_session| {
                 current_session.thread_id = Some(thread_id);
+                push_runtime_event(
+                    current_session,
+                    "Preparing turn",
+                    "Codex thread is ready. Starting the turn.",
+                    None,
+                );
                 current_session.updated_at_ms = now_ms();
                 Ok(())
             })?;
@@ -202,6 +240,13 @@ impl AgentRuntimeState {
             });
         }
 
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Preparing turn",
+            "Waiting for first Codex runtime events.",
+            None,
+        )?;
         send_codex_request(
             &writer_tx,
             &pending_responses,
@@ -344,6 +389,12 @@ impl AgentRuntimeState {
                 {
                     let snapshot = self.mutate_session(session_id, |session| {
                         session.thread_id = Some(thread_id.to_string());
+                        push_runtime_event(
+                            session,
+                            "Preparing turn",
+                            "Codex thread started.",
+                            Some(thread_id.to_string()),
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -358,6 +409,12 @@ impl AgentRuntimeState {
                     } else {
                         AgentRuntimeStatus::Running
                     };
+                    push_runtime_event(
+                        session,
+                        "Waiting for model",
+                        "Codex acknowledged the turn and is preparing a response.",
+                        None,
+                    );
                     session.updated_at_ms = now_ms();
                     Ok(())
                 })?;
@@ -372,6 +429,12 @@ impl AgentRuntimeState {
                 if !delta.is_empty() {
                     let snapshot = self.mutate_session(session_id, |session| {
                         append_assistant_text(session, item_id.as_deref(), delta);
+                        push_runtime_event(
+                            session,
+                            "Streaming response",
+                            "Received Codex response text.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -392,6 +455,12 @@ impl AgentRuntimeState {
                         .map(str::to_string);
                     let snapshot = self.mutate_session(session_id, |session| {
                         ensure_assistant_message(session, activity_id.as_deref());
+                        push_runtime_event(
+                            session,
+                            "Streaming response",
+                            "Codex started a new assistant message item.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -412,17 +481,24 @@ impl AgentRuntimeState {
                         .and_then(Value::as_str)
                         .map(str::to_string);
                     let snapshot = self.mutate_session(session_id, |session| {
+                        let cwd_details = cwd.clone();
                         if !session.activities.iter().any(|activity| activity.id == activity_id) {
                             session.activities.push(AgentActivity {
                                 id: activity_id.clone(),
                                 kind: "command_execution".to_string(),
                                 title: command.clone(),
                                 status: AgentActivityStatus::Running,
-                                details: cwd,
+                                details: cwd_details,
                                 started_at_ms: now_ms(),
                                 completed_at_ms: None,
                             });
                         }
+                        push_runtime_event(
+                            session,
+                            "Running command",
+                            "Codex started a command execution.",
+                            Some(command.clone()),
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -440,17 +516,25 @@ impl AgentRuntimeState {
                     );
                     let details = item.get("arguments").map(truncate_json_details);
                     let snapshot = self.mutate_session(session_id, |session| {
+                        let activity_title = title.clone();
+                        let activity_details = details.clone();
                         if !session.activities.iter().any(|activity| activity.id == activity_id) {
                             session.activities.push(AgentActivity {
-                                id: activity_id,
+                                id: activity_id.clone(),
                                 kind: "mcp_tool".to_string(),
-                                title,
+                                title: activity_title,
                                 status: AgentActivityStatus::Running,
-                                details,
+                                details: activity_details,
                                 started_at_ms: now_ms(),
                                 completed_at_ms: None,
                             });
                         }
+                        push_runtime_event(
+                            session,
+                            "Running tool",
+                            "Codex started an MCP tool call.",
+                            Some(title.clone()),
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -479,6 +563,12 @@ impl AgentRuntimeState {
                         if let Some(message) = assistant_message_mut(session, item_id.as_deref()) {
                             message.status = AgentMessageStatus::Done;
                         }
+                        push_runtime_event(
+                            session,
+                            "Streaming response",
+                            "Codex completed an assistant message item.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -501,6 +591,16 @@ impl AgentRuntimeState {
                     };
                     let snapshot = self.mutate_session(session_id, |session| {
                         complete_activity(session, &activity_id, aggregated_output, activity_status);
+                        push_runtime_event(
+                            session,
+                            if matches!(activity_status, AgentActivityStatus::Error) {
+                                "Command failed"
+                            } else {
+                                "Command completed"
+                            },
+                            "Codex finished a command execution.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -518,6 +618,12 @@ impl AgentRuntimeState {
                             &activity_id,
                             details,
                             AgentActivityStatus::Completed,
+                        );
+                        push_runtime_event(
+                            session,
+                            "Applied changes",
+                            "Codex reported a file change item.",
+                            None,
                         );
                         session.updated_at_ms = now_ms();
                         Ok(())
@@ -540,6 +646,16 @@ impl AgentRuntimeState {
                     };
                     let snapshot = self.mutate_session(session_id, |session| {
                         complete_activity(session, &activity_id, details, status);
+                        push_runtime_event(
+                            session,
+                            if matches!(status, AgentActivityStatus::Error) {
+                                "Tool failed"
+                            } else {
+                                "Tool completed"
+                            },
+                            "Codex finished an MCP tool call.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -582,6 +698,20 @@ impl AgentRuntimeState {
                     };
                     session.pending_request = None;
                     session.error_message = error_message.clone();
+                    push_runtime_event(
+                        session,
+                        if error_message.is_some() {
+                            "Turn failed"
+                        } else {
+                            "Completed"
+                        },
+                        if error_message.is_some() {
+                            "Codex finished the turn with an error."
+                        } else {
+                            "Codex completed the turn."
+                        },
+                        error_message.clone(),
+                    );
                     session.updated_at_ms = now_ms();
                     Ok(())
                 })?;
@@ -609,6 +739,12 @@ impl AgentRuntimeState {
                     session.status = AgentSessionStatus::Idle;
                     session.runtime_status = AgentRuntimeStatus::Error;
                     session.error_message = Some(error_message.clone());
+                    push_runtime_event(
+                        session,
+                        "Errored",
+                        "Codex App Server emitted an error.",
+                        Some(error_message.clone()),
+                    );
                     session.updated_at_ms = now_ms();
                     Ok(())
                 })?;

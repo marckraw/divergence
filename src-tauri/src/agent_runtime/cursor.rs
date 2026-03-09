@@ -9,6 +9,13 @@ impl AgentRuntimeState {
         session_id: &str,
         turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Launching provider",
+            "Starting Cursor Agent CLI.",
+            Some(session.model.clone()),
+        )?;
         let mut command = build_cursor_command(session, &turn.prompt, turn.interaction_mode)?;
         command
             .current_dir(&session.path)
@@ -35,6 +42,13 @@ impl AgentRuntimeState {
                 child: child.clone(),
                 transport: RunningTransport::Cursor,
             },
+        )?;
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Waiting for model",
+            "Cursor process started. Waiting for streamed output.",
+            None,
         )?;
 
         let stderr_task = tokio::spawn(async move {
@@ -90,6 +104,12 @@ impl AgentRuntimeState {
             }
             current_session.status = AgentSessionStatus::Active;
             current_session.runtime_status = AgentRuntimeStatus::Idle;
+            push_runtime_event(
+                current_session,
+                "Completed",
+                "Cursor completed the turn.",
+                None,
+            );
             current_session.updated_at_ms = now_ms();
             Ok(())
         })?;
@@ -124,6 +144,12 @@ impl AgentRuntimeState {
                 if let Some(thread_id) = read_provider_thread_id(&parsed) {
                     let snapshot = self.mutate_session(session_id, |session| {
                         session.thread_id = Some(thread_id);
+                        push_runtime_event(
+                            session,
+                            "Preparing turn",
+                            "Cursor session is ready.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -183,6 +209,12 @@ impl AgentRuntimeState {
                         _ => {}
                     }
 
+                    push_runtime_event(
+                        session,
+                        "Thinking",
+                        "Cursor emitted thinking output.",
+                        None,
+                    );
                     session.updated_at_ms = now_ms();
                     Ok(())
                 })?;
@@ -202,6 +234,12 @@ impl AgentRuntimeState {
                             message.content = text;
                             message.status = AgentMessageStatus::Done;
                         }
+                        push_runtime_event(
+                            session,
+                            "Streaming response",
+                            "Received Cursor response text.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -218,18 +256,26 @@ impl AgentRuntimeState {
                     .or_else(|| parsed.get("input"))
                     .map(truncate_json_details);
                 let snapshot = self.mutate_session(session_id, |session| {
+                    let activity_title = title.clone();
+                    let activity_details = details.clone();
                     if !session.activities.iter().any(|item| item.id == activity_id) {
                         session.activities.push(AgentActivity {
                             id: activity_id.clone(),
                             kind: "tool".to_string(),
-                            title,
+                            title: activity_title,
                             status: AgentActivityStatus::Running,
-                            details,
+                            details: activity_details,
                             started_at_ms: now_ms(),
                             completed_at_ms: None,
                         });
-                        session.updated_at_ms = now_ms();
                     }
+                    push_runtime_event(
+                        session,
+                        "Running tool",
+                        "Cursor started a tool call.",
+                        Some(title.clone()),
+                    );
+                    session.updated_at_ms = now_ms();
                     Ok(())
                 })?;
                 self.emit_snapshot_update(app, &snapshot);
@@ -248,6 +294,12 @@ impl AgentRuntimeState {
                             &activity_id,
                             details,
                             AgentActivityStatus::Completed,
+                        );
+                        push_runtime_event(
+                            session,
+                            "Tool completed",
+                            "Cursor finished a tool call.",
+                            None,
                         );
                         session.updated_at_ms = now_ms();
                         Ok(())
@@ -271,6 +323,12 @@ impl AgentRuntimeState {
                     session.status = AgentSessionStatus::Idle;
                     session.runtime_status = AgentRuntimeStatus::Error;
                     session.error_message = Some(message.clone());
+                    push_runtime_event(
+                        session,
+                        "Errored",
+                        "Cursor emitted an error.",
+                        Some(message.clone()),
+                    );
                     session.updated_at_ms = now_ms();
                     Ok(())
                 })?;
@@ -280,6 +338,12 @@ impl AgentRuntimeState {
                 if let Some(thread_id) = read_provider_thread_id(&parsed) {
                     let snapshot = self.mutate_session(session_id, |session| {
                         session.thread_id = Some(thread_id);
+                        push_runtime_event(
+                            session,
+                            "Preparing turn",
+                            "Cursor returned a result handle.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
