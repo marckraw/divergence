@@ -7,9 +7,21 @@ impl AgentRuntimeState {
         app: &AppHandle,
         session: &AgentSessionSnapshot,
         session_id: &str,
-        prompt: &str,
+        turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
-        let mut command = build_gemini_command(session, prompt)?;
+        let attachment_paths = resolve_gemini_attachment_paths(session_id, &turn.attachments)?;
+        let attachment_dirs = if attachment_paths.is_empty() {
+            Vec::new()
+        } else {
+            vec![session_attachment_dir(session_id)]
+        };
+        let prompt_with_attachments = build_gemini_prompt(&turn.prompt, &attachment_paths);
+        let mut command = build_gemini_command(
+            session,
+            &prompt_with_attachments,
+            turn.interaction_mode,
+            &attachment_dirs,
+        )?;
         command
             .current_dir(&session.path)
             .stdout(Stdio::piped())
@@ -173,5 +185,33 @@ impl AgentRuntimeState {
         })?;
         self.emit_snapshot_update(app, &snapshot);
         Ok(())
+    }
+}
+
+fn resolve_gemini_attachment_paths(
+    session_id: &str,
+    attachments: &[AgentAttachment],
+) -> Result<Vec<PathBuf>, String> {
+    attachments
+        .iter()
+        .map(|attachment| resolve_staged_attachment_path(session_id, &attachment.id))
+        .collect()
+}
+
+fn build_gemini_prompt(prompt: &str, attachment_paths: &[PathBuf]) -> String {
+    if attachment_paths.is_empty() {
+        return prompt.to_string();
+    }
+
+    let attachment_directives = attachment_paths
+        .iter()
+        .map(|path| format!("@{}", path.to_string_lossy()))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if prompt.trim().is_empty() {
+        attachment_directives
+    } else {
+        format!("{attachment_directives}\n\n{}", prompt.trim())
     }
 }

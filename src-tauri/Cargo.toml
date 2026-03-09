@@ -1,6 +1,6 @@
 [package]
 name = "divergence"
-version = "0.28.0"
+version = "0.27.1"
 description = "A desktop app for managing multiple projects with embedded terminals"
 authors = ["Divergence"]
 edition = "2021"
@@ -13,6 +13,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+base64 = "0.22"
 tauri = { version = "~2.10", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "~2.3"
 tauri-plugin-dialog = "~2.6"

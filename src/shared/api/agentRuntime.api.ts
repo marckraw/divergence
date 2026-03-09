@@ -1,11 +1,13 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AgentRuntimeAttachment,
   AgentRuntimeCapabilities,
   AgentRuntimeSessionSnapshot,
   AgentRuntimeSessionUpdatedEvent,
   CreateAgentSessionInput,
   RespondAgentRequestInput,
+  StageAgentRuntimeAttachmentInput,
   StartAgentTurnInput,
   UpdateAgentSessionInput,
 } from "./agentRuntime.types";
@@ -58,9 +60,34 @@ export async function startAgentRuntimeTurn(
     input: {
       sessionId: input.sessionId,
       prompt: input.prompt,
+      interactionMode: input.interactionMode,
+      attachments: input.attachments,
       claudeOAuthToken: input.claudeOAuthToken,
       automationMode: input.automationMode,
     },
+  });
+}
+
+export async function stageAgentRuntimeAttachment(
+  input: StageAgentRuntimeAttachmentInput
+): Promise<AgentRuntimeAttachment> {
+  return invoke<AgentRuntimeAttachment>("stage_agent_attachment", {
+    input: {
+      sessionId: input.sessionId,
+      name: input.name,
+      mimeType: input.mimeType,
+      base64Content: input.base64Content,
+    },
+  });
+}
+
+export async function discardAgentRuntimeAttachment(
+  sessionId: string,
+  attachmentId: string
+): Promise<void> {
+  await invoke("discard_agent_attachment", {
+    sessionId,
+    attachmentId,
   });
 }
 

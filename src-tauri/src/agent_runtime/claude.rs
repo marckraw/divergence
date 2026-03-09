@@ -7,10 +7,21 @@ impl AgentRuntimeState {
         app: &AppHandle,
         session: &AgentSessionSnapshot,
         session_id: &str,
-        prompt: &str,
-        claude_oauth_token: &str,
+        turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
-        let mut command = build_claude_command(session, claude_oauth_token);
+        let attachment_paths = resolve_attachment_paths(session_id, &turn.attachments)?;
+        let attachment_dirs = if attachment_paths.is_empty() {
+            Vec::new()
+        } else {
+            vec![session_attachment_dir(session_id)]
+        };
+        let prompt_with_attachments = build_claude_prompt(&turn.prompt, &attachment_paths);
+        let mut command = build_claude_command(
+            session,
+            turn.interaction_mode,
+            &turn.claude_oauth_token,
+            &attachment_dirs,
+        );
         command
             .current_dir(&session.path)
             .stdin(Stdio::piped())
@@ -23,7 +34,7 @@ impl AgentRuntimeState {
 
         if let Some(mut stdin) = child.stdin.take() {
             stdin
-                .write_all(prompt.as_bytes())
+                .write_all(prompt_with_attachments.as_bytes())
                 .await
                 .map_err(|error| format!("Failed to write Claude prompt: {error}"))?;
             stdin
@@ -313,4 +324,34 @@ impl AgentRuntimeState {
 
         Ok(())
     }
+}
+
+fn resolve_attachment_paths(
+    session_id: &str,
+    attachments: &[AgentAttachment],
+) -> Result<Vec<PathBuf>, String> {
+    attachments
+        .iter()
+        .map(|attachment| resolve_staged_attachment_path(session_id, &attachment.id))
+        .collect()
+}
+
+fn build_claude_prompt(prompt: &str, attachment_paths: &[PathBuf]) -> String {
+    if attachment_paths.is_empty() {
+        return prompt.to_string();
+    }
+
+    let mut sections = vec![
+        "Attached image files:".to_string(),
+        attachment_paths
+            .iter()
+            .map(|path| format!("- {}", path.to_string_lossy()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        "Use those images as part of your answer.".to_string(),
+    ];
+    if !prompt.trim().is_empty() {
+        sections.push(format!("User prompt:\n{}", prompt.trim()));
+    }
+    sections.join("\n\n")
 }

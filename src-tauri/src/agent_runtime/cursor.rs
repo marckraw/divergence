@@ -7,9 +7,9 @@ impl AgentRuntimeState {
         app: &AppHandle,
         session: &AgentSessionSnapshot,
         session_id: &str,
-        prompt: &str,
+        turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
-        let mut command = build_cursor_command(session, prompt)?;
+        let mut command = build_cursor_command(session, &turn.prompt, turn.interaction_mode)?;
         command
             .current_dir(&session.path)
             .stdout(Stdio::piped())
@@ -190,8 +190,18 @@ impl AgentRuntimeState {
             }
             "assistant" | "assistant_message" => {
                 if let Some(text) = read_provider_text_delta(&parsed) {
+                    let has_timestamp = parsed.get("timestamp_ms").and_then(Value::as_i64).is_some();
                     let snapshot = self.mutate_session(session_id, |session| {
-                        append_assistant_text(session, None, &text);
+                        let message = ensure_assistant_message(session, None);
+                        if has_timestamp {
+                            if !matches!(message.status, AgentMessageStatus::Streaming) {
+                                message.status = AgentMessageStatus::Streaming;
+                            }
+                            message.content.push_str(&text);
+                        } else {
+                            message.content = text;
+                            message.status = AgentMessageStatus::Done;
+                        }
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;

@@ -897,6 +897,7 @@ dependencies = [
 name = "divergence"
 version = "0.27.1"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
  "futures-util",

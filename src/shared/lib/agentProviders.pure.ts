@@ -88,6 +88,31 @@ export function getAgentRuntimeProviderModelOptions(
   return getAgentRuntimeProviderDescriptor(capabilities, provider)?.modelOptions ?? [];
 }
 
+export function supportsAgentRuntimePlanMode(
+  capabilities: AgentRuntimeCapabilities | null,
+  provider: AgentRuntimeProvider
+): boolean {
+  return getAgentRuntimeProviderDescriptor(capabilities, provider)?.features.planMode ?? false;
+}
+
+export function supportsAgentRuntimeImageAttachments(
+  capabilities: AgentRuntimeCapabilities | null,
+  provider: AgentRuntimeProvider
+): boolean {
+  return (
+    getAgentRuntimeProviderDescriptor(capabilities, provider)?.features.imageAttachments ?? false
+  );
+}
+
+export function supportsAgentRuntimeStructuredPlanUi(
+  capabilities: AgentRuntimeCapabilities | null,
+  provider: AgentRuntimeProvider
+): boolean {
+  return (
+    getAgentRuntimeProviderDescriptor(capabilities, provider)?.features.structuredPlanUi ?? false
+  );
+}
+
 export function getAvailableAgentProviders(
   capabilities: AgentRuntimeCapabilities | null
 ): AgentRuntimeProvider[] {

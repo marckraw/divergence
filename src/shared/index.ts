@@ -83,6 +83,9 @@ export {
   getAgentRuntimeProviderDescriptor,
   getAgentRuntimeProviderModelOptions,
   indexAgentRuntimeProviders,
+  supportsAgentRuntimeImageAttachments,
+  supportsAgentRuntimePlanMode,
+  supportsAgentRuntimeStructuredPlanUi,
 } from "./lib/agentProviders.pure";
 
 export {
@@ -193,6 +196,7 @@ export {
 } from "./api/cloudNotifications.api";
 export {
   createAgentRuntimeSession,
+  discardAgentRuntimeAttachment,
   deleteAgentRuntimeSession,
   getAgentRuntimeCapabilities,
   getAgentRuntimeSession,
@@ -200,14 +204,17 @@ export {
   onAgentRuntimeSessionUpdated,
   refreshAgentRuntimeCapabilities,
   respondAgentRuntimeRequest,
+  stageAgentRuntimeAttachment,
   startAgentRuntimeTurn,
   stopAgentRuntimeSession,
   updateAgentRuntimeSession,
 } from "./api/agentRuntime.api";
 export type {
+  AgentRuntimeAttachment,
   AgentRuntimeActivity,
   AgentRuntimeActivityStatus,
   AgentRuntimeCapabilities,
+  AgentRuntimeInteractionMode,
   AgentRuntimeMessage,
   AgentRuntimeMessageRole,
   AgentRuntimeMessageStatus,
@@ -231,6 +238,7 @@ export type {
   AgentRuntimeTargetType,
   CreateAgentSessionInput,
   RespondAgentRequestInput,
+  StageAgentRuntimeAttachmentInput,
   StartAgentTurnInput,
   UpdateAgentSessionInput,
 } from "./api/agentRuntime.types";

@@ -13,6 +13,8 @@ The runtime shape is:
 - Terminals remain first-class and unchanged for human shell workflows.
 - Agent sessions are a distinct domain model from terminal sessions.
 - Provider support is registry-driven, not hardcoded per screen.
+- Plan mode is a per-turn composer option, not a separate session type.
+- Image attachments are staged by the runtime and passed through provider adapters instead of terminal paste shortcuts.
 - Claude uses a local CLI adapter.
 - Codex uses a dedicated App Server adapter.
 - Cursor uses a local headless CLI adapter.
@@ -57,9 +59,17 @@ Provider adapters may emit richer internal events, but only the canonical contra
 ## Provider notes
 
 - Claude runs through local `claude -p` streaming and still uses permissive headless execution rather than surfaced approval requests.
+- Claude plan turns use `--permission-mode plan`.
+- Claude image attachments are staged locally, added as allowed directories, and referenced in the prompt wrapper by file path.
 - Codex runs through `codex app-server` over JSON-RPC on stdio and surfaces structured approval/user-input requests into the React UI.
+- Codex plan turns use App Server collaboration mode metadata.
+- Codex image attachments are converted into `data:` URLs and sent as multimodal `turn/start` input items.
 - Cursor runs through local `cursor-agent --print --output-format stream-json` and reuses the provider session id as the shared `threadId`.
+- Cursor plan turns use `--mode plan`.
+- Cursor image attachments remain intentionally disabled until the official headless CLI exposes a stable attachment transport.
 - Gemini runs through local `gemini -p` and now uses `--output-format stream-json` on binaries that advertise it, with text fallback only for older installs.
+- Gemini plan turns use `--approval-mode plan`.
+- Gemini image attachments are staged locally, added to the included directories, and injected into the prompt as `@/absolute/path` references.
 - Automation runs use the same agent runtime and store their linked `agentSessionId` in automation run metadata so Task Center and restart reconciliation can attach back to the same structured session.
 - Provider auth stays inside the official CLI process. Divergence never extracts subscription credentials for direct backend calls.
 - Database migration recovery is part of startup. Divergence repairs the known half-applied `automations_v13` migration state before normal data loading continues.
@@ -76,6 +86,7 @@ Provider adapters may emit richer internal events, but only the canonical contra
 - Store and render agent session snapshots.
 - Route user input and approval responses back to the runtime.
 - Project canonical events into chat, work log, and request UI.
+- Preserve per-session composer draft state, including plan mode and staged attachment metadata, across agent-tab switches.
 - Keep terminal-specific rendering isolated from agent-specific rendering.
 
 ## Enforcement

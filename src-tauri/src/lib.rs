@@ -143,6 +143,8 @@ pub fn run() {
             commands::get_agent_session,
             commands::create_agent_session,
             commands::start_agent_turn,
+            commands::stage_agent_attachment,
+            commands::discard_agent_attachment,
             commands::stop_agent_session,
             commands::delete_agent_session,
             commands::update_agent_session,

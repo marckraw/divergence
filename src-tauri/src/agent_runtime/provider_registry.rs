@@ -32,6 +32,9 @@ pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
                 streaming: true,
                 resume: true,
                 structured_requests: false,
+                plan_mode: true,
+                image_attachments: true,
+                structured_plan_ui: false,
                 usage_inspection: false,
                 provider_extras: false,
             },
@@ -68,6 +71,9 @@ pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
                 streaming: true,
                 resume: true,
                 structured_requests: true,
+                plan_mode: true,
+                image_attachments: true,
+                structured_plan_ui: true,
                 usage_inspection: true,
                 provider_extras: true,
             },
@@ -83,6 +89,9 @@ pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
                 streaming: true,
                 resume: true,
                 structured_requests: false,
+                plan_mode: true,
+                image_attachments: false,
+                structured_plan_ui: false,
                 usage_inspection: false,
                 provider_extras: true,
             },
@@ -107,6 +116,9 @@ pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
                 streaming: gemini_stream_json_supported,
                 resume: false,
                 structured_requests: false,
+                plan_mode: true,
+                image_attachments: true,
+                structured_plan_ui: false,
                 usage_inspection: false,
                 provider_extras: true,
             },
@@ -134,7 +146,9 @@ pub(super) fn normalize_agent_model(provider: &AgentProvider, raw_model: Option<
 
 pub(super) fn build_claude_command(
     session: &AgentSessionSnapshot,
+    interaction_mode: AgentInteractionMode,
     claude_oauth_token: &str,
+    attachment_dirs: &[PathBuf],
 ) -> Command {
     let mut command = Command::new("claude");
     command
@@ -144,11 +158,17 @@ pub(super) fn build_claude_command(
         .arg("stream-json")
         .arg("--include-partial-messages")
         .arg("--dangerously-skip-permissions");
+    if matches!(interaction_mode, AgentInteractionMode::Plan) {
+        command.arg("--permission-mode").arg("plan");
+    }
     if !session.model.trim().is_empty() {
         command.arg("--model").arg(session.model.trim());
     }
     if let Some(thread_id) = session.thread_id.as_deref() {
         command.arg("--resume").arg(thread_id);
+    }
+    for attachment_dir in attachment_dirs {
+        command.arg("--add-dir").arg(attachment_dir);
     }
     if !claude_oauth_token.trim().is_empty() {
         command.env("CLAUDE_CODE_OAUTH_TOKEN", claude_oauth_token.trim());
@@ -159,6 +179,7 @@ pub(super) fn build_claude_command(
 pub(super) fn build_cursor_command(
     session: &AgentSessionSnapshot,
     prompt: &str,
+    interaction_mode: AgentInteractionMode,
 ) -> Result<Command, String> {
     let binary = detect_cursor_binary().ok_or_else(|| {
         "Cursor Agent was not found. Install cursor-agent and log in before starting a Cursor session."
@@ -178,6 +199,10 @@ pub(super) fn build_cursor_command(
         .arg("--force")
         .arg("--trust");
 
+    if matches!(interaction_mode, AgentInteractionMode::Plan) {
+        command.arg("--mode").arg("plan");
+    }
+
     if let Some(thread_id) = session.thread_id.as_deref() {
         command.arg("--resume").arg(thread_id);
     }
@@ -189,6 +214,8 @@ pub(super) fn build_cursor_command(
 pub(super) fn build_gemini_command(
     session: &AgentSessionSnapshot,
     prompt: &str,
+    interaction_mode: AgentInteractionMode,
+    attachment_dirs: &[PathBuf],
 ) -> Result<Command, String> {
     let binary = detect_gemini_binary().ok_or_else(|| {
         "Gemini CLI was not found. Install gemini and log in with a supported Google account before starting a Gemini session."
@@ -201,6 +228,12 @@ pub(super) fn build_gemini_command(
         command.arg("--output-format").arg("stream-json");
     }
     command.arg("-m").arg(session.model.trim()).arg("-y");
+    if matches!(interaction_mode, AgentInteractionMode::Plan) {
+        command.arg("--approval-mode").arg("plan");
+    }
+    for attachment_dir in attachment_dirs {
+        command.arg("--include-directories").arg(attachment_dir);
+    }
     Ok(command)
 }
 

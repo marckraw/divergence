@@ -2,16 +2,20 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import type { AgentSessionSnapshot } from "../../../entities";
 import {
   createAgentRuntimeSession,
+  discardAgentRuntimeAttachment,
   deleteAgentRuntimeSession,
   getAgentRuntimeSession,
   listAgentRuntimeSessions,
   onAgentRuntimeSessionUpdated,
   refreshAgentRuntimeCapabilities,
   respondAgentRuntimeRequest,
+  stageAgentRuntimeAttachment,
   startAgentRuntimeTurn,
   stopAgentRuntimeSession,
   updateAgentRuntimeSession,
+  type AgentRuntimeAttachment,
   type AgentRuntimeCapabilities,
+  type AgentRuntimeInteractionMode,
   type CreateAgentSessionInput,
 } from "../../../shared";
 import { mapAgentRuntimeSnapshot } from "../lib/agentRuntimeSnapshot.pure";
@@ -30,8 +34,19 @@ interface UseAgentRuntimeResult {
   startTurn: (
     sessionId: string,
     prompt: string,
-    options?: { automationMode?: boolean }
+    options?: {
+      automationMode?: boolean;
+      interactionMode?: AgentRuntimeInteractionMode;
+      attachments?: AgentRuntimeAttachment[];
+    }
   ) => Promise<void>;
+  stageAttachment: (input: {
+    sessionId: string;
+    name: string;
+    mimeType: string;
+    base64Content: string;
+  }) => Promise<AgentRuntimeAttachment>;
+  discardAttachment: (sessionId: string, attachmentId: string) => Promise<void>;
   respondToRequest: (
     sessionId: string,
     requestId: string,
@@ -133,7 +148,11 @@ export function useAgentRuntime({
   const startTurn = useCallback(async (
     sessionId: string,
     prompt: string,
-    options?: { automationMode?: boolean }
+    options?: {
+      automationMode?: boolean;
+      interactionMode?: AgentRuntimeInteractionMode;
+      attachments?: AgentRuntimeAttachment[];
+    }
   ): Promise<void> => {
     if (!prompt.trim()) {
       return;
@@ -141,6 +160,8 @@ export function useAgentRuntime({
     const snapshot = mapAgentRuntimeSnapshot(await startAgentRuntimeTurn({
       sessionId,
       prompt,
+      interactionMode: options?.interactionMode,
+      attachments: options?.attachments,
       claudeOAuthToken,
       automationMode: options?.automationMode,
     }));
@@ -150,6 +171,22 @@ export function useAgentRuntime({
       return next;
     });
   }, [claudeOAuthToken]);
+
+  const stageAttachment = useCallback(async (input: {
+    sessionId: string;
+    name: string;
+    mimeType: string;
+    base64Content: string;
+  }): Promise<AgentRuntimeAttachment> => {
+    return stageAgentRuntimeAttachment(input);
+  }, []);
+
+  const discardAttachment = useCallback(async (
+    sessionId: string,
+    attachmentId: string,
+  ): Promise<void> => {
+    await discardAgentRuntimeAttachment(sessionId, attachmentId);
+  }, []);
 
   const stopSession = useCallback(async (sessionId: string): Promise<void> => {
     await stopAgentRuntimeSession(sessionId);
@@ -231,6 +268,8 @@ export function useAgentRuntime({
     getSession,
     createSession,
     startTurn,
+    stageAttachment,
+    discardAttachment,
     respondToRequest,
     updateSession,
     openSession,
