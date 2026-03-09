@@ -1,7 +1,9 @@
 import {
+  AGENT_PROVIDER_ORDER,
   Button,
   EmptyState,
   ErrorBanner,
+  getAgentProviderLabel,
   Textarea,
 } from "../../../shared";
 import type {
@@ -70,8 +72,11 @@ function GithubPrChatSidebarPresentational({
               className="h-9 rounded border border-surface bg-main px-2 text-sm text-text"
               disabled={sending}
             >
-              <option value="claude">Claude</option>
-              <option value="codex">Codex</option>
+              {AGENT_PROVIDER_ORDER.map((provider) => (
+                <option key={provider} value={provider}>
+                  {getAgentProviderLabel(provider)}
+                </option>
+              ))}
             </select>
           </label>
           <label className="text-xs text-subtext inline-flex items-center gap-2">

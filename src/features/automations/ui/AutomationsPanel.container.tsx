@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { Automation } from "../../../entities/automation";
+import { getDefaultAgentProvider } from "../../../shared";
 import AutomationsPanelPresentational from "./AutomationsPanel.presentational";
 import type { AutomationFormState, AutomationsPanelProps } from "./AutomationsPanel.types";
 
@@ -11,7 +12,7 @@ const EMPTY_FORM: AutomationFormState = {
   sourceProjectId: null,
   targetProjectId: null,
   baseBranches: "",
-  agent: "claude",
+  agent: getDefaultAgentProvider(),
   prompt: "",
   intervalHours: 5,
   enabled: true,

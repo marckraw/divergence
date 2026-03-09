@@ -1,24 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RunBackgroundTask } from "../../src/entities";
+import type { AgentSessionSnapshot, RunBackgroundTask } from "../../src/entities";
 import type { Automation } from "../../src/entities/automation";
 import {
   runAutomationNow,
   type RunAutomationNowDependencies,
 } from "../../src/features/automations/service/runAutomationNow.service";
-
-const VALID_RESULT_JSON = JSON.stringify({
-  status: "completed",
-  exitCode: 0,
-  startedAt: "2025-01-01T00:00:00Z",
-  finishedAt: "2025-01-01T00:05:00Z",
-});
-
-const VALID_RESULT = {
-  status: "completed" as const,
-  exitCode: 0,
-  startedAt: "2025-01-01T00:00:00Z",
-  finishedAt: "2025-01-01T00:05:00Z",
-};
 
 const MOCK_DIVERGENCE_PATH = "/divergences/mock-divergence";
 
@@ -46,13 +32,48 @@ function createAutomation(overrides: Partial<Automation> = {}): Automation {
   };
 }
 
+function createAgentSessionSnapshot(
+  overrides: Partial<AgentSessionSnapshot> = {}
+): AgentSessionSnapshot {
+  return {
+    kind: "agent",
+    id: overrides.id ?? "agent-session-1",
+    provider: overrides.provider ?? "claude",
+    targetType: overrides.targetType ?? "divergence",
+    targetId: overrides.targetId ?? 42,
+    projectId: overrides.projectId ?? 2,
+    workspaceOwnerId: overrides.workspaceOwnerId,
+    workspaceKey: overrides.workspaceKey ?? "divergence:42",
+    sessionRole: overrides.sessionRole ?? "manual",
+    name: overrides.name ?? "Automation: Manual audit",
+    path: overrides.path ?? MOCK_DIVERGENCE_PATH,
+    status: overrides.status ?? "active",
+    runtimeStatus: overrides.runtimeStatus ?? "idle",
+    createdAtMs: overrides.createdAtMs ?? 1000,
+    updatedAtMs: overrides.updatedAtMs ?? 1234,
+    lastActivity: overrides.lastActivity ?? new Date(1234),
+    threadId: overrides.threadId,
+    messages: overrides.messages ?? [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        content: "Automation finished cleanly.",
+        status: "done",
+        createdAtMs: 1234,
+      },
+    ],
+    activities: overrides.activities ?? [],
+    pendingRequest: overrides.pendingRequest ?? null,
+    errorMessage: overrides.errorMessage ?? null,
+  };
+}
+
 function createDependencies(
   overrides: Partial<RunAutomationNowDependencies> = {}
 ): RunAutomationNowDependencies {
   return {
     insertAutomationRun: vi.fn().mockResolvedValue(99),
     updateAutomationRun: vi.fn().mockResolvedValue(undefined),
-    updateAutomationRunTmuxSession: vi.fn().mockResolvedValue(undefined),
     updateAutomationRunDivergence: vi.fn().mockResolvedValue(undefined),
     markAutomationRunSchedule: vi.fn().mockResolvedValue(undefined),
     loadProjectSettings: vi.fn().mockResolvedValue({
@@ -73,20 +94,39 @@ function createDependencies(
     }),
     insertDivergenceRecord: vi.fn().mockResolvedValue(42),
     buildAutomationPromptMarkdown: vi.fn().mockReturnValue("# Prompt"),
-    writeAutomationBriefFile: vi.fn().mockResolvedValue({
-      path: `${MOCK_DIVERGENCE_PATH}/.divergence/review-brief.md`,
-    }),
-    spawnAutomationTmuxSession: vi.fn().mockResolvedValue(undefined),
-    queryAutomationTmuxPaneStatus: vi.fn().mockResolvedValue({ alive: false, exitCode: 0 }),
-    readAutomationLogTail: vi.fn().mockResolvedValue("agent output here"),
-    readAutomationResultFile: vi.fn().mockResolvedValue(VALID_RESULT_JSON),
-    killAutomationTmuxSession: vi.fn().mockResolvedValue(undefined),
-    parseAutomationResult: vi.fn().mockReturnValue(VALID_RESULT),
     now: vi.fn(() => 1234),
     pollIntervalMs: 0,
+    maxPollDurationMs: 4 * 60 * 60 * 1000,
     ...overrides,
   };
 }
+
+function createRuntimeMocks(overrides?: {
+  createAgentSession?: (input: Parameters<NonNullable<RunAutomationInput["createAgentSession"]>>[0]) => Promise<AgentSessionSnapshot>;
+  startAgentTurn?: (sessionId: string, prompt: string, options?: { automationMode?: boolean }) => Promise<void>;
+  getAgentSession?: (sessionId: string) => Promise<AgentSessionSnapshot | null>;
+}) {
+  const createAgentSession = vi.fn(
+    overrides?.createAgentSession
+      ?? (async () => createAgentSessionSnapshot())
+  );
+  const startAgentTurn = vi.fn(
+    overrides?.startAgentTurn
+      ?? (async () => undefined)
+  );
+  const getAgentSession = vi.fn(
+    overrides?.getAgentSession
+      ?? (async () => createAgentSessionSnapshot())
+  );
+
+  return {
+    createAgentSession,
+    startAgentTurn,
+    getAgentSession,
+  };
+}
+
+type RunAutomationInput = Parameters<typeof runAutomationNow>[0];
 
 const runTaskNow: RunBackgroundTask = async (options) => {
   return options.run({
@@ -98,286 +138,60 @@ const runTaskNow: RunBackgroundTask = async (options) => {
 describe("runAutomationNow service", () => {
   it("marks run as error when project is missing", async () => {
     const deps = createDependencies();
-    const runTask = vi.fn(runTaskNow);
+    const runtime = createRuntimeMocks();
 
     const result = await runAutomationNow({
       automation: createAutomation({ projectId: 999 }),
       project: null,
-      runTask,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "codex exec --dangerously-bypass-approvals-and-sandbox -C \"{workspacePath}\" - < \"{briefPath}\"",
+      runTask: runTaskNow,
+      ...runtime,
     }, deps);
 
     expect(result.status).toBe("error");
     expect(result.error).toContain("Project 999 was not found.");
-    expect(runTask).not.toHaveBeenCalled();
+    expect(runtime.createAgentSession).not.toHaveBeenCalled();
     expect(deps.updateAutomationRun).toHaveBeenCalledWith(
       99,
-      expect.objectContaining({
-        status: "error",
-      })
-    );
-    // nextRunAtMs should be recomputed: anchor(9000) + 5h = 9000 + 18_000_000 = 18_009_000
-    expect(deps.markAutomationRunSchedule).toHaveBeenCalledWith(
-      7,
-      expect.objectContaining({
-        nextRunAtMs: 9000 + 5 * 60 * 60 * 1000,
-      })
+      expect.objectContaining({ status: "error" })
     );
   });
 
-  it("reports template configuration errors", async () => {
+  it("creates an agent session, starts the turn in automation mode, and returns launched status", async () => {
     const deps = createDependencies();
-
-    const result = await runAutomationNow({
-      automation: createAutomation({ agent: "codex" }),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(result.status).toBe("error");
-    expect(result.error).toContain("No codex command template configured in settings.");
-    expect(deps.spawnAutomationTmuxSession).not.toHaveBeenCalled();
-  });
-
-  it("spawns tmux, polls until done, and returns launched status", async () => {
-    const deps = createDependencies();
+    const runtime = createRuntimeMocks();
 
     const result = await runAutomationNow({
       automation: createAutomation(),
       project: { id: 2, name: "repo", path: "/repo" },
       runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
+      ...runtime,
     }, deps);
 
     expect(result.status).toBe("launched");
-    expect(result.tmuxSessionName).toBe("divergence-auto-7-99");
-    expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
+    expect(result.agentSessionId).toBe("agent-session-1");
+    expect(result.divergenceId).toBe(42);
+    expect(runtime.createAgentSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionName: "divergence-auto-7-99",
-        cwd: MOCK_DIVERGENCE_PATH,
+        provider: "claude",
+        targetType: "divergence",
+        targetId: 42,
+        path: MOCK_DIVERGENCE_PATH,
       })
     );
-    // Verify monitoring happened
-    expect(deps.queryAutomationTmuxPaneStatus).toHaveBeenCalledWith("divergence-auto-7-99");
-    expect(deps.readAutomationResultFile).toHaveBeenCalled();
-    // Verify finalization
-    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
-      99,
-      expect.objectContaining({
-        status: "success",
-      })
-    );
-    expect(deps.killAutomationTmuxSession).toHaveBeenCalledWith("divergence-auto-7-99");
-    expect(deps.markAutomationRunSchedule).toHaveBeenCalledWith(
-      7,
-      expect.objectContaining({
-        lastRunAtMs: 1234,
-      })
+    expect(runtime.startAgentTurn).toHaveBeenCalledWith(
+      "agent-session-1",
+      "# Prompt",
+      { automationMode: true }
     );
   });
 
-  it("creates brief file before spawning tmux", async () => {
+  it("updates the task target and automation run metadata with the agent session", async () => {
     const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.writeAutomationBriefFile).toHaveBeenCalledWith(MOCK_DIVERGENCE_PATH, "# Prompt");
-    expect(deps.buildAutomationPromptMarkdown).toHaveBeenCalledWith(
-      expect.objectContaining({
-        automationName: "Manual audit",
-        projectName: "repo",
-      })
-    );
-  });
-
-  it("renders command template with correct tokens", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "cat \"{briefPath}\" | claude -p --cwd \"{workspacePath}\"",
-      agentCommandCodex: "",
-    }, deps);
-
-    const spawnCall = (deps.spawnAutomationTmuxSession as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(spawnCall.command).toContain(`cat "${MOCK_DIVERGENCE_PATH}/.divergence/review-brief.md" | claude -p --cwd "${MOCK_DIVERGENCE_PATH}"`);
-  });
-
-  it("marks run as error when agent exits with non-zero code", async () => {
-    const failResult = {
-      status: "completed" as const,
-      exitCode: 1,
-      startedAt: "2025-01-01T00:00:00Z",
-      finishedAt: "2025-01-01T00:05:00Z",
-    };
-    const deps = createDependencies({
-      queryAutomationTmuxPaneStatus: vi.fn().mockResolvedValue({ alive: false, exitCode: 1 }),
-      readAutomationResultFile: vi.fn().mockResolvedValue(JSON.stringify(failResult)),
-      parseAutomationResult: vi.fn().mockReturnValue(failResult),
-    });
-
-    const result = await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(result.status).toBe("error");
-    expect(result.error).toContain("Agent exited with code 1");
-    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
-      99,
-      expect.objectContaining({
-        status: "error",
-        error: "Agent exited with code 1",
-      })
-    );
-  });
-
-  it("produces actionable auth error message when result has auth errorCategory", async () => {
-    const authFailResult = {
-      status: "completed" as const,
-      exitCode: 1,
-      startedAt: "2025-01-01T00:00:00Z",
-      finishedAt: "2025-01-01T00:05:00Z",
-      errorCategory: "auth" as const,
-    };
-    const deps = createDependencies({
-      queryAutomationTmuxPaneStatus: vi.fn().mockResolvedValue({ alive: false, exitCode: 1 }),
-      readAutomationResultFile: vi.fn().mockResolvedValue(JSON.stringify(authFailResult)),
-      parseAutomationResult: vi.fn().mockReturnValue(authFailResult),
-    });
-
-    const result = await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(result.status).toBe("error");
-    expect(result.error).toContain("authentication error");
-    expect(result.error).toContain("claude /login");
-    expect(result.error).toContain("setup-token");
-    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
-      99,
-      expect.objectContaining({
-        status: "error",
-        error: expect.stringContaining("authentication error"),
-      })
-    );
-  });
-
-  it("updates output tail during polling", async () => {
-    let pollCount = 0;
-    const deps = createDependencies({
-      queryAutomationTmuxPaneStatus: vi.fn().mockImplementation(() => {
-        pollCount++;
-        if (pollCount <= 2) {
-          return Promise.resolve({ alive: true, exitCode: null });
-        }
-        return Promise.resolve({ alive: false, exitCode: 0 });
-      }),
-      // Result file only appears after agent exits (not during alive polls)
-      readAutomationResultFile: vi.fn().mockImplementation(() => {
-        if (pollCount <= 2) {
-          return Promise.resolve(null);
-        }
-        return Promise.resolve(VALID_RESULT_JSON);
-      }),
-    });
-
-    const outputTails: string[] = [];
-    const trackingRunTask: RunBackgroundTask = async (options) => {
-      return options.run({
-        setPhase: () => {},
-        setOutputTail: (tail: string) => { outputTails.push(tail); },
-      });
-    };
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: trackingRunTask,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    // Output should have been updated during each poll tick + final read
-    expect(outputTails.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("does not kill tmux session when keepSessionAlive is true", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation({ keepSessionAlive: true }),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.killAutomationTmuxSession).not.toHaveBeenCalled();
-    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
-      99,
-      expect.objectContaining({ status: "success" })
-    );
-  });
-
-  it("kills tmux session when keepSessionAlive is false", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation({ keepSessionAlive: false }),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.killAutomationTmuxSession).toHaveBeenCalledWith("divergence-auto-7-99");
-    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
-      99,
-      expect.objectContaining({ status: "success" })
-    );
-  });
-
-  it("passes keepSessionAlive to insertAutomationRun", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation({ keepSessionAlive: true }),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.insertAutomationRun).toHaveBeenCalledWith(
-      expect.objectContaining({ keepSessionAlive: true })
-    );
-  });
-
-  it("includes tmuxSessionName in task target", async () => {
-    const deps = createDependencies();
+    const runtime = createRuntimeMocks();
     let capturedTarget: Record<string, unknown> | undefined;
+
     const capturingRunTask: RunBackgroundTask = async (options) => {
-      capturedTarget = options.target as unknown as Record<string, unknown>;
+      capturedTarget = options.target as Record<string, unknown>;
       return options.run({
         setPhase: () => {},
         setOutputTail: () => {},
@@ -388,23 +202,34 @@ describe("runAutomationNow service", () => {
       automation: createAutomation(),
       project: { id: 2, name: "repo", path: "/repo" },
       runTask: capturingRunTask,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
+      ...runtime,
     }, deps);
 
-    expect(capturedTarget?.tmuxSessionName).toBe("divergence-auto-7-99");
+    expect(capturedTarget?.agentSessionId).toBe("agent-session-1");
+    expect(capturedTarget?.agentProvider).toBe("claude");
+    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({
+        status: "running",
+        detailsJson: expect.stringContaining("\"agentSessionId\":\"agent-session-1\""),
+      })
+    );
+    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({ status: "success" })
+    );
   });
 
-  it("passes triggerSource through to insertAutomationRun and buildAutomationPromptMarkdown", async () => {
+  it("passes triggerSource through to insertAutomationRun and prompt construction", async () => {
     const deps = createDependencies();
+    const runtime = createRuntimeMocks();
 
     await runAutomationNow({
       automation: createAutomation(),
       project: { id: 2, name: "repo", path: "/repo" },
       runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
       triggerSource: "schedule",
+      ...runtime,
     }, deps);
 
     expect(deps.insertAutomationRun).toHaveBeenCalledWith(
@@ -415,52 +240,123 @@ describe("runAutomationNow service", () => {
     );
   });
 
-  it("times out polling when maxPollDurationMs is exceeded", async () => {
-    let clock = 0;
-    const deps = createDependencies({
-      now: vi.fn(() => clock),
-      queryAutomationTmuxPaneStatus: vi.fn().mockImplementation(() => {
-        // Advance clock by 2 hours per poll tick
-        clock += 2 * 60 * 60 * 1000;
-        return Promise.resolve({ alive: true, exitCode: null });
+  it("uses workspace mode without creating a divergence clone", async () => {
+    const deps = createDependencies();
+    const runtime = createRuntimeMocks({
+      createAgentSession: async (input) => createAgentSessionSnapshot({
+        targetType: input.targetType,
+        targetId: input.targetId,
+        workspaceKey: input.workspaceKey,
+        path: input.path,
       }),
-      readAutomationResultFile: vi.fn().mockResolvedValue(null),
-      pollIntervalMs: 0,
-      maxPollDurationMs: 3 * 60 * 60 * 1000, // 3 hour timeout
+    });
+
+    const result = await runAutomationNow({
+      automation: createAutomation({ workspaceId: 88 }),
+      project: { id: 2, name: "repo", path: "/repo" },
+      workspace: { id: 88, name: "Shared", folderPath: "/workspaces/shared" },
+      runTask: runTaskNow,
+      ...runtime,
+    }, deps);
+
+    expect(result.status).toBe("launched");
+    expect(deps.createDivergenceRepository).not.toHaveBeenCalled();
+    expect(runtime.createAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetType: "workspace",
+        targetId: 88,
+        workspaceOwnerId: 88,
+        path: "/workspaces/shared",
+      })
+    );
+  });
+
+  it("marks the run as error when the agent session returns an error state", async () => {
+    const deps = createDependencies();
+    const runtime = createRuntimeMocks({
+      getAgentSession: async () => createAgentSessionSnapshot({
+        runtimeStatus: "error",
+        status: "idle",
+        errorMessage: "Agent failed during execution.",
+      }),
     });
 
     const result = await runAutomationNow({
       automation: createAutomation(),
       project: { id: 2, name: "repo", path: "/repo" },
       runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
+      ...runtime,
     }, deps);
 
     expect(result.status).toBe("error");
-    expect(result.error).toContain("polling timed out");
-    expect(result.error).toContain("180 minutes");
-    // DB should be finalized to "error" to avoid stuck "running" rows
+    expect(result.error).toContain("Agent failed during execution.");
     expect(deps.updateAutomationRun).toHaveBeenCalledWith(
       99,
       expect.objectContaining({
         status: "error",
+        error: "Agent failed during execution.",
       })
     );
-    expect(deps.markAutomationRunSchedule).toHaveBeenCalled();
   });
 
-  it("uses fixed-clock scheduling: anchors to scheduled time, not completion time", async () => {
-    // Automation scheduled at 9000ms, 5h interval, now() returns 1234 (completion time)
-    // Fixed-clock: next = 9000 + 5*3600000 = 18_009_000 (not 1234 + 5*3600000)
+  it("marks the run as error when the agent session disappears", async () => {
     const deps = createDependencies();
+    const runtime = createRuntimeMocks({
+      getAgentSession: async () => null,
+    });
+
+    const result = await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      ...runtime,
+    }, deps);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("disappeared");
+  });
+
+  it("times out polling when the runtime never completes", async () => {
+    let clock = 0;
+    const deps = createDependencies({
+      now: vi.fn(() => clock),
+      maxPollDurationMs: 3 * 60 * 60 * 1000,
+    });
+    const runtime = createRuntimeMocks({
+      getAgentSession: async () => {
+        clock += 2 * 60 * 60 * 1000;
+        return createAgentSessionSnapshot({
+          runtimeStatus: "running",
+          status: "busy",
+          messages: [],
+        });
+      },
+    });
+
+    const result = await runAutomationNow({
+      automation: createAutomation(),
+      project: { id: 2, name: "repo", path: "/repo" },
+      runTask: runTaskNow,
+      ...runtime,
+    }, deps);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("polling timed out");
+    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({ status: "error" })
+    );
+  });
+
+  it("keeps fixed-clock scheduling semantics", async () => {
+    const deps = createDependencies();
+    const runtime = createRuntimeMocks();
 
     await runAutomationNow({
       automation: createAutomation({ nextRunAtMs: 9000, intervalHours: 5 }),
       project: { id: 2, name: "repo", path: "/repo" },
       runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
+      ...runtime,
     }, deps);
 
     expect(deps.markAutomationRunSchedule).toHaveBeenCalledWith(
@@ -471,153 +367,21 @@ describe("runAutomationNow service", () => {
     );
   });
 
-  it("returns null nextRunAtMs when automation is disabled", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation({ enabled: false }),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.markAutomationRunSchedule).toHaveBeenCalledWith(
-      7,
-      expect.objectContaining({
-        nextRunAtMs: null,
-      })
-    );
-  });
-
-  it("creates divergence before spawning agent", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.createDivergenceRepository).toHaveBeenCalledWith(
-      expect.objectContaining({
-        project: { id: 2, name: "repo", path: "/repo" },
-        copyIgnoredSkip: ["node_modules"],
-        useExistingBranch: false,
-      })
-    );
-    // Branch name should start with automation/7-
-    const call = (deps.createDivergenceRepository as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(call.branchName).toMatch(/^automation\/7-manual-audit-/);
-  });
-
   it("marks run as error when divergence creation fails", async () => {
     const deps = createDependencies({
       createDivergenceRepository: vi.fn().mockRejectedValue(new Error("Git clone failed")),
     });
+    const runtime = createRuntimeMocks();
 
     const result = await runAutomationNow({
       automation: createAutomation(),
       project: { id: 2, name: "repo", path: "/repo" },
       runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
+      ...runtime,
     }, deps);
 
     expect(result.status).toBe("error");
     expect(result.error).toContain("Failed to create divergence");
-    expect(result.error).toContain("Git clone failed");
-    expect(deps.spawnAutomationTmuxSession).not.toHaveBeenCalled();
-    expect(deps.updateAutomationRun).toHaveBeenCalledWith(
-      99,
-      expect.objectContaining({ status: "error" })
-    );
-  });
-
-  it("links divergence to automation run", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.updateAutomationRunDivergence).toHaveBeenCalledWith(99, 42);
-  });
-
-  it("returns divergenceId in result", async () => {
-    const deps = createDependencies();
-
-    const result = await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(result.status).toBe("launched");
-    expect(result.divergenceId).toBe(42);
-  });
-
-  it("passes CLAUDE_CODE_OAUTH_TOKEN envVars when claudeOAuthToken is provided", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-      claudeOAuthToken: "sk-ant-oauth-test-token-123",
-    }, deps);
-
-    expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        envVars: [["CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oauth-test-token-123"]],
-      })
-    );
-  });
-
-  it("does not pass envVars when claudeOAuthToken is empty", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-      claudeOAuthToken: "",
-    }, deps);
-
-    expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        envVars: undefined,
-      })
-    );
-  });
-
-  it("does not pass envVars when claudeOAuthToken is missing", async () => {
-    const deps = createDependencies();
-
-    await runAutomationNow({
-      automation: createAutomation(),
-      project: { id: 2, name: "repo", path: "/repo" },
-      runTask: runTaskNow,
-      agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
-      agentCommandCodex: "",
-    }, deps);
-
-    expect(deps.spawnAutomationTmuxSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        envVars: undefined,
-      })
-    );
+    expect(runtime.createAgentSession).not.toHaveBeenCalled();
   });
 });

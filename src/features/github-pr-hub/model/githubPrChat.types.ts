@@ -1,10 +1,11 @@
+import type { AgentRuntimeProvider } from "../../../shared";
 import type {
   GithubPullRequestDetail,
   GithubPullRequestFile,
   GithubPullRequestSummary,
 } from "./githubPrHub.types";
 
-export type GithubPrChatAgent = "claude" | "codex";
+export type GithubPrChatAgent = AgentRuntimeProvider;
 
 export type GithubPrChatMessageRole = "user" | "assistant" | "system";
 

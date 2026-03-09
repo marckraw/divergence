@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import type {
+  AgentSessionSnapshot,
   Project,
   TerminalSession,
   BackgroundTask,
@@ -25,6 +26,7 @@ interface UseTaskCenterAttachmentParams {
     tmuxHistoryLimit: number;
   };
   portAllocationByEntityKey: Map<string, PortAllocation>;
+  agentSessions: Map<string, AgentSessionSnapshot>;
   setSessions: React.Dispatch<React.SetStateAction<Map<string, TerminalSession>>>;
   setActiveSessionId: React.Dispatch<React.SetStateAction<string | null>>;
   sendCommandToSession: (sessionId: string, command: string, options?: { timeoutMs?: number; activateIfNeeded?: boolean }) => Promise<void>;
@@ -45,6 +47,7 @@ export function useTaskCenterAttachment({
   projectsById,
   appSettings,
   portAllocationByEntityKey,
+  agentSessions,
   setSessions,
   setActiveSessionId,
   sendCommandToSession,
@@ -57,6 +60,12 @@ export function useTaskCenterAttachment({
   }, [viewTask, setIsSidebarOpen, setSidebarMode, setWorkTab]);
 
   const handleAttachToAutomationSession = useCallback(async (task: BackgroundTask) => {
+    if (task.target.agentSessionId && agentSessions.has(task.target.agentSessionId)) {
+      setActiveSessionId(task.target.agentSessionId);
+      setSidebarMode("projects");
+      return;
+    }
+
     const { tmuxSessionName, projectId, path } = task.target;
     if (!tmuxSessionName || !projectId || !path) return;
 
@@ -100,7 +109,7 @@ export function useTaskCenterAttachment({
     } catch (err) {
       console.warn("Failed to attach to automation tmux session:", err);
     }
-  }, [projectById, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, portAllocationByEntityKey, sendCommandToSession, setSessions, setActiveSessionId, setSidebarMode]);
+  }, [agentSessions, projectById, settingsByProjectId, projectsById, appSettings.tmuxHistoryLimit, portAllocationByEntityKey, sendCommandToSession, setSessions, setActiveSessionId, setSidebarMode]);
 
   return {
     handleViewTaskCenterTask,

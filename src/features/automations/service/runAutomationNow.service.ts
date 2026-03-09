@@ -1,10 +1,10 @@
-import type { Project, RunBackgroundTask, Workspace } from "../../../entities";
+import type { AgentSessionSnapshot, Project, RunBackgroundTask, Workspace } from "../../../entities";
+import type { AgentRuntimeProvider } from "../../../shared";
 import {
   insertAutomationRun,
   markAutomationRunSchedule,
   updateAutomationRun,
   updateAutomationRunDivergence,
-  updateAutomationRunTmuxSession,
   type Automation,
   type AutomationRunTriggerSource,
 } from "../../../entities/automation";
@@ -13,36 +13,48 @@ import {
   createDivergenceRepository,
   insertDivergenceRecord,
 } from "../../create-divergence";
-import { writeAutomationBriefFile } from "../api/runAutomation.api";
-import {
-  spawnAutomationTmuxSession,
-  queryAutomationTmuxPaneStatus,
-  readAutomationLogTail,
-  readAutomationResultFile,
-  killAutomationTmuxSession,
-} from "../api/tmuxAutomation.api";
-import {
-  buildAutomationErrorMessage,
-  buildAutomationLogPath,
-  buildAutomationResultPath,
-  buildAutomationTmuxSessionName,
-  buildWrapperCommand,
-  parseAutomationResult,
-} from "../lib/tmuxAutomation.pure";
-import type { AutomationResultFile } from "../lib/tmuxAutomation.types";
 import {
   buildAutomationBranchName,
   buildAutomationPromptMarkdown,
   computeNextScheduledRunAtMs,
 } from "../lib/automationScheduler.pure";
-import { renderTemplateCommand } from "../../../shared";
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
-const DEFAULT_MAX_POLL_DURATION_MS = 4 * 60 * 60 * 1000; // 4 hours
-const LOG_TAIL_MAX_BYTES = 8_000;
+const DEFAULT_MAX_POLL_DURATION_MS = 4 * 60 * 60 * 1000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildWorkspaceKey(
+  type: "project" | "divergence" | "workspace" | "workspace_divergence",
+  targetId: number
+): string {
+  return `${type}:${targetId}`;
+}
+
+interface AutomationSessionDetails {
+  runtime: "agent";
+  agentSessionId: string;
+  provider: AgentRuntimeProvider;
+}
+
+function encodeAutomationSessionDetails(details: AutomationSessionDetails): string {
+  return JSON.stringify(details);
+}
+
+function getAutomationOutputTail(session: AgentSessionSnapshot): string {
+  const assistantMessage = [...session.messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.content.trim().length > 0);
+  if (assistantMessage) {
+    return assistantMessage.content;
+  }
+
+  const latestActivity = [...session.activities]
+    .reverse()
+    .find((activity) => activity.details?.trim());
+  return latestActivity?.details ?? "";
 }
 
 export interface RunAutomationNowInput {
@@ -50,9 +62,23 @@ export interface RunAutomationNowInput {
   project: Pick<Project, "id" | "name" | "path"> | null;
   workspace?: Pick<Workspace, "id" | "name" | "folderPath"> | null;
   runTask: RunBackgroundTask;
-  agentCommandClaude: string;
-  agentCommandCodex: string;
-  claudeOAuthToken?: string;
+  createAgentSession: (input: {
+    provider: AgentRuntimeProvider;
+    targetType: "project" | "divergence" | "workspace" | "workspace_divergence";
+    targetId: number;
+    projectId: number;
+    workspaceOwnerId?: number;
+    workspaceKey: string;
+    sessionRole?: "default" | "review-agent" | "manual";
+    name: string;
+    path: string;
+  }) => Promise<AgentSessionSnapshot>;
+  startAgentTurn: (
+    sessionId: string,
+    prompt: string,
+    options?: { automationMode?: boolean }
+  ) => Promise<void>;
+  getAgentSession: (sessionId: string) => Promise<AgentSessionSnapshot | null>;
   triggerSource?: AutomationRunTriggerSource;
   triggerContext?: {
     sourceRepoKey: string;
@@ -70,7 +96,7 @@ export interface RunAutomationNowInput {
 export interface RunAutomationNowResult {
   runId: number;
   status: "launched" | "error";
-  tmuxSessionName?: string;
+  agentSessionId?: string;
   divergenceId?: number;
   error?: string;
 }
@@ -78,20 +104,12 @@ export interface RunAutomationNowResult {
 export interface RunAutomationNowDependencies {
   insertAutomationRun: typeof insertAutomationRun;
   updateAutomationRun: typeof updateAutomationRun;
-  updateAutomationRunTmuxSession: typeof updateAutomationRunTmuxSession;
   updateAutomationRunDivergence: typeof updateAutomationRunDivergence;
   markAutomationRunSchedule: typeof markAutomationRunSchedule;
   loadProjectSettings: typeof loadProjectSettings;
   createDivergenceRepository: typeof createDivergenceRepository;
   insertDivergenceRecord: typeof insertDivergenceRecord;
   buildAutomationPromptMarkdown: typeof buildAutomationPromptMarkdown;
-  writeAutomationBriefFile: typeof writeAutomationBriefFile;
-  spawnAutomationTmuxSession: typeof spawnAutomationTmuxSession;
-  queryAutomationTmuxPaneStatus: typeof queryAutomationTmuxPaneStatus;
-  readAutomationLogTail: typeof readAutomationLogTail;
-  readAutomationResultFile: typeof readAutomationResultFile;
-  killAutomationTmuxSession: typeof killAutomationTmuxSession;
-  parseAutomationResult: typeof parseAutomationResult;
   now: () => number;
   pollIntervalMs: number;
   maxPollDurationMs: number;
@@ -104,20 +122,12 @@ export async function runAutomationNow(
   const deps: RunAutomationNowDependencies = {
     insertAutomationRun,
     updateAutomationRun,
-    updateAutomationRunTmuxSession,
     updateAutomationRunDivergence,
     markAutomationRunSchedule,
     loadProjectSettings,
     createDivergenceRepository,
     insertDivergenceRecord,
     buildAutomationPromptMarkdown,
-    writeAutomationBriefFile,
-    spawnAutomationTmuxSession,
-    queryAutomationTmuxPaneStatus,
-    readAutomationLogTail,
-    readAutomationResultFile,
-    killAutomationTmuxSession,
-    parseAutomationResult,
     now: Date.now,
     pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
     maxPollDurationMs: DEFAULT_MAX_POLL_DURATION_MS,
@@ -157,16 +167,11 @@ export async function runAutomationNow(
     };
   }
 
-  // ── Resolve working directory ──
-  // When a workspace is provided, run directly in the workspace folder
-  // (no divergence creation). Otherwise, create a branch-isolated clone.
   let divergencePath: string;
-  let divergenceId: number;
-  const useWorkspaceMode = Boolean(input.workspace);
+  let divergenceId = 0;
 
-  if (useWorkspaceMode && input.workspace) {
+  if (input.workspace) {
     divergencePath = input.workspace.folderPath;
-    divergenceId = 0;
   } else {
     try {
       const settings = await deps.loadProjectSettings(project.id);
@@ -180,9 +185,9 @@ export async function runAutomationNow(
       divergenceId = await deps.insertDivergenceRecord(divergence);
       await deps.updateAutomationRunDivergence(runId, divergenceId);
       divergencePath = divergence.path;
-    } catch (err) {
+    } catch (error) {
       const endedAtMs = deps.now();
-      const errorMessage = `Failed to create divergence: ${err instanceof Error ? err.message : String(err)}`;
+      const errorMessage = `Failed to create divergence: ${error instanceof Error ? error.message : String(error)}`;
       await Promise.all([
         deps.updateAutomationRun(runId, {
           status: "error",
@@ -203,20 +208,78 @@ export async function runAutomationNow(
     }
   }
 
+  const agentTarget = input.workspace
+    ? {
+        targetType: "workspace" as const,
+        targetId: input.workspace.id,
+        workspaceOwnerId: input.workspace.id,
+        workspaceKey: buildWorkspaceKey("workspace", input.workspace.id),
+      }
+    : divergenceId > 0
+      ? {
+          targetType: "divergence" as const,
+          targetId: divergenceId,
+          workspaceOwnerId: undefined,
+          workspaceKey: buildWorkspaceKey("divergence", divergenceId),
+        }
+      : {
+          targetType: "project" as const,
+          targetId: project.id,
+          workspaceOwnerId: undefined,
+          workspaceKey: buildWorkspaceKey("project", project.id),
+        };
+
+  let agentSession: AgentSessionSnapshot;
+  try {
+    agentSession = await input.createAgentSession({
+      provider: input.automation.agent,
+      targetType: agentTarget.targetType,
+      targetId: agentTarget.targetId,
+      projectId: project.id,
+      workspaceOwnerId: agentTarget.workspaceOwnerId,
+      workspaceKey: agentTarget.workspaceKey,
+      sessionRole: "manual",
+      name: `Automation: ${input.automation.name}`,
+      path: divergencePath,
+    });
+  } catch (error) {
+    const endedAtMs = deps.now();
+    const errorMessage = `Failed to create automation agent session: ${error instanceof Error ? error.message : String(error)}`;
+    await Promise.all([
+      deps.updateAutomationRun(runId, {
+        status: "error",
+        startedAtMs,
+        endedAtMs,
+        error: errorMessage,
+      }),
+      deps.markAutomationRunSchedule(input.automation.id, {
+        lastRunAtMs: endedAtMs,
+        nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
+      }),
+    ]);
+    return {
+      runId,
+      status: "error",
+      error: errorMessage,
+    };
+  }
+
   let dbFinalized = false;
-  const precomputedTmuxSessionName = buildAutomationTmuxSessionName(input.automation.id, runId);
 
   try {
     await input.runTask<void>({
       kind: "automation_run",
       title: `Automation: ${input.automation.name}`,
       target: {
-        type: "project",
+        type: input.workspace ? "workspace" : "project",
         projectId: project.id,
+        workspaceId: input.workspace?.id,
+        divergenceId: divergenceId || undefined,
         projectName: project.name,
         path: divergencePath,
         label: `${project.name} / ${input.automation.name}`,
-        tmuxSessionName: precomputedTmuxSessionName,
+        agentSessionId: agentSession.id,
+        agentProvider: input.automation.agent,
       },
       origin: "automation_manual",
       fsHeavy: false,
@@ -225,7 +288,6 @@ export async function runAutomationNow(
       errorMessage: `Automation failed: ${input.automation.name}`,
       dbRunId: runId,
       run: async ({ setPhase, setOutputTail }) => {
-        // ── Phase 1: Launch ──
         setPhase("Preparing prompt");
         const markdown = deps.buildAutomationPromptMarkdown({
           automationName: input.automation.name,
@@ -235,140 +297,99 @@ export async function runAutomationNow(
           generatedAtMs: deps.now(),
           triggerContext: input.triggerContext,
         });
-        const { path: briefPath } = await deps.writeAutomationBriefFile(divergencePath, markdown);
 
-        const commandTemplate = input.automation.agent === "claude"
-          ? input.agentCommandClaude
-          : input.agentCommandCodex;
-        if (!commandTemplate.trim()) {
-          throw new Error(`No ${input.automation.agent} command template configured in settings.`);
-        }
-
-        const agentCommand = renderTemplateCommand(commandTemplate, {
-          workspacePath: divergencePath,
-          briefPath,
-        });
-
-        const tmuxSessionName = buildAutomationTmuxSessionName(input.automation.id, runId);
-        const logPath = buildAutomationLogPath(divergencePath, runId);
-        const resultPath = buildAutomationResultPath(divergencePath, runId);
-
-        const wrapperCommand = buildWrapperCommand({
-          agentCommand,
-          logPath,
-          resultPath,
-          metadata: {
-            automationName: input.automation.name,
-            runId,
-            automationId: input.automation.id,
-            projectName: project.name,
-            projectPath: project.path,
-            divergencePath,
-            agent: input.automation.agent,
-            triggerSource,
-            briefPath,
-          },
-        });
-
-        setPhase("Spawning tmux session");
-        const envVars: [string, string][] = [];
-        if (input.claudeOAuthToken) {
-          envVars.push(["CLAUDE_CODE_OAUTH_TOKEN", input.claudeOAuthToken]);
-        }
-        await deps.spawnAutomationTmuxSession({
-          sessionName: tmuxSessionName,
-          command: wrapperCommand,
-          cwd: divergencePath,
-          logPath,
-          envVars: envVars.length > 0 ? envVars : undefined,
-        });
-
-        await Promise.all([
-          deps.updateAutomationRun(runId, {
-            status: "running",
-            startedAtMs,
+        await deps.updateAutomationRun(runId, {
+          status: "running",
+          startedAtMs,
+          detailsJson: encodeAutomationSessionDetails({
+            runtime: "agent",
+            agentSessionId: agentSession.id,
+            provider: input.automation.agent,
           }),
-          deps.updateAutomationRunTmuxSession(runId, {
-            tmuxSessionName,
-            logFilePath: logPath,
-            resultFilePath: resultPath,
-          }),
-        ]);
+        });
 
-        // ── Phase 2: Monitor ──
+        setPhase("Sending prompt");
+        await input.startAgentTurn(agentSession.id, markdown, { automationMode: true });
+
         setPhase("Running agent");
-
-        const result = await pollUntilDone({
-          tmuxSessionName,
-          logPath,
-          resultPath,
+        const completedSession = await pollAgentSessionUntilDone({
+          sessionId: agentSession.id,
+          getAgentSession: input.getAgentSession,
           setOutputTail,
           pollIntervalMs: deps.pollIntervalMs,
           maxPollDurationMs: deps.maxPollDurationMs,
           now: deps.now,
-          queryPaneStatus: deps.queryAutomationTmuxPaneStatus,
-          readLogTail: deps.readAutomationLogTail,
-          readResultFile: deps.readAutomationResultFile,
-          parseResult: deps.parseAutomationResult,
         });
 
-        // ── Phase 3: Finalize ──
         const endedAtMs = deps.now();
-
-        // Read final log tail
-        try {
-          const finalLog = await deps.readAutomationLogTail(logPath, LOG_TAIL_MAX_BYTES);
-          if (finalLog) setOutputTail(finalLog);
-        } catch { /* ignore */ }
-
-        // Kill tmux session (unless keepSessionAlive is enabled)
-        if (!input.automation.keepSessionAlive) {
-          try {
-            await deps.killAutomationTmuxSession(tmuxSessionName);
-          } catch { /* best-effort cleanup */ }
-        }
-
-        // Update schedule
         await deps.markAutomationRunSchedule(input.automation.id, {
           lastRunAtMs: endedAtMs,
           nextRunAtMs: computeNextScheduledRunAtMs(input.automation, endedAtMs),
         });
 
-        if (result && result.exitCode === 0) {
-          await deps.updateAutomationRun(runId, {
-            status: "success",
-            startedAtMs,
-            endedAtMs,
-          });
-          dbFinalized = true;
-          // Returns normally -> task center shows "Success"
-        } else {
-          const errorMsg = buildAutomationErrorMessage(result);
+        const finalOutputTail = getAutomationOutputTail(completedSession);
+        if (finalOutputTail.trim()) {
+          setOutputTail(finalOutputTail);
+        }
+
+        if (completedSession.runtimeStatus === "error") {
+          const errorMessage = completedSession.errorMessage || "Automation agent run failed.";
           await deps.updateAutomationRun(runId, {
             status: "error",
             startedAtMs,
             endedAtMs,
-            error: errorMsg,
+            error: errorMessage,
+            detailsJson: encodeAutomationSessionDetails({
+              runtime: "agent",
+              agentSessionId: agentSession.id,
+              provider: input.automation.agent,
+            }),
           });
           dbFinalized = true;
-          throw new Error(errorMsg); // -> task center shows "Error"
+          throw new Error(errorMessage);
         }
+
+        if (completedSession.runtimeStatus === "stopped") {
+          const errorMessage = "Automation agent session was stopped before completion.";
+          await deps.updateAutomationRun(runId, {
+            status: "error",
+            startedAtMs,
+            endedAtMs,
+            error: errorMessage,
+            detailsJson: encodeAutomationSessionDetails({
+              runtime: "agent",
+              agentSessionId: agentSession.id,
+              provider: input.automation.agent,
+            }),
+          });
+          dbFinalized = true;
+          throw new Error(errorMessage);
+        }
+
+        await deps.updateAutomationRun(runId, {
+          status: "success",
+          startedAtMs,
+          endedAtMs,
+          detailsJson: encodeAutomationSessionDetails({
+            runtime: "agent",
+            agentSessionId: agentSession.id,
+            provider: input.automation.agent,
+          }),
+        });
+        dbFinalized = true;
       },
     });
 
     return {
       runId,
       status: "launched",
-      tmuxSessionName: buildAutomationTmuxSessionName(input.automation.id, runId),
-      divergenceId,
+      agentSessionId: agentSession.id,
+      divergenceId: divergenceId || undefined,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
     if (!dbFinalized) {
-      // DB hasn't been finalized yet — this covers launch-phase errors and
-      // unexpected monitoring-phase errors (e.g., poll timeout) that would
-      // otherwise leave the run stuck in "running" status.
       const endedAtMs = deps.now();
       await Promise.all([
         deps.updateAutomationRun(runId, {
@@ -376,6 +397,11 @@ export async function runAutomationNow(
           startedAtMs,
           endedAtMs,
           error: message,
+          detailsJson: encodeAutomationSessionDetails({
+            runtime: "agent",
+            agentSessionId: agentSession.id,
+            provider: input.automation.agent,
+          }),
         }),
         deps.markAutomationRunSchedule(input.automation.id, {
           lastRunAtMs: endedAtMs,
@@ -387,95 +413,54 @@ export async function runAutomationNow(
     return {
       runId,
       status: "error",
+      agentSessionId: agentSession.id,
       error: message,
     };
   }
 }
 
-async function pollUntilDone(params: {
-  tmuxSessionName: string;
-  logPath: string;
-  resultPath: string;
+async function pollAgentSessionUntilDone(input: {
+  sessionId: string;
+  getAgentSession: (sessionId: string) => Promise<AgentSessionSnapshot | null>;
   setOutputTail: (tail: string) => void;
   pollIntervalMs: number;
   maxPollDurationMs: number;
   now: () => number;
-  queryPaneStatus: typeof queryAutomationTmuxPaneStatus;
-  readLogTail: typeof readAutomationLogTail;
-  readResultFile: typeof readAutomationResultFile;
-  parseResult: typeof parseAutomationResult;
-}): Promise<AutomationResultFile | null> {
-  const {
-    tmuxSessionName,
-    logPath,
-    resultPath,
-    setOutputTail,
-    pollIntervalMs,
-    maxPollDurationMs,
-    now,
-    queryPaneStatus,
-    readLogTail,
-    readResultFile,
-    parseResult,
-  } = params;
-
-  const pollStartedAt = now();
+}): Promise<AgentSessionSnapshot> {
+  const startedAt = input.now();
 
   while (true) {
-    if (now() - pollStartedAt >= maxPollDurationMs) {
+    if (input.now() - startedAt >= input.maxPollDurationMs) {
       throw new Error(
-        `Automation polling timed out after ${Math.round(maxPollDurationMs / 60_000)} minutes. ` +
-        `The tmux session "${tmuxSessionName}" may still be running.`
+        `Automation polling timed out after ${Math.round(input.maxPollDurationMs / 60_000)} minutes.`,
       );
     }
-    await sleep(pollIntervalMs);
 
-    // Read log tail for live output
-    try {
-      const logTail = await readLogTail(logPath, LOG_TAIL_MAX_BYTES);
-      if (logTail) {
-        setOutputTail(logTail);
-      }
-    } catch {
-      // Log read failure is non-fatal
+    await sleep(input.pollIntervalMs);
+
+    const session = await input.getAgentSession(input.sessionId);
+    if (!session) {
+      throw new Error("Automation agent session disappeared.");
     }
 
-    // Check tmux pane status
-    let paneStatus;
-    try {
-      paneStatus = await queryPaneStatus(tmuxSessionName);
-    } catch {
-      // Session disappeared — check result file
-      try {
-        const resultJson = await readResultFile(resultPath);
-        if (resultJson) {
-          return parseResult(resultJson);
-        }
-      } catch { /* ignore */ }
-      return null;
+    const outputTail = getAutomationOutputTail(session);
+    if (outputTail.trim()) {
+      input.setOutputTail(outputTail);
     }
 
-    if (paneStatus.alive) {
-      // Secondary completion signal: check if result file exists even though
-      // pane reports alive. This handles the case where the background poller
-      // killed the session but tmux falls back to a parent session context.
-      try {
-        const resultJson = await readResultFile(resultPath);
-        if (resultJson) {
-          const earlyResult = parseResult(resultJson);
-          if (earlyResult) return earlyResult;
-        }
-      } catch { /* ignore */ }
-      continue;
+    if (session.pendingRequest) {
+      throw new Error(`Automation requires interactive input: ${session.pendingRequest.title}`);
     }
 
-    // Process exited — read result file
-    try {
-      const resultJson = await readResultFile(resultPath);
-      if (resultJson) {
-        return parseResult(resultJson);
-      }
-    } catch { /* ignore */ }
-    return null;
+    if (session.runtimeStatus === "error" || session.runtimeStatus === "stopped") {
+      return session;
+    }
+
+    if (
+      session.runtimeStatus === "idle"
+      && session.messages.some((message) => message.role === "assistant")
+    ) {
+      return session;
+    }
   }
 }

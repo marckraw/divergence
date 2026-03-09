@@ -17,6 +17,7 @@ import type { AutomationRunTriggerSource } from "../../entities/automation";
 import { insertInboxEvent } from "../../entities/inbox-event";
 import {
   ackCloudAutomationEvent,
+  type AgentRuntimeProvider,
   getProjectGithubRepository,
   nackCloudAutomationEvent,
   pullCloudAutomationEventQueueCounts,
@@ -24,6 +25,7 @@ import {
   type GithubPrMergedAutomationEvent,
 } from "../../shared";
 import type {
+  AgentSessionSnapshot,
   Project,
   Workspace,
   Automation,
@@ -58,11 +60,25 @@ interface UseAutomationOrchestrationParams {
   appSettings: {
     cloudApiBaseUrl?: string;
     cloudApiToken?: string;
-    agentCommandClaude: string;
-    agentCommandCodex: string;
-    claudeOAuthToken?: string;
   };
   runTask: RunBackgroundTask;
+  createAgentSession: (input: {
+    provider: AgentRuntimeProvider;
+    targetType: "project" | "divergence" | "workspace" | "workspace_divergence";
+    targetId: number;
+    projectId: number;
+    workspaceOwnerId?: number;
+    workspaceKey: string;
+    sessionRole?: "default" | "review-agent" | "manual";
+    name: string;
+    path: string;
+  }) => Promise<AgentSessionSnapshot>;
+  startAgentTurn: (
+    sessionId: string,
+    prompt: string,
+    options?: { automationMode?: boolean }
+  ) => Promise<void>;
+  getAgentSession: (sessionId: string) => Promise<AgentSessionSnapshot | null>;
   refreshAutomations: () => Promise<void>;
   refreshDivergences: () => Promise<void>;
   refreshWorkspaces: () => Promise<void>;
@@ -87,6 +103,9 @@ export function useAutomationOrchestration({
   projects,
   appSettings,
   runTask,
+  createAgentSession,
+  startAgentTurn,
+  getAgentSession,
   refreshAutomations,
   refreshDivergences,
   refreshWorkspaces,
@@ -213,24 +232,24 @@ export function useAutomationOrchestration({
       project,
       workspace,
       runTask,
-      agentCommandClaude: appSettings.agentCommandClaude,
-      agentCommandCodex: appSettings.agentCommandCodex,
-      claudeOAuthToken: appSettings.claudeOAuthToken ?? "",
+      createAgentSession,
+      startAgentTurn,
+      getAgentSession,
       triggerSource: input?.triggerSource,
       triggerContext,
     });
     await Promise.all([refreshAutomations(), refreshDivergences()]);
     return result.status === "launched" ? result.runId : null;
   }, [
-    appSettings.agentCommandClaude,
-    appSettings.agentCommandCodex,
-    appSettings.claudeOAuthToken,
     automations,
+    createAgentSession,
+    getAgentSession,
     projectById,
     refreshAutomations,
     refreshDivergences,
     refreshWorkspaces,
     runTask,
+    startAgentTurn,
   ]);
 
   // Cloud queue count polling

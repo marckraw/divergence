@@ -1,9 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
-import { getErrorMessage, renderTemplateCommand } from "../../../shared";
-import {
-  runLocalGithubPrAgentPrompt,
-  writeGithubPrChatBrief,
-} from "../api/githubPrChat.api";
+import type { AgentSessionSnapshot } from "../../../entities";
+import { getDefaultAgentProvider, type CreateAgentSessionInput } from "../../../shared";
 import { buildGithubPrChatContextMarkdown } from "../lib/githubPrChatContext.pure";
 import { buildGithubPrChatPromptMarkdown } from "../lib/githubPrChatPrompt.pure";
 import type {
@@ -17,8 +14,7 @@ import type {
   GithubPullRequestSummary,
 } from "./githubPrHub.types";
 
-const DEFAULT_AGENT: GithubPrChatAgent = "claude";
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_AGENT: GithubPrChatAgent = getDefaultAgentProvider();
 
 function createDefaultThreadState(): GithubPrChatThreadState {
   return {
@@ -35,11 +31,31 @@ function buildPrKey(pullRequest: GithubPullRequestSummary): string {
   return `${pullRequest.repoKey}#${pullRequest.number}`;
 }
 
-function buildMessageId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
+function mapRuntimeMessages(
+  prKey: string,
+  snapshot: AgentSessionSnapshot | null
+): GithubPrChatMessage[] {
+  if (!snapshot) {
+    return [];
   }
-  return `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+
+  return snapshot.messages
+    .filter((message) => message.role !== "system")
+    .map((message) => ({
+      id: message.id,
+      prKey,
+      role: message.role,
+      content: message.content,
+      createdAtMs: message.createdAtMs,
+      status: message.status === "streaming"
+        ? "pending"
+        : message.status === "error"
+          ? "error"
+          : "done",
+      error: message.status === "error"
+        ? (snapshot.errorMessage ?? message.content)
+        : null,
+    }));
 }
 
 interface UseGithubPrChatInput {
@@ -47,9 +63,10 @@ interface UseGithubPrChatInput {
   detail: GithubPullRequestDetail | null;
   detailFiles: GithubPullRequestFile[];
   selectedFilePath: string | null;
-  agentCommandClaude: string;
-  agentCommandCodex: string;
-  claudeOAuthToken: string;
+  agentSessions: Map<string, AgentSessionSnapshot>;
+  createAgentSession: (input: CreateAgentSessionInput) => Promise<{ id: string }>;
+  startAgentTurn: (sessionId: string, prompt: string) => Promise<void>;
+  deleteAgentSession: (sessionId: string) => Promise<void>;
 }
 
 export function useGithubPrChat({
@@ -57,11 +74,13 @@ export function useGithubPrChat({
   detail,
   detailFiles,
   selectedFilePath,
-  agentCommandClaude,
-  agentCommandCodex,
-  claudeOAuthToken,
+  agentSessions,
+  createAgentSession,
+  startAgentTurn,
+  deleteAgentSession,
 }: UseGithubPrChatInput) {
   const [threadByPrKey, setThreadByPrKey] = useState<Record<string, GithubPrChatThreadState>>({});
+  const [sessionIdByPrKey, setSessionIdByPrKey] = useState<Record<string, string>>({});
 
   const activePrKey = useMemo(() => (
     selectedPullRequest ? buildPrKey(selectedPullRequest) : null
@@ -73,6 +92,14 @@ export function useGithubPrChat({
     }
     return threadByPrKey[activePrKey] ?? createDefaultThreadState();
   }, [activePrKey, threadByPrKey]);
+
+  const activeRuntimeSession = useMemo(() => {
+    if (!activePrKey) {
+      return null;
+    }
+    const sessionId = sessionIdByPrKey[activePrKey];
+    return sessionId ? agentSessions.get(sessionId) ?? null : null;
+  }, [activePrKey, agentSessions, sessionIdByPrKey]);
 
   const updateThread = useCallback((prKey: string, updater: (current: GithubPrChatThreadState) => GithubPrChatThreadState) => {
     setThreadByPrKey((previous) => {
@@ -119,8 +146,21 @@ export function useGithubPrChat({
     if (!activePrKey) {
       return;
     }
+
+    const sessionId = sessionIdByPrKey[activePrKey];
+    if (sessionId) {
+      void deleteAgentSession(sessionId).catch((error) => {
+        console.warn("Failed to delete PR chat agent session:", error);
+      });
+      setSessionIdByPrKey((previous) => {
+        const next = { ...previous };
+        delete next[activePrKey];
+        return next;
+      });
+    }
+
     updateThread(activePrKey, () => createDefaultThreadState());
-  }, [activePrKey, updateThread]);
+  }, [activePrKey, deleteAgentSession, sessionIdByPrKey, updateThread]);
 
   const sendMessage = useCallback(async (): Promise<boolean> => {
     if (!activePrKey || !selectedPullRequest || !detail) {
@@ -129,7 +169,7 @@ export function useGithubPrChat({
 
     const thread = threadByPrKey[activePrKey] ?? createDefaultThreadState();
     const question = thread.draft.trim();
-    if (!question || thread.sending) {
+    if (!question) {
       return false;
     }
 
@@ -141,34 +181,6 @@ export function useGithubPrChat({
       return false;
     }
 
-    const userMessage: GithubPrChatMessage = {
-      id: buildMessageId(),
-      prKey: activePrKey,
-      role: "user",
-      content: question,
-      createdAtMs: Date.now(),
-      status: "done",
-      error: null,
-    };
-    const pendingMessageId = buildMessageId();
-    const pendingAssistant: GithubPrChatMessage = {
-      id: pendingMessageId,
-      prKey: activePrKey,
-      role: "assistant",
-      content: "Thinking...",
-      createdAtMs: Date.now(),
-      status: "pending",
-      error: null,
-    };
-
-    updateThread(activePrKey, (current) => ({
-      ...current,
-      draft: "",
-      sending: true,
-      error: null,
-      messages: [...current.messages, userMessage, pendingAssistant],
-    }));
-
     try {
       const contextMarkdown = buildGithubPrChatContextMarkdown({
         pullRequest: selectedPullRequest,
@@ -179,115 +191,69 @@ export function useGithubPrChat({
       });
       const promptMarkdown = buildGithubPrChatPromptMarkdown({
         contextMarkdown,
-        recentMessages: thread.messages,
+        recentMessages: mapRuntimeMessages(
+          activePrKey,
+          activeRuntimeSession,
+        ),
         userQuestion: question,
       });
-      const { path: briefPath } = await writeGithubPrChatBrief(
-        selectedPullRequest.projectPath,
-        promptMarkdown,
-      );
 
-      const commandTemplate = thread.selectedAgent === "claude"
-        ? agentCommandClaude
-        : agentCommandCodex;
-      if (!commandTemplate.trim()) {
-        throw new Error(`No ${thread.selectedAgent} command template configured in settings.`);
+      let sessionId = sessionIdByPrKey[activePrKey] ?? null;
+      if (!sessionId) {
+        const createdSession = await createAgentSession({
+          provider: thread.selectedAgent,
+          targetType: "project",
+          targetId: selectedPullRequest.projectId,
+          projectId: selectedPullRequest.projectId,
+          workspaceKey: `project:${selectedPullRequest.projectId}`,
+          sessionRole: "default",
+          name: `PR #${selectedPullRequest.number} • ${thread.selectedAgent}`,
+          path: selectedPullRequest.projectPath,
+        });
+        sessionId = createdSession.id;
+        setSessionIdByPrKey((previous) => ({
+          ...previous,
+          [activePrKey]: createdSession.id,
+        }));
       }
-
-      const command = renderTemplateCommand(commandTemplate, {
-        workspacePath: selectedPullRequest.projectPath,
-        briefPath,
-      });
-
-      const envVars: [string, string][] = [];
-      const oauthToken = claudeOAuthToken.trim();
-      if (thread.selectedAgent === "claude" && oauthToken) {
-        envVars.push(["CLAUDE_CODE_OAUTH_TOKEN", oauthToken]);
-      }
-
-      const result = await runLocalGithubPrAgentPrompt({
-        command,
-        cwd: selectedPullRequest.projectPath,
-        timeoutMs: DEFAULT_TIMEOUT_MS,
-        envVars,
-      });
-
-      if (result.timedOut) {
-        throw new Error(`Agent timed out after ${Math.round(result.durationMs / 1000)}s.`);
-      }
-
-      const stdout = result.stdout.trim();
-      const stderr = result.stderr.trim();
-      if ((result.exitCode ?? 0) !== 0 && !stdout) {
-        throw new Error(stderr || `Agent exited with code ${result.exitCode}.`);
-      }
-
-      const content = stdout || stderr;
-      if (!content) {
-        throw new Error("Agent returned no output.");
-      }
-
-      const assistantMessage: GithubPrChatMessage = {
-        id: pendingMessageId,
-        prKey: activePrKey,
-        role: "assistant",
-        content,
-        createdAtMs: Date.now(),
-        status: "done",
-        error: null,
-      };
 
       updateThread(activePrKey, (current) => ({
         ...current,
-        sending: false,
+        draft: "",
         error: null,
-        messages: current.messages.map((message) => (
-          message.id === pendingMessageId ? assistantMessage : message
-        )),
       }));
+      await startAgentTurn(sessionId, promptMarkdown);
       return true;
     } catch (error) {
-      const message = getErrorMessage(error, "Failed to run PR chat.");
-      const failedAssistant: GithubPrChatMessage = {
-        id: pendingMessageId,
-        prKey: activePrKey,
-        role: "assistant",
-        content: message,
-        createdAtMs: Date.now(),
-        status: "error",
-        error: message,
-      };
+      const message = error instanceof Error ? error.message : "Failed to run PR chat.";
       updateThread(activePrKey, (current) => ({
         ...current,
-        sending: false,
         error: message,
-        messages: current.messages.map((item) => (
-          item.id === pendingMessageId ? failedAssistant : item
-        )),
       }));
       return false;
     }
   }, [
     activePrKey,
-    agentCommandClaude,
-    agentCommandCodex,
-    claudeOAuthToken,
+    activeRuntimeSession,
+    createAgentSession,
     detail,
     detailFiles,
     selectedFilePath,
     selectedPullRequest,
+    sessionIdByPrKey,
+    startAgentTurn,
     threadByPrKey,
     updateThread,
   ]);
 
   return {
     activePrKey,
-    messages: activeThread.messages,
+    messages: activePrKey ? mapRuntimeMessages(activePrKey, activeRuntimeSession) : [],
     draft: activeThread.draft,
     selectedAgent: activeThread.selectedAgent,
     includeAllPatches: activeThread.includeAllPatches,
-    sending: activeThread.sending,
-    error: activeThread.error,
+    sending: activeRuntimeSession?.runtimeStatus === "running",
+    error: activeRuntimeSession?.errorMessage ?? activeThread.error,
     setDraft,
     setSelectedAgent,
     setIncludeAllPatches,

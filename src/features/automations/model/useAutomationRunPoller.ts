@@ -15,9 +15,32 @@ import {
 } from "../api/tmuxAutomation.api";
 import { parseAutomationResult } from "../lib/tmuxAutomation.pure";
 import type { AutomationResultFile } from "../lib/tmuxAutomation.types";
+import {
+  getAgentRuntimeSession,
+  type AgentRuntimeProvider,
+  type AgentRuntimeSessionSnapshot,
+} from "../../../shared";
 
 const DEFAULT_POLLING_INTERVAL_MS = 5_000;
 const LOG_TAIL_MAX_BYTES = 4_000;
+
+interface AutomationRunRuntimeDetails {
+  runtime?: string;
+  agentSessionId?: string;
+  provider?: AgentRuntimeProvider;
+}
+
+function parseRunRuntimeDetails(detailsJson: string | null): AutomationRunRuntimeDetails | null {
+  if (!detailsJson?.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(detailsJson) as AutomationRunRuntimeDetails;
+  } catch {
+    return null;
+  }
+}
 
 export interface AutomationRunPollerCallbacks {
   onRunCompleted: (runId: number, result: AutomationResultFile) => void;
@@ -50,20 +73,26 @@ export function useAutomationRunPoller(options: {
       }
 
       for (const run of runningRuns) {
-        if (!run.tmuxSessionName || !run.logFilePath || !run.resultFilePath) {
-          continue;
-        }
-
         try {
-          await pollSingleRun(
-            run.id,
-            run.automationId,
-            run.tmuxSessionName,
-            run.logFilePath,
-            run.resultFilePath,
-            run.keepSessionAlive,
-            callbacksRef.current
-          );
+          const runtimeDetails = parseRunRuntimeDetails(run.detailsJson);
+          if (runtimeDetails?.runtime === "agent" && runtimeDetails.agentSessionId) {
+            await pollAgentRun(
+              run.id,
+              run.automationId,
+              runtimeDetails.agentSessionId,
+              callbacksRef.current
+            );
+          } else if (run.tmuxSessionName && run.logFilePath && run.resultFilePath) {
+            await pollSingleRun(
+              run.id,
+              run.automationId,
+              run.tmuxSessionName,
+              run.logFilePath,
+              run.resultFilePath,
+              run.keepSessionAlive,
+              callbacksRef.current
+            );
+          }
         } catch (error) {
           console.warn(`Poller error for run ${run.id}:`, error);
         }
@@ -84,6 +113,119 @@ export function useAutomationRunPoller(options: {
       window.clearInterval(timerId);
     };
   }, [tick, intervalMs]);
+}
+
+async function pollAgentRun(
+  runId: number,
+  automationId: number,
+  agentSessionId: string,
+  callbacks: AutomationRunPollerCallbacks
+): Promise<void> {
+  let cachedAutomation: Automation | undefined | null = null;
+  async function getAutomation(): Promise<Automation | undefined> {
+    if (cachedAutomation === null) {
+      const allAutomations = await listAutomations();
+      cachedAutomation = allAutomations.find((automation) => automation.id === automationId);
+    }
+    return cachedAutomation;
+  }
+
+  const session = await getAgentRuntimeSession(agentSessionId);
+  if (!session) {
+    const endedAtMs = Date.now();
+    await updateAutomationRun(runId, {
+      status: "error",
+      endedAtMs,
+      error: "Automation agent session disappeared.",
+    });
+    const automation = await getAutomation();
+    await markAutomationRunSchedule(automationId, {
+      lastRunAtMs: endedAtMs,
+      nextRunAtMs: automation
+        ? computeNextScheduledRunAtMs(automation, endedAtMs)
+        : null,
+    });
+    callbacks.onRunFailed(runId, "Automation agent session disappeared.");
+    return;
+  }
+
+  const outputTail = getAgentOutputTail(session);
+  if (outputTail) {
+    callbacks.onOutputUpdate(runId, outputTail);
+  }
+
+  if (session.pendingRequest) {
+    const endedAtMs = Date.now();
+    const error = `Automation requires interactive input: ${session.pendingRequest.title}`;
+    await updateAutomationRun(runId, {
+      status: "error",
+      endedAtMs,
+      error,
+    });
+    const automation = await getAutomation();
+    await markAutomationRunSchedule(automationId, {
+      lastRunAtMs: endedAtMs,
+      nextRunAtMs: automation
+        ? computeNextScheduledRunAtMs(automation, endedAtMs)
+        : null,
+    });
+    callbacks.onRunFailed(runId, error);
+    return;
+  }
+
+  if (session.runtimeStatus === "running" || session.runtimeStatus === "waiting") {
+    return;
+  }
+
+  const endedAtMs = Date.now();
+  const automation = await getAutomation();
+  const output = getAgentOutputTail(session);
+  if (session.runtimeStatus === "error" || session.runtimeStatus === "stopped") {
+    const error = session.errorMessage ?? "Automation agent session failed.";
+    await updateAutomationRun(runId, {
+      status: "error",
+      endedAtMs,
+      error,
+      detailsJson: JSON.stringify({
+        runtime: "agent",
+        agentSessionId: session.id,
+        provider: session.provider,
+        output,
+      }),
+    });
+    await markAutomationRunSchedule(automationId, {
+      lastRunAtMs: endedAtMs,
+      nextRunAtMs: automation
+        ? computeNextScheduledRunAtMs(automation, endedAtMs)
+        : null,
+    });
+    callbacks.onRunFailed(runId, error);
+    return;
+  }
+
+  const syntheticResult: AutomationResultFile = {
+    status: "completed",
+    exitCode: 0,
+    startedAt: new Date(session.createdAtMs).toISOString(),
+    finishedAt: new Date(endedAtMs).toISOString(),
+  };
+  await updateAutomationRun(runId, {
+    status: "success",
+    endedAtMs,
+    detailsJson: JSON.stringify({
+      runtime: "agent",
+      agentSessionId: session.id,
+      provider: session.provider,
+      output,
+    }),
+  });
+  await markAutomationRunSchedule(automationId, {
+    lastRunAtMs: endedAtMs,
+    nextRunAtMs: automation
+      ? computeNextScheduledRunAtMs(automation, endedAtMs)
+      : null,
+  });
+  callbacks.onRunCompleted(runId, syntheticResult);
 }
 
 async function pollSingleRun(
@@ -232,4 +374,18 @@ async function finalizeRun(
       // Cleanup best-effort
     }
   }
+}
+
+function getAgentOutputTail(session: AgentRuntimeSessionSnapshot): string {
+  const assistantMessage = [...session.messages]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.content.trim().length > 0);
+  if (assistantMessage) {
+    return assistantMessage.content;
+  }
+
+  const activityWithDetails = [...session.activities]
+    .reverse()
+    .find((activity) => Boolean(activity.details?.trim()));
+  return activityWithDetails?.details ?? "";
 }

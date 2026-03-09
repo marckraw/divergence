@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Automation } from "../../../entities/automation";
+import { getDefaultAgentProvider } from "../../../shared";
 import {
   buildAutomationBranchName,
   buildAutomationPromptMarkdown,
@@ -134,7 +135,7 @@ describe("automation scheduler utils", () => {
         id: 1,
         name: "test",
         projectId: 1,
-        agent: "claude",
+        agent: getDefaultAgentProvider(),
         prompt: "test",
         intervalHours: 6,
         runMode: "schedule",
