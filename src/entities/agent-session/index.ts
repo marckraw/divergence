@@ -15,8 +15,10 @@ export type {
   AgentSessionStatus,
   AgentSessionTargetType,
 } from "./model/agentSession.types";
+export type { AgentRuntimeDebugEvent } from "../../shared";
 export {
   createAgentSessionLabel,
   createEmptyAgentSessionSnapshot,
   getAgentSessionTimestamp,
 } from "./lib/agentSession.pure";
+export { suggestAgentSessionTitle } from "./lib/agentSessionTitle.pure";

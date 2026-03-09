@@ -18,6 +18,10 @@ import {
   supportsAgentRuntimePlanMode,
   Textarea,
 } from "../../../shared";
+import {
+  buildAgentRuntimeTelemetrySummary,
+  formatRuntimeEventOffset,
+} from "../lib/agentRuntimeTelemetry.pure";
 import { buildAgentTimeline } from "../lib/agentTimeline.pure";
 import type { AgentSessionViewPresentationalProps } from "./AgentSessionView.types";
 
@@ -70,6 +74,7 @@ function AgentSessionViewPresentational({
   activeSessionId,
   idleAttentionSessionIds,
   capabilities,
+  nowMs,
   draft,
   isSubmitting,
   isStagingAttachment,
@@ -102,6 +107,8 @@ function AgentSessionViewPresentational({
   const canSubmitPendingRequest = pendingRequest?.kind === "user-input"
     && (pendingRequest.questions ?? []).every((_, index) => Boolean(requestAnswers[index]?.trim()));
   const timelineItems = buildAgentTimeline(session.messages, session.activities);
+  const telemetry = buildAgentRuntimeTelemetrySummary(session, nowMs);
+  const hasRuntimeTelemetry = session.runtimeEvents.length > 0;
 
   return (
     <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
@@ -149,6 +156,18 @@ function AgentSessionViewPresentational({
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-subtext truncate">{session.path}</p>
+                {(session.runtimeStatus === "running"
+                  || session.runtimeStatus === "waiting"
+                  || hasRuntimeTelemetry) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-subtext">
+                    <span className="rounded-full border border-surface bg-main/50 px-2 py-0.5 uppercase tracking-[0.16em]">
+                      {telemetry.phaseLabel}
+                    </span>
+                    {telemetry.elapsedLabel && <span>Elapsed {telemetry.elapsedLabel}</span>}
+                    {telemetry.lastEventLabel && <span>Last event {telemetry.lastEventLabel} ago</span>}
+                    {telemetry.latestEventMessage && <span>{telemetry.latestEventMessage}</span>}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {modelOptions.length > 0 ? (
@@ -183,6 +202,50 @@ function AgentSessionViewPresentational({
             {session.errorMessage && (
               <div className="mx-auto mt-3 w-full max-w-5xl rounded-xl border border-red/30 bg-red/10 px-3 py-2">
                 <p className="text-xs text-red">{session.errorMessage}</p>
+              </div>
+            )}
+            {telemetry.slowWarning && (
+              <div className="mx-auto mt-3 w-full max-w-5xl rounded-xl border border-yellow/30 bg-yellow/10 px-3 py-2">
+                <p className="text-xs text-yellow">{telemetry.slowWarning}</p>
+              </div>
+            )}
+            {hasRuntimeTelemetry && (
+              <div className="mx-auto mt-3 w-full max-w-5xl rounded-2xl border border-surface/80 bg-main/35 px-4 py-3">
+                <details>
+                  <summary className="cursor-pointer list-none text-xs text-subtext transition-colors hover:text-text">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="rounded-full border border-surface px-2 py-0.5 uppercase tracking-[0.16em]">
+                        Runtime Debug
+                      </span>
+                      <span>
+                        {session.runtimeEvents.length} event{session.runtimeEvents.length === 1 ? "" : "s"} captured
+                      </span>
+                    </span>
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {session.runtimeEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="rounded-xl border border-surface/70 bg-sidebar/35 px-3 py-2"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-subtext">
+                          <span className="rounded-full border border-surface px-2 py-0.5 uppercase tracking-[0.16em]">
+                            {event.phase}
+                          </span>
+                          <span>
+                            {formatRuntimeEventOffset(event.atMs, session.currentTurnStartedAtMs)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm text-text">{event.message}</p>
+                        {event.details && (
+                          <pre className="mt-2 overflow-x-auto rounded-lg border border-surface/70 bg-main/70 p-2 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-subtext">
+                            {event.details}
+                          </pre>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </details>
               </div>
             )}
             {pendingRequest && (

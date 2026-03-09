@@ -46,6 +46,7 @@ export async function createAgentRuntimeSession(
       workspaceOwnerId: input.workspaceOwnerId,
       workspaceKey: input.workspaceKey,
       sessionRole: input.sessionRole,
+      nameMode: input.nameMode,
       model: input.model,
       name: input.name,
       path: input.path,
@@ -124,6 +125,8 @@ export async function updateAgentRuntimeSession(
       sessionId: input.sessionId,
       isOpen: input.isOpen,
       model: input.model,
+      name: input.name,
+      nameMode: input.nameMode,
     },
   });
 }

@@ -9,6 +9,13 @@ impl AgentRuntimeState {
         session_id: &str,
         turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Launching provider",
+            "Starting Gemini CLI.",
+            Some(session.model.clone()),
+        )?;
         let attachment_paths = resolve_gemini_attachment_paths(session_id, &turn.attachments)?;
         let attachment_dirs = if attachment_paths.is_empty() {
             Vec::new()
@@ -47,6 +54,13 @@ impl AgentRuntimeState {
                 child: child.clone(),
                 transport: RunningTransport::Gemini,
             },
+        )?;
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Waiting for model",
+            "Gemini process started. Waiting for streamed output.",
+            None,
         )?;
 
         let stderr_task = tokio::spawn(async move {
@@ -99,6 +113,12 @@ impl AgentRuntimeState {
             }
             current_session.status = AgentSessionStatus::Active;
             current_session.runtime_status = AgentRuntimeStatus::Idle;
+            push_runtime_event(
+                current_session,
+                "Completed",
+                "Gemini completed the turn.",
+                None,
+            );
             current_session.updated_at_ms = now_ms();
             Ok(())
         })?;
@@ -126,6 +146,12 @@ impl AgentRuntimeState {
                         if let Some(thread_id) = read_provider_thread_id(&value) {
                             let snapshot = self.mutate_session(session_id, |session| {
                                 session.thread_id = Some(thread_id);
+                                push_runtime_event(
+                                    session,
+                                    "Preparing turn",
+                                    "Gemini session is ready.",
+                                    None,
+                                );
                                 session.updated_at_ms = now_ms();
                                 Ok(())
                             })?;
@@ -145,6 +171,12 @@ impl AgentRuntimeState {
                                     } else {
                                         append_assistant_paragraph(session, None, &text);
                                     }
+                                    push_runtime_event(
+                                        session,
+                                        "Streaming response",
+                                        "Received Gemini response text.",
+                                        None,
+                                    );
                                     session.updated_at_ms = now_ms();
                                     Ok(())
                                 })?;
@@ -158,6 +190,12 @@ impl AgentRuntimeState {
                         if let Some(text) = read_provider_text_delta(&value) {
                             let snapshot = self.mutate_session(session_id, |session| {
                                 append_assistant_text(session, None, &text);
+                                push_runtime_event(
+                                    session,
+                                    "Streaming response",
+                                    "Received Gemini response text.",
+                                    None,
+                                );
                                 session.updated_at_ms = now_ms();
                                 Ok(())
                             })?;
@@ -180,6 +218,12 @@ impl AgentRuntimeState {
                 trimmed.to_string()
             };
             append_assistant_text(session, None, &delta);
+            push_runtime_event(
+                session,
+                "Streaming response",
+                "Received Gemini response text.",
+                None,
+            );
             session.updated_at_ms = now_ms();
             Ok(())
         })?;

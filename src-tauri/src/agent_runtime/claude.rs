@@ -9,6 +9,13 @@ impl AgentRuntimeState {
         session_id: &str,
         turn: &AgentTurnInvocation,
     ) -> Result<(), String> {
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Launching provider",
+            "Starting Claude Code CLI.",
+            Some(session.model.clone()),
+        )?;
         let attachment_paths = resolve_attachment_paths(session_id, &turn.attachments)?;
         let attachment_dirs = if attachment_paths.is_empty() {
             Vec::new()
@@ -59,6 +66,13 @@ impl AgentRuntimeState {
                 child: child.clone(),
                 transport: RunningTransport::Claude,
             },
+        )?;
+        self.emit_runtime_event(
+            app,
+            session_id,
+            "Waiting for model",
+            "Claude process started. Waiting for streamed output.",
+            None,
         )?;
 
         let stderr_task = tokio::spawn(async move {
@@ -114,6 +128,12 @@ impl AgentRuntimeState {
             }
             current_session.status = AgentSessionStatus::Active;
             current_session.runtime_status = AgentRuntimeStatus::Idle;
+            push_runtime_event(
+                current_session,
+                "Completed",
+                "Claude completed the turn.",
+                None,
+            );
             current_session.updated_at_ms = now_ms();
             Ok(())
         })?;
@@ -158,6 +178,12 @@ impl AgentRuntimeState {
                 if let Some(thread_id) = session_identifier {
                     let snapshot = self.mutate_session(session_id, |session| {
                         session.thread_id = Some(thread_id);
+                        push_runtime_event(
+                            session,
+                            "Preparing turn",
+                            "Claude session is ready.",
+                            None,
+                        );
                         session.updated_at_ms = now_ms();
                         Ok(())
                     })?;
@@ -184,6 +210,12 @@ impl AgentRuntimeState {
                         if !text.is_empty() {
                             let snapshot = self.mutate_session(session_id, |session| {
                                 append_assistant_text(session, None, text);
+                                push_runtime_event(
+                                    session,
+                                    "Streaming response",
+                                    "Received Claude response text.",
+                                    None,
+                                );
                                 session.updated_at_ms = now_ms();
                                 Ok(())
                             })?;
@@ -230,8 +262,14 @@ impl AgentRuntimeState {
                                     started_at_ms: now_ms(),
                                     completed_at_ms: None,
                                 });
-                                session.updated_at_ms = now_ms();
                             }
+                            push_runtime_event(
+                                session,
+                                "Running tool",
+                                "Claude started a tool call.",
+                                Some(tool_name.clone()),
+                            );
+                            session.updated_at_ms = now_ms();
                             Ok(())
                         })?;
                         self.emit_snapshot_update(app, &snapshot);
@@ -262,6 +300,12 @@ impl AgentRuntimeState {
                                 &activity_id,
                                 details,
                                 AgentActivityStatus::Completed,
+                            );
+                            push_runtime_event(
+                                session,
+                                "Tool completed",
+                                "Claude finished a tool call.",
+                                None,
                             );
                             session.updated_at_ms = now_ms();
                             Ok(())
@@ -314,6 +358,16 @@ impl AgentRuntimeState {
                     } else {
                         None
                     };
+                    push_runtime_event(
+                        session,
+                        if is_error { "Errored" } else { "Completed" },
+                        if is_error {
+                            "Claude finished the turn with an error."
+                        } else {
+                            "Claude finished the turn."
+                        },
+                        if is_error { Some(result.clone()) } else { None },
+                    );
                     session.updated_at_ms = now_ms();
                     Ok(())
                 })?;

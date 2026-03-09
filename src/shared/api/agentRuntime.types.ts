@@ -1,6 +1,7 @@
 export type AgentRuntimeProvider = "claude" | "codex" | "cursor" | "gemini";
 
 export type AgentRuntimeSessionRole = "default" | "review-agent" | "manual";
+export type AgentRuntimeSessionNameMode = "default" | "auto" | "manual";
 
 export type AgentRuntimeTargetType =
   | "project"
@@ -105,6 +106,14 @@ export interface AgentRuntimeActivity {
   completedAtMs?: number;
 }
 
+export interface AgentRuntimeDebugEvent {
+  id: string;
+  atMs: number;
+  phase: string;
+  message: string;
+  details?: string;
+}
+
 export interface AgentRuntimeRequest {
   id: string;
   kind: AgentRuntimeRequestKind;
@@ -134,6 +143,7 @@ export interface AgentRuntimeSessionSnapshot {
   workspaceOwnerId?: number;
   workspaceKey: string;
   sessionRole: AgentRuntimeSessionRole;
+  nameMode: AgentRuntimeSessionNameMode;
   name: string;
   path: string;
   status: AgentRuntimeSessionStatus;
@@ -142,6 +152,10 @@ export interface AgentRuntimeSessionSnapshot {
   createdAtMs: number;
   updatedAtMs: number;
   threadId?: string;
+  currentTurnStartedAtMs?: number | null;
+  lastRuntimeEventAtMs?: number | null;
+  runtimePhase?: string | null;
+  runtimeEvents: AgentRuntimeDebugEvent[];
   messages: AgentRuntimeMessage[];
   activities: AgentRuntimeActivity[];
   pendingRequest: AgentRuntimeRequest | null;
@@ -156,6 +170,7 @@ export interface CreateAgentSessionInput {
   workspaceOwnerId?: number;
   workspaceKey: string;
   sessionRole?: AgentRuntimeSessionRole;
+  nameMode?: AgentRuntimeSessionNameMode;
   model?: string;
   name: string;
   path: string;
@@ -188,6 +203,8 @@ export interface UpdateAgentSessionInput {
   sessionId: string;
   isOpen?: boolean;
   model?: string;
+  name?: string;
+  nameMode?: AgentRuntimeSessionNameMode;
 }
 
 export interface AgentRuntimeSessionUpdatedEvent {

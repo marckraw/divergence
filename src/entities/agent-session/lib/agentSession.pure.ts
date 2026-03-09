@@ -3,6 +3,10 @@ import type { AgentSession, AgentSessionSnapshot } from "../model/agentSession.t
 export function createEmptyAgentSessionSnapshot(session: AgentSession): AgentSessionSnapshot {
   return {
     ...session,
+    currentTurnStartedAtMs: null,
+    lastRuntimeEventAtMs: null,
+    runtimePhase: null,
+    runtimeEvents: [],
     messages: [],
     activities: [],
     pendingRequest: null,

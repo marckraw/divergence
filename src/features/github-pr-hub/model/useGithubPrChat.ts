@@ -207,6 +207,7 @@ export function useGithubPrChat({
           projectId: selectedPullRequest.projectId,
           workspaceKey: `project:${selectedPullRequest.projectId}`,
           sessionRole: "default",
+          nameMode: "manual",
           name: `PR #${selectedPullRequest.number} • ${thread.selectedAgent}`,
           path: selectedPullRequest.projectPath,
         });

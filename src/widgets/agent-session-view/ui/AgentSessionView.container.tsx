@@ -73,6 +73,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
   const [isUpdatingModel, setIsUpdatingModel] = useState(false);
   const [requestAnswers, setRequestAnswers] = useState<string[]>([]);
   const [isResolvingRequest, setIsResolvingRequest] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const sessionId = props.session.id;
   const currentDraft = useMemo(
@@ -96,6 +97,16 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
     setIsUpdatingModel(false);
     setIsResolvingRequest(false);
   }, [props.session.id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const questions = props.session.pendingRequest?.questions ?? [];
@@ -314,6 +325,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
   return (
     <AgentSessionViewPresentational
       {...props}
+      nowMs={nowMs}
       draft={currentDraft}
       isSubmitting={isSubmitting}
       isStagingAttachment={isStagingAttachment}

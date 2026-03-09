@@ -19,6 +19,7 @@ export interface SidebarProps {
   onSelectSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onDeleteAgentSession: (sessionId: string) => void;
+  onRenameAgentSession: (sessionId: string) => void;
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   onAddProject: (name: string, path: string) => Promise<void>;
   onRemoveProject: (id: number) => Promise<void>;

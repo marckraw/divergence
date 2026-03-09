@@ -14,6 +14,7 @@ interface UseReviewAgentSessionParams {
     workspaceOwnerId?: number;
     workspaceKey: string;
     sessionRole?: "default" | "review-agent" | "manual";
+    nameMode?: "default" | "auto" | "manual";
     name: string;
     path: string;
   }) => Promise<{ id: string }>;
@@ -54,6 +55,7 @@ export function useReviewAgentSession({
       workspaceOwnerId: sourceSession.workspaceOwnerId,
       workspaceKey: sourceSession.workspaceKey,
       sessionRole: "review-agent",
+      nameMode: "manual",
       name: createAgentSessionLabel(sourceSession.name, input.agent, "review-agent"),
       path: input.workspacePath,
     });
