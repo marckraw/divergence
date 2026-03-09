@@ -1,5 +1,11 @@
 # divergence
 
+## 0.29.0
+
+### Minor Changes
+
+- 2f29a63: Add plan mode and image attachments to the agent runtime UI, including staged image transport for Codex, Claude, and Gemini, Shift+Tab mode switching in the composer, and a Cursor streaming fix that prevents duplicated assistant responses.
+
 ## 0.28.0
 
 ### Minor Changes
