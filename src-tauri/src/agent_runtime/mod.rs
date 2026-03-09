@@ -98,7 +98,7 @@ pub struct AgentRuntimeProviderFeatures {
     pub resume: bool,
     pub structured_requests: bool,
     pub plan_mode: bool,
-    pub image_attachments: bool,
+    pub attachment_kinds: Vec<AgentAttachmentKind>,
     pub structured_plan_ui: bool,
     pub usage_inspection: bool,
     pub provider_extras: bool,
@@ -186,6 +186,14 @@ pub enum AgentMessageStatus {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentAttachmentKind {
+    #[default]
+    Image,
+    Pdf,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAttachment {
@@ -193,6 +201,8 @@ pub struct AgentAttachment {
     pub name: String,
     pub mime_type: String,
     pub size_bytes: usize,
+    #[serde(default)]
+    pub kind: AgentAttachmentKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -582,6 +592,7 @@ impl AgentRuntimeState {
         if trimmed_mime_type.is_empty() {
             return Err("Attachment mimeType is required.".to_string());
         }
+        let attachment_kind = attachment_kind_from_mime_type(trimmed_mime_type)?;
 
         let bytes = BASE64_STANDARD
             .decode(input.base64_content.trim())
@@ -601,6 +612,7 @@ impl AgentRuntimeState {
             name: trimmed_name.to_string(),
             mime_type: trimmed_mime_type.to_string(),
             size_bytes: bytes.len(),
+            kind: attachment_kind,
         })
     }
 
@@ -872,10 +884,10 @@ impl AgentRuntimeState {
             return Err(format!("Agent session not found: {session_id}"));
         };
 
+        validate_turn_attachments_for_provider(&session.provider, &turn.attachments)?;
+
         if matches!(session.provider, AgentProvider::Cursor) && !turn.attachments.is_empty() {
-            return Err(
-                "Cursor image attachments are not supported in Divergence yet.".to_string(),
-            );
+            return Err("Cursor attachments are not supported in Divergence yet.".to_string());
         }
 
         match session.provider {
@@ -1212,6 +1224,58 @@ fn sanitize_attachment_name(name: &str) -> String {
     sanitized.trim_matches('-').to_string()
 }
 
+fn attachment_kind_from_mime_type(mime_type: &str) -> Result<AgentAttachmentKind, String> {
+    let normalized_mime_type = mime_type.trim().to_ascii_lowercase();
+    if normalized_mime_type.starts_with("image/") {
+        return Ok(AgentAttachmentKind::Image);
+    }
+    if normalized_mime_type == "application/pdf" {
+        return Ok(AgentAttachmentKind::Pdf);
+    }
+    Err(format!(
+        "Unsupported attachment type '{mime_type}'. Only image and PDF attachments are supported."
+    ))
+}
+
+fn validate_turn_attachments_for_provider(
+    provider: &AgentProvider,
+    attachments: &[AgentAttachment],
+) -> Result<(), String> {
+    for attachment in attachments {
+        let is_supported = match provider {
+            AgentProvider::Codex | AgentProvider::Claude => {
+                matches!(attachment.kind, AgentAttachmentKind::Image)
+            }
+            AgentProvider::Cursor => false,
+            AgentProvider::Gemini => matches!(
+                attachment.kind,
+                AgentAttachmentKind::Image | AgentAttachmentKind::Pdf
+            ),
+        };
+        if is_supported {
+            continue;
+        }
+
+        let provider_label = match provider {
+            AgentProvider::Claude => "Claude",
+            AgentProvider::Codex => "Codex",
+            AgentProvider::Cursor => "Cursor",
+            AgentProvider::Gemini => "Gemini",
+        };
+
+        let kind_label = match attachment.kind {
+            AgentAttachmentKind::Image => "image",
+            AgentAttachmentKind::Pdf => "PDF",
+        };
+
+        return Err(format!(
+            "{provider_label} does not support {kind_label} attachments in Divergence yet."
+        ));
+    }
+
+    Ok(())
+}
+
 fn build_attachment_filename(attachment_id: &str, name: &str) -> String {
     let sanitized_name = sanitize_attachment_name(name);
     if sanitized_name.is_empty() {
@@ -1253,13 +1317,27 @@ fn load_persisted_sessions(path: &Path) -> HashMap<String, AgentSessionSnapshot>
         return HashMap::new();
     };
 
-    let Ok(items) = serde_json::from_str::<Vec<AgentSessionSnapshot>>(&raw) else {
+    let Ok(items) = serde_json::from_str::<Vec<Value>>(&raw) else {
+        eprintln!(
+            "[agent_runtime] Failed to parse persisted session snapshot array at {}",
+            path.display()
+        );
         return HashMap::new();
     };
 
     items
         .into_iter()
-        .map(normalize_persisted_session)
+        .filter_map(|item| match serde_json::from_value::<AgentSessionSnapshot>(item) {
+            Ok(session) => Some(normalize_persisted_session(session)),
+            Err(error) => {
+                eprintln!(
+                    "[agent_runtime] Skipping unreadable persisted session in {}: {}",
+                    path.display(),
+                    error
+                );
+                None
+            }
+        })
         .map(|item| (item.id.clone(), item))
         .collect()
 }
@@ -1276,6 +1354,15 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
     if session.runtime_events.len() > MAX_RUNTIME_EVENTS {
         let keep_from = session.runtime_events.len() - MAX_RUNTIME_EVENTS;
         session.runtime_events = session.runtime_events.split_off(keep_from);
+    }
+    for message in &mut session.messages {
+        if let Some(attachments) = &mut message.attachments {
+            for attachment in attachments {
+                if let Ok(kind) = attachment_kind_from_mime_type(&attachment.mime_type) {
+                    attachment.kind = kind;
+                }
+            }
+        }
     }
     if matches!(
         session.runtime_status,

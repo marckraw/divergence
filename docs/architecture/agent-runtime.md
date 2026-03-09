@@ -61,15 +61,17 @@ Provider adapters may emit richer internal events, but only the canonical contra
 - Claude runs through local `claude -p` streaming and still uses permissive headless execution rather than surfaced approval requests.
 - Claude plan turns use `--permission-mode plan`.
 - Claude image attachments are staged locally, added as allowed directories, and referenced in the prompt wrapper by file path.
+- Claude PDF attachments remain disabled in Divergence.
 - Codex runs through `codex app-server` over JSON-RPC on stdio and surfaces structured approval/user-input requests into the React UI.
 - Codex plan turns use App Server collaboration mode metadata.
 - Codex image attachments are converted into `data:` URLs and sent as multimodal `turn/start` input items.
+- Codex PDF attachments remain disabled because the current App Server transport is image-only.
 - Cursor runs through local `cursor-agent --print --output-format stream-json` and reuses the provider session id as the shared `threadId`.
 - Cursor plan turns use `--mode plan`.
-- Cursor image attachments remain intentionally disabled until the official headless CLI exposes a stable attachment transport.
+- Cursor attachments remain intentionally disabled until the official headless CLI exposes a stable attachment transport.
 - Gemini runs through local `gemini -p` and now uses `--output-format stream-json` on binaries that advertise it, with text fallback only for older installs.
 - Gemini plan turns use `--approval-mode plan`.
-- Gemini image attachments are staged locally, added to the included directories, and injected into the prompt as `@/absolute/path` references.
+- Gemini image and PDF attachments are staged locally, added to the included directories, and injected into the prompt as `@/absolute/path` references.
 - Automation runs use the same agent runtime and store their linked `agentSessionId` in automation run metadata so Task Center and restart reconciliation can attach back to the same structured session.
 - Provider auth stays inside the official CLI process. Divergence never extracts subscription credentials for direct backend calls.
 - Database migration recovery is part of startup. Divergence repairs the known half-applied `automations_v13` migration state before normal data loading continues.
@@ -87,6 +89,7 @@ Provider adapters may emit richer internal events, but only the canonical contra
 - Route user input and approval responses back to the runtime.
 - Project canonical events into chat, work log, and request UI.
 - Preserve per-session composer draft state, including plan mode and staged attachment metadata, across agent-tab switches.
+- Keep attachment previews draft-local in the renderer; preview URLs are never persisted into the runtime snapshot.
 - Keep terminal-specific rendering isolated from agent-specific rendering.
 
 ## Enforcement

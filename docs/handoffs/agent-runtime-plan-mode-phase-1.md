@@ -3,13 +3,14 @@
 ## What exists now
 
 - Shared runtime contracts now include per-turn `interactionMode` and message-level attachment metadata.
-- Provider descriptors expose `planMode`, `imageAttachments`, and `structuredPlanUi`.
-- Divergence can stage image attachments through the Tauri runtime and discard them before send.
+- Provider descriptors expose `planMode`, `attachmentKinds`, and `structuredPlanUi`.
+- Divergence can stage supported attachments through the Tauri runtime and discard them before send.
 - The agent composer now supports:
   - Chat / Plan mode toggle
-  - image picker
+  - provider-gated attachment picker
+  - draft-local hover previews for image chips
   - image paste from clipboard
-  - image drag-and-drop
+  - attachment drag-and-drop
   - per-session draft state across agent-tab switches
 - User messages in the timeline now show:
   - plan-mode badge when applicable
@@ -20,15 +21,17 @@
 - Codex
   - App Server turns now send collaboration mode metadata for plan/default turns.
   - Image attachments are converted into `data:` URLs and added as multimodal `input` items.
+  - PDF attachments are rejected in the runtime.
 - Claude
   - Plan turns use `--permission-mode plan`.
   - Image attachments are staged, added as allowed directories, and referenced in the composed prompt text.
+  - PDF attachments are rejected in the runtime.
 - Cursor
   - Plan turns use `--mode plan`.
-  - Image attachments are explicitly rejected in the runtime and disabled in the UI.
+  - All attachments are explicitly rejected in the runtime and disabled in the UI.
 - Gemini
   - Plan turns use `--approval-mode plan`.
-  - Image attachments are staged, included as allowed directories, and injected into the prompt with `@/path`.
+  - Image and PDF attachments are staged, included as allowed directories, and injected into the prompt with `@/path`.
 
 ## Important files changed
 
@@ -51,7 +54,7 @@
 ## What is intentionally deferred
 
 - Session-restart recovery for composer drafts. Drafts currently survive agent-tab switches in the running app session.
-- Rich image preview rendering in the conversation timeline. The current UI shows attachment chips and metadata only.
+- Rich preview rendering in the conversation timeline. The current UI limits preview to draft chips before send.
 - Structured plan rendering outside Codex. Claude, Cursor, and Gemini plan output remains assistant-message based.
 
 ## Validation status

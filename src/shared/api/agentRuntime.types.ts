@@ -14,6 +14,7 @@ export type AgentRuntimeSessionStatus = "idle" | "active" | "busy";
 export type AgentRuntimeStatus = "idle" | "running" | "waiting" | "error" | "stopped";
 
 export type AgentRuntimeInteractionMode = "default" | "plan";
+export type AgentRuntimeAttachmentKind = "image" | "pdf";
 
 export type AgentRuntimeMessageRole = "user" | "assistant" | "system";
 
@@ -54,7 +55,7 @@ export interface AgentRuntimeProviderFeatures {
   resume: boolean;
   structuredRequests: boolean;
   planMode: boolean;
-  imageAttachments: boolean;
+  attachmentKinds: AgentRuntimeAttachmentKind[];
   structuredPlanUi: boolean;
   usageInspection: boolean;
   providerExtras: boolean;
@@ -131,6 +132,7 @@ export interface AgentRuntimeAttachment {
   name: string;
   mimeType: string;
   sizeBytes: number;
+  kind: AgentRuntimeAttachmentKind;
 }
 
 export interface AgentRuntimeSessionSnapshot {

@@ -6,11 +6,13 @@ import {
   getAgentProviderIconClass,
   getDefaultAgentProvider,
   getAgentProviderLabel,
+  getAgentRuntimeProviderAttachmentKinds,
   getAgentRuntimeProviderDefaultModel,
   getAgentRuntimeProviderDescriptor,
   getAgentRuntimeProviderModelOptions,
   indexAgentRuntimeProviders,
   supportsAgentRuntimeImageAttachments,
+  supportsAgentRuntimePdfAttachments,
   supportsAgentRuntimePlanMode,
   supportsAgentRuntimeStructuredPlanUi,
 } from "./agentProviders.pure";
@@ -40,7 +42,7 @@ const capabilities: AgentRuntimeCapabilities = {
         resume: true,
         structuredRequests: false,
         planMode: true,
-        imageAttachments: true,
+        attachmentKinds: ["image"],
         structuredPlanUi: false,
         usageInspection: false,
         providerExtras: false,
@@ -65,7 +67,7 @@ const capabilities: AgentRuntimeCapabilities = {
         resume: true,
         structuredRequests: false,
         planMode: true,
-        imageAttachments: false,
+        attachmentKinds: [],
         structuredPlanUi: false,
         usageInspection: false,
         providerExtras: true,
@@ -90,7 +92,7 @@ const capabilities: AgentRuntimeCapabilities = {
         resume: true,
         structuredRequests: true,
         planMode: true,
-        imageAttachments: true,
+        attachmentKinds: ["image"],
         structuredPlanUi: true,
         usageInspection: true,
         providerExtras: true,
@@ -115,7 +117,7 @@ const capabilities: AgentRuntimeCapabilities = {
         resume: false,
         structuredRequests: false,
         planMode: true,
-        imageAttachments: true,
+        attachmentKinds: ["image", "pdf"],
         structuredPlanUi: false,
         usageInspection: false,
         providerExtras: true,
@@ -156,9 +158,11 @@ describe("agentProviders.pure", () => {
     ]);
   });
 
-  it("resolves plan and image attachment capability flags", () => {
+  it("resolves plan and attachment capability flags", () => {
     expect(supportsAgentRuntimePlanMode(capabilities, "claude")).toBe(true);
     expect(supportsAgentRuntimeImageAttachments(capabilities, "cursor")).toBe(false);
+    expect(supportsAgentRuntimePdfAttachments(capabilities, "gemini")).toBe(true);
+    expect(getAgentRuntimeProviderAttachmentKinds(capabilities, "codex")).toEqual(["image"]);
     expect(supportsAgentRuntimeStructuredPlanUi(capabilities, "codex")).toBe(true);
   });
 });
