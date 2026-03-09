@@ -1,5 +1,11 @@
 # divergence
 
+## 0.29.1
+
+### Patch Changes
+
+- a3bbf18: Add agent runtime telemetry for slow turns and improve agent conversation naming with automatic titles plus manual rename support.
+
 ## 0.29.0
 
 ### Minor Changes
