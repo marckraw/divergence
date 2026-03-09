@@ -731,6 +731,10 @@ function App() {
   const activeAgentSession = activeWorkspaceSession && isAgentSession(activeWorkspaceSession)
     ? activeWorkspaceSession
     : null;
+  const workspaceSessionList = useMemo(
+    () => Array.from(workspaceSessions.values()),
+    [workspaceSessions],
+  );
   const agentProviders = useMemo(() => {
     const available = getAvailableAgentProviders(agentRuntimeCapabilities);
     return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
@@ -865,8 +869,8 @@ function App() {
         </div>
       ) : activeAgentSession ? (
         <AgentSessionView
-          session={activeAgentSession}
-          sessionList={Array.from(workspaceSessions.values())}
+          sessionId={activeAgentSession.id}
+          sessionList={workspaceSessionList}
           activeSessionId={activeSessionId}
           idleAttentionSessionIds={idleAttentionSessionIds}
           capabilities={agentRuntimeCapabilities}

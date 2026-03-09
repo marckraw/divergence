@@ -1,24 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useMemo } from "react";
 import type { AgentSessionSnapshot } from "../../../entities";
-import {
-  createAgentRuntimeSession,
-  discardAgentRuntimeAttachment,
-  deleteAgentRuntimeSession,
-  getAgentRuntimeSession,
-  listAgentRuntimeSessions,
-  onAgentRuntimeSessionUpdated,
-  refreshAgentRuntimeCapabilities,
-  respondAgentRuntimeRequest,
-  stageAgentRuntimeAttachment,
-  startAgentRuntimeTurn,
-  stopAgentRuntimeSession,
-  updateAgentRuntimeSession,
-  type AgentRuntimeAttachment,
-  type AgentRuntimeCapabilities,
-  type AgentRuntimeInteractionMode,
-  type CreateAgentSessionInput,
+import type {
+  AgentRuntimeAttachment,
+  AgentRuntimeCapabilities,
+  AgentRuntimeInteractionMode,
+  CreateAgentSessionInput,
 } from "../../../shared";
-import { mapAgentRuntimeSnapshot } from "../lib/agentRuntimeSnapshot.pure";
+import {
+  createAgentRuntimeSessionState,
+  deleteAgentRuntimeSessionState,
+  discardAgentRuntimeAttachmentState,
+  getAgentRuntimeSessionState,
+  respondAgentRuntimeRequestState,
+  stageAgentRuntimeAttachmentState,
+  startAgentRuntimeTurnState,
+  stopAgentRuntimeSessionState,
+  updateAgentRuntimeSessionState,
+  useAgentRuntimeCapabilitiesState,
+  useAgentRuntimeSessionState,
+  useOrderedAgentRuntimeSessions,
+  useOrderedOpenAgentRuntimeSessions,
+} from "./agentRuntimeStore";
 
 interface UseAgentRuntimeInput {
   claudeOAuthToken: string;
@@ -28,7 +30,6 @@ interface UseAgentRuntimeResult {
   capabilities: AgentRuntimeCapabilities | null;
   agentSessions: Map<string, AgentSessionSnapshot>;
   openAgentSessions: Map<string, AgentSessionSnapshot>;
-  agentSessionsRef: MutableRefObject<Map<string, AgentSessionSnapshot>>;
   getSession: (sessionId: string) => Promise<AgentSessionSnapshot | null>;
   createSession: (input: CreateAgentSessionInput) => Promise<AgentSessionSnapshot>;
   startTurn: (
@@ -65,90 +66,34 @@ interface UseAgentRuntimeResult {
   deleteSession: (sessionId: string) => Promise<void>;
 }
 
+export function useAgentRuntimeSession(sessionId: string | null): AgentSessionSnapshot | null {
+  return useAgentRuntimeSessionState(sessionId);
+}
+
 export function useAgentRuntime({
   claudeOAuthToken,
 }: UseAgentRuntimeInput): UseAgentRuntimeResult {
-  const [capabilities, setCapabilities] = useState<AgentRuntimeCapabilities | null>(null);
-  const [agentSessions, setAgentSessions] = useState<Map<string, AgentSessionSnapshot>>(new Map());
-  const agentSessionsRef = useRef(agentSessions);
+  const capabilities = useAgentRuntimeCapabilitiesState();
+  const orderedAgentSessions = useOrderedAgentRuntimeSessions();
+  const orderedOpenAgentSessions = useOrderedOpenAgentRuntimeSessions();
 
-  useEffect(() => {
-    agentSessionsRef.current = agentSessions;
-  }, [agentSessions]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void refreshAgentRuntimeCapabilities()
-      .then((nextCapabilities) => {
-        if (!cancelled) {
-          setCapabilities(nextCapabilities);
-        }
-      })
-      .catch((error) => {
-        console.warn("Failed to load agent runtime capabilities:", error);
-      });
-
-    void listAgentRuntimeSessions()
-      .then((snapshots) => {
-        if (cancelled) {
-          return;
-        }
-        setAgentSessions(new Map(
-          snapshots.map((snapshot) => [snapshot.id, mapAgentRuntimeSnapshot(snapshot)])
-        ));
-      })
-      .catch((error) => {
-        console.warn("Failed to load agent runtime sessions:", error);
-      });
-
-    let removeListener: (() => void) | null = null;
-    void onAgentRuntimeSessionUpdated((event) => {
-      if (cancelled) {
-        return;
-      }
-      const snapshot = mapAgentRuntimeSnapshot(event.snapshot);
-      setAgentSessions((previous) => {
-        const next = new Map(previous);
-        next.set(snapshot.id, snapshot);
-        return next;
-      });
-    }).then((unlisten) => {
-      if (cancelled) {
-        void unlisten();
-        return;
-      }
-      removeListener = unlisten;
-    });
-
-    return () => {
-      cancelled = true;
-      if (removeListener) {
-        void removeListener();
-      }
-    };
-  }, []);
+  const agentSessions = useMemo(
+    () => new Map(orderedAgentSessions.map((session) => [session.id, session])),
+    [orderedAgentSessions],
+  );
+  const openAgentSessions = useMemo(
+    () => new Map(orderedOpenAgentSessions.map((session) => [session.id, session])),
+    [orderedOpenAgentSessions],
+  );
 
   const createSession = useCallback(async (
     input: CreateAgentSessionInput
   ): Promise<AgentSessionSnapshot> => {
-    const snapshot = mapAgentRuntimeSnapshot(await createAgentRuntimeSession(input));
-    setAgentSessions((previous) => {
-      const next = new Map(previous);
-      next.set(snapshot.id, snapshot);
-      return next;
-    });
-    return snapshot;
+    return createAgentRuntimeSessionState(input);
   }, []);
 
   const getSession = useCallback(async (sessionId: string): Promise<AgentSessionSnapshot | null> => {
-    const cached = agentSessionsRef.current.get(sessionId);
-    if (cached) {
-      return cached;
-    }
-
-    const snapshot = await getAgentRuntimeSession(sessionId);
-    return snapshot ? mapAgentRuntimeSnapshot(snapshot) : null;
+    return getAgentRuntimeSessionState(sessionId);
   }, []);
 
   const startTurn = useCallback(async (
@@ -163,18 +108,14 @@ export function useAgentRuntime({
     if (!prompt.trim()) {
       return;
     }
-    const snapshot = mapAgentRuntimeSnapshot(await startAgentRuntimeTurn({
+
+    await startAgentRuntimeTurnState({
       sessionId,
       prompt,
       interactionMode: options?.interactionMode,
       attachments: options?.attachments,
       claudeOAuthToken,
       automationMode: options?.automationMode,
-    }));
-    setAgentSessions((previous) => {
-      const next = new Map(previous);
-      next.set(snapshot.id, snapshot);
-      return next;
     });
   }, [claudeOAuthToken]);
 
@@ -184,18 +125,14 @@ export function useAgentRuntime({
     mimeType: string;
     base64Content: string;
   }): Promise<AgentRuntimeAttachment> => {
-    return stageAgentRuntimeAttachment(input);
+    return stageAgentRuntimeAttachmentState(input);
   }, []);
 
   const discardAttachment = useCallback(async (
     sessionId: string,
     attachmentId: string,
   ): Promise<void> => {
-    await discardAgentRuntimeAttachment(sessionId, attachmentId);
-  }, []);
-
-  const stopSession = useCallback(async (sessionId: string): Promise<void> => {
-    await stopAgentRuntimeSession(sessionId);
+    await discardAgentRuntimeAttachmentState(sessionId, attachmentId);
   }, []);
 
   const respondToRequest = useCallback(async (
@@ -203,28 +140,11 @@ export function useAgentRuntime({
     requestId: string,
     input: { decision?: string; answers?: string[] }
   ): Promise<void> => {
-    const snapshot = mapAgentRuntimeSnapshot(await respondAgentRuntimeRequest({
+    await respondAgentRuntimeRequestState({
       sessionId,
       requestId,
       decision: input.decision,
       answers: input.answers,
-    }));
-    setAgentSessions((previous) => {
-      const next = new Map(previous);
-      next.set(snapshot.id, snapshot);
-      return next;
-    });
-  }, []);
-
-  const deleteSession = useCallback(async (sessionId: string): Promise<void> => {
-    await deleteAgentRuntimeSession(sessionId);
-    setAgentSessions((previous) => {
-      if (!previous.has(sessionId)) {
-        return previous;
-      }
-      const next = new Map(previous);
-      next.delete(sessionId);
-      return next;
     });
   }, []);
 
@@ -237,12 +157,7 @@ export function useAgentRuntime({
       nameMode?: "default" | "auto" | "manual";
     }
   ): Promise<void> => {
-    const snapshot = mapAgentRuntimeSnapshot(await updateAgentRuntimeSession(input));
-    setAgentSessions((previous) => {
-      const next = new Map(previous);
-      next.set(snapshot.id, snapshot);
-      return next;
-    });
+    await updateAgentRuntimeSessionState(input);
   }, []);
 
   const openSession = useCallback(async (sessionId: string): Promise<void> => {
@@ -259,24 +174,18 @@ export function useAgentRuntime({
     });
   }, [updateSession]);
 
-  const orderedAgentSessions = useMemo(() => {
-    const items = Array.from(agentSessions.values());
-    items.sort((left, right) => right.updatedAtMs - left.updatedAtMs);
-    return new Map(items.map((item) => [item.id, item]));
-  }, [agentSessions]);
+  const stopSession = useCallback(async (sessionId: string): Promise<void> => {
+    await stopAgentRuntimeSessionState(sessionId);
+  }, []);
 
-  const orderedOpenAgentSessions = useMemo(() => {
-    const items = Array.from(agentSessions.values())
-      .filter((session) => session.isOpen)
-      .sort((left, right) => right.updatedAtMs - left.updatedAtMs);
-    return new Map(items.map((item) => [item.id, item]));
-  }, [agentSessions]);
+  const deleteSession = useCallback(async (sessionId: string): Promise<void> => {
+    await deleteAgentRuntimeSessionState(sessionId);
+  }, []);
 
   return {
     capabilities,
-    agentSessions: orderedAgentSessions,
-    openAgentSessions: orderedOpenAgentSessions,
-    agentSessionsRef,
+    agentSessions,
+    openAgentSessions,
     getSession,
     createSession,
     startTurn,
