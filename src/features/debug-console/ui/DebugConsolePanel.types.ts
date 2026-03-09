@@ -24,6 +24,7 @@ export interface DebugConsolePanelProps {
   onResetFilters: () => void;
   onInspectEvent: (event: DebugEvent) => void;
   onCloseInspectModal: () => void;
+  onRefreshAgentRuntimeSnapshot: () => Promise<void>;
   onRefreshTmuxDiagnostics: () => Promise<void>;
   onCopyJson: () => Promise<void>;
   onClear: () => void;

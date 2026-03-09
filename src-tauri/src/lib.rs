@@ -1,3 +1,4 @@
+mod agent_runtime;
 mod commands;
 mod db;
 mod git;
@@ -26,6 +27,7 @@ pub fn run() {
         .plugin(tauri_plugin_pty::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .manage(agent_runtime::AgentRuntimeState::new())
         .setup(|app| {
             // Initialize database
             let app_handle = app.handle().clone();
@@ -135,6 +137,16 @@ pub fn run() {
             commands::read_file_tail,
             commands::read_file_if_exists,
             commands::run_local_agent_prompt,
+            commands::get_agent_runtime_capabilities,
+            commands::refresh_agent_runtime_capabilities,
+            commands::list_agent_sessions,
+            commands::get_agent_session,
+            commands::create_agent_session,
+            commands::start_agent_turn,
+            commands::stop_agent_session,
+            commands::delete_agent_session,
+            commands::update_agent_session,
+            commands::respond_agent_request,
             commands::create_workspace_folder,
             commands::update_workspace_folder,
             commands::delete_workspace_folder,

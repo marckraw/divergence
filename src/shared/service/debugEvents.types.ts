@@ -1,6 +1,6 @@
 export type DebugEventLevel = "info" | "warn" | "error";
 
-export type DebugEventCategory = "app" | "terminal" | "tmux" | "automation";
+export type DebugEventCategory = "app" | "terminal" | "tmux" | "automation" | "agent_runtime";
 
 export interface DebugEvent {
   id: string;

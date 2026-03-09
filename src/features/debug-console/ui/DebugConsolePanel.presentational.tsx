@@ -24,6 +24,7 @@ const CATEGORY_FILTER_OPTIONS: Array<{ id: DebugCategoryFilter; label: string }>
   { id: "terminal", label: "Terminal" },
   { id: "tmux", label: "Tmux" },
   { id: "automation", label: "Automation" },
+  { id: "agent_runtime", label: "Agent Runtime" },
 ];
 
 function formatTimestamp(atMs: number): string {
@@ -48,6 +49,9 @@ function getCategoryClass(category: DebugEvent["category"]): string {
     return "bg-yellow/10 text-yellow";
   }
   if (category === "automation") {
+    return "bg-accent/10 text-accent";
+  }
+  if (category === "agent_runtime") {
     return "bg-accent/10 text-accent";
   }
   return "bg-surface text-text";
@@ -88,6 +92,7 @@ function DebugConsolePanelPresentational({
   onResetFilters,
   onInspectEvent,
   onCloseInspectModal,
+  onRefreshAgentRuntimeSnapshot,
   onRefreshTmuxDiagnostics,
   onCopyJson,
   onClear,
@@ -102,6 +107,17 @@ function DebugConsolePanelPresentational({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            onClick={() => {
+              void onRefreshAgentRuntimeSnapshot();
+            }}
+            variant="secondary"
+            size="sm"
+            className="px-3 py-1.5 text-xs rounded border border-surface text-text hover:bg-surface"
+          >
+            Capture agent runtime
+          </Button>
           <Button
             type="button"
             onClick={() => {

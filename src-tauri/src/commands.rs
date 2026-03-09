@@ -1,3 +1,7 @@
+use crate::agent_runtime::{
+    AgentRuntimeCapabilities, AgentRuntimeState, AgentSessionSnapshot, CreateAgentSessionInput,
+    RespondAgentRequestInput, StartAgentTurnInput, UpdateAgentSessionInput,
+};
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
 use serde::{Deserialize, Serialize};
@@ -7,6 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,6 +37,88 @@ pub struct Divergence {
 
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
+}
+
+#[tauri::command]
+pub async fn get_agent_runtime_capabilities(
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<AgentRuntimeCapabilities, String> {
+    agent_runtime.capabilities()
+}
+
+#[tauri::command]
+pub async fn refresh_agent_runtime_capabilities(
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<AgentRuntimeCapabilities, String> {
+    agent_runtime.refresh_capabilities()
+}
+
+#[tauri::command]
+pub async fn list_agent_sessions(
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<Vec<AgentSessionSnapshot>, String> {
+    agent_runtime.list_sessions()
+}
+
+#[tauri::command]
+pub async fn get_agent_session(
+    session_id: String,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<Option<AgentSessionSnapshot>, String> {
+    agent_runtime.get_session(&session_id)
+}
+
+#[tauri::command]
+pub async fn create_agent_session(
+    input: CreateAgentSessionInput,
+    app_handle: AppHandle,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<AgentSessionSnapshot, String> {
+    agent_runtime.create_session(&app_handle, input)
+}
+
+#[tauri::command]
+pub async fn start_agent_turn(
+    input: StartAgentTurnInput,
+    app_handle: AppHandle,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<AgentSessionSnapshot, String> {
+    agent_runtime.start_turn(app_handle, input)
+}
+
+#[tauri::command]
+pub async fn stop_agent_session(
+    session_id: String,
+    app_handle: AppHandle,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<(), String> {
+    agent_runtime.stop_session(&app_handle, &session_id).await
+}
+
+#[tauri::command]
+pub async fn delete_agent_session(
+    session_id: String,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<(), String> {
+    agent_runtime.delete_session(&session_id).await
+}
+
+#[tauri::command]
+pub async fn update_agent_session(
+    input: UpdateAgentSessionInput,
+    app_handle: AppHandle,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<AgentSessionSnapshot, String> {
+    agent_runtime.update_session(&app_handle, input)
+}
+
+#[tauri::command]
+pub async fn respond_agent_request(
+    input: RespondAgentRequestInput,
+    app_handle: AppHandle,
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<AgentSessionSnapshot, String> {
+    agent_runtime.respond_to_request(&app_handle, input)
 }
 
 #[tauri::command]

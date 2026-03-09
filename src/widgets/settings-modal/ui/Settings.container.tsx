@@ -3,8 +3,10 @@ import {
   DEFAULT_APP_SETTINGS,
   normalizeTmuxHistoryLimit,
   loadAppSettings,
+  refreshAgentRuntimeCapabilities,
   saveAppSettings,
   broadcastAppSettings,
+  type AgentRuntimeCapabilities,
 } from "../../../shared";
 import { getAppVersion } from "../../../shared/api/app.api";
 import { getUpdaterPresentation } from "../lib/updaterPresentation.pure";
@@ -33,6 +35,7 @@ function SettingsContainer({
   initialCategory,
 }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsState>(defaultSettings);
+  const [agentRuntimeCapabilities, setAgentRuntimeCapabilities] = useState<AgentRuntimeCapabilities | null>(null);
   const [loading, setLoading] = useState(true);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<SettingsCategoryId>(initialCategory ?? "general");
@@ -68,6 +71,9 @@ function SettingsContainer({
 
   useEffect(() => {
     void getAppVersion().then(setAppVersion).catch(() => {});
+    void refreshAgentRuntimeCapabilities().then(setAgentRuntimeCapabilities).catch((error) => {
+      console.warn("Failed to load agent runtime capabilities for settings:", error);
+    });
   }, []);
 
   const handleSave = useCallback(() => {
@@ -107,6 +113,7 @@ function SettingsContainer({
     <SettingsPresentational
       loading={loading}
       settings={settings}
+      agentRuntimeCapabilities={agentRuntimeCapabilities}
       appVersion={appVersion}
       updater={updater}
       updaterPresentation={updaterPresentation}

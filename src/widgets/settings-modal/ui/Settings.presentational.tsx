@@ -40,7 +40,7 @@ const SETTINGS_CATEGORIES: SettingsCategoryItem[] = [
   {
     id: "agents",
     label: "Agents",
-    description: "Command templates and auth",
+    description: "Providers, auth, and compatibility",
   },
   {
     id: "integrations",
@@ -63,6 +63,18 @@ const SETTINGS_CATEGORIES: SettingsCategoryItem[] = [
     description: "Version and updater",
   },
 ];
+
+function getProviderReadinessTone(status: "ready" | "partial" | "setup-required") {
+  switch (status) {
+    case "ready":
+      return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200";
+    case "setup-required":
+      return "border-red/30 bg-red/10 text-red";
+    case "partial":
+    default:
+      return "border-yellow/30 bg-yellow/10 text-yellow";
+  }
+}
 
 function CategorySidebarButton({
   category,
@@ -95,6 +107,7 @@ function CategorySidebarButton({
 function SettingsPresentational({
   loading,
   settings,
+  agentRuntimeCapabilities,
   appVersion,
   updater,
   updaterPresentation,
@@ -260,6 +273,75 @@ function SettingsPresentational({
 
               {activeCategory === "agents" && (
                 <>
+                  {agentRuntimeCapabilities && (
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-sm font-medium text-text">Provider Runtime Readiness</h3>
+                        <p className="mt-1 text-xs text-subtext">
+                          Divergence uses the official local CLI/app-server for each provider. Subscription-backed login lives inside those CLIs.
+                        </p>
+                      </div>
+                      <div className="grid gap-3">
+                        {agentRuntimeCapabilities.providers.map((provider) => (
+                          <div
+                            key={provider.id}
+                            className="rounded-xl border border-surface bg-main/50 p-3 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-text">{provider.label}</span>
+                                  <span className="rounded-full border border-surface bg-surface px-1.5 py-0.5 text-[10px] uppercase tracking-[0.18em] text-subtext">
+                                    {provider.transport}
+                                  </span>
+                                  <span className={`rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.18em] ${getProviderReadinessTone(provider.readiness.status)}`}>
+                                    {provider.readiness.status}
+                                  </span>
+                                </div>
+                                <p className="mt-1 text-xs text-subtext">{provider.readiness.summary}</p>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-[0.18em] text-subtext">Default model</div>
+                                <div className="mt-1 text-xs text-text">{provider.defaultModel}</div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 text-[11px] text-subtext">
+                              <span className="rounded-full bg-surface px-2 py-1">
+                                Auth: {provider.readiness.authStatus}
+                              </span>
+                              <span className="rounded-full bg-surface px-2 py-1">
+                                {provider.features.streaming ? "Streaming" : "Non-streaming"}
+                              </span>
+                              <span className="rounded-full bg-surface px-2 py-1">
+                                {provider.features.resume ? "Resumable" : "Snapshot-only"}
+                              </span>
+                              <span className="rounded-full bg-surface px-2 py-1">
+                                {provider.features.structuredRequests ? "Structured requests" : "No structured requests"}
+                              </span>
+                            </div>
+
+                            <div className="space-y-1">
+                              <div className="text-[11px] text-subtext">
+                                CLI: <span className="text-text">{provider.readiness.detectedCommand ?? "not detected"}</span>
+                              </div>
+                              <div className="text-[11px] text-subtext">
+                                Candidates: <span className="text-text">{provider.readiness.binaryCandidates.join(", ")}</span>
+                              </div>
+                              {provider.readiness.details.length > 0 && (
+                                <ul className="space-y-1 text-[11px] text-subtext">
+                                  {provider.readiness.details.map((detail) => (
+                                    <li key={detail}>• {detail}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-text mb-2">Claude Command Template</label>
                     <Textarea
@@ -267,7 +349,9 @@ function SettingsPresentational({
                       onChange={(event) => onUpdateSetting("agentCommandClaude", event.target.value)}
                       className="min-h-[110px]"
                     />
-                    <p className="text-xs text-subtext mt-1">Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.</p>
+                    <p className="text-xs text-subtext mt-1">
+                      Legacy/manual automation compatibility only. Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.
+                    </p>
                   </div>
 
                   <div>
@@ -277,7 +361,9 @@ function SettingsPresentational({
                       onChange={(event) => onUpdateSetting("agentCommandCodex", event.target.value)}
                       className="min-h-[110px]"
                     />
-                    <p className="text-xs text-subtext mt-1">Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.</p>
+                    <p className="text-xs text-subtext mt-1">
+                      Legacy/manual automation compatibility only. Supports <code>{"{workspacePath}"}</code> and <code>{"{briefPath}"}</code>.
+                    </p>
                   </div>
 
                   <div>

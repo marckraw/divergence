@@ -1,5 +1,6 @@
 import type { UpdateStatus } from "../../../shared";
 import type { EditorThemeId } from "../../../shared";
+import type { AgentRuntimeCapabilities } from "../../../shared";
 import type { UpdaterPresentation } from "../lib/updaterPresentation.pure";
 
 export interface UpdaterProp {
@@ -52,6 +53,7 @@ export type UpdateSettingHandler = <K extends keyof SettingsState>(
 export interface SettingsPresentationalProps {
   loading: boolean;
   settings: SettingsState;
+  agentRuntimeCapabilities: AgentRuntimeCapabilities | null;
   appVersion: string | null;
   updater: UpdaterProp;
   updaterPresentation: UpdaterPresentation;
