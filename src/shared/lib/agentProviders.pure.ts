@@ -1,4 +1,5 @@
 import type {
+  AgentRuntimeAttachmentKind,
   AgentRuntimeCapabilities,
   AgentRuntimeProvider,
   AgentRuntimeProviderDescriptor,
@@ -99,9 +100,21 @@ export function supportsAgentRuntimeImageAttachments(
   capabilities: AgentRuntimeCapabilities | null,
   provider: AgentRuntimeProvider
 ): boolean {
-  return (
-    getAgentRuntimeProviderDescriptor(capabilities, provider)?.features.imageAttachments ?? false
-  );
+  return getAgentRuntimeProviderAttachmentKinds(capabilities, provider).includes("image");
+}
+
+export function supportsAgentRuntimePdfAttachments(
+  capabilities: AgentRuntimeCapabilities | null,
+  provider: AgentRuntimeProvider
+): boolean {
+  return getAgentRuntimeProviderAttachmentKinds(capabilities, provider).includes("pdf");
+}
+
+export function getAgentRuntimeProviderAttachmentKinds(
+  capabilities: AgentRuntimeCapabilities | null,
+  provider: AgentRuntimeProvider
+): AgentRuntimeAttachmentKind[] {
+  return getAgentRuntimeProviderDescriptor(capabilities, provider)?.features.attachmentKinds ?? [];
 }
 
 export function supportsAgentRuntimeStructuredPlanUi(

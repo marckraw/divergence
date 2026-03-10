@@ -38,6 +38,10 @@ export {
   TextInput,
   SecretTokenField,
   ToolbarButton,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "./ui";
 export type {
   ButtonProps,
@@ -80,10 +84,12 @@ export {
   getAgentProviderIconClass,
   getAgentProviderLabel,
   getAgentRuntimeProviderDefaultModel,
+  getAgentRuntimeProviderAttachmentKinds,
   getAgentRuntimeProviderDescriptor,
   getAgentRuntimeProviderModelOptions,
   indexAgentRuntimeProviders,
   supportsAgentRuntimeImageAttachments,
+  supportsAgentRuntimePdfAttachments,
   supportsAgentRuntimePlanMode,
   supportsAgentRuntimeStructuredPlanUi,
 } from "./lib/agentProviders.pure";
@@ -213,6 +219,7 @@ export type {
   AgentRuntimeAttachment,
   AgentRuntimeActivity,
   AgentRuntimeActivityStatus,
+  AgentRuntimeAttachmentKind,
   AgentRuntimeCapabilities,
   AgentRuntimeDebugEvent,
   AgentRuntimeInteractionMode,

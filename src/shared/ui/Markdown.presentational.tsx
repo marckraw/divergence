@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "../lib/cn.pure";
@@ -170,21 +171,23 @@ function createMarkdownComponents(size: MarkdownProps["size"]): Components {
 }
 
 function Markdown({ content, className, size = "md" }: MarkdownProps) {
+  const components = useMemo(() => createMarkdownComponents(size), [size]);
+
   return (
     <div
       className={cn(
         "min-w-0 break-words text-text [&_:first-child]:mt-0 [&_:last-child]:mb-0",
         className,
       )}
-    >
-      <ReactMarkdown
-        components={createMarkdownComponents(size)}
-        remarkPlugins={[remarkGfm]}
       >
-        {content}
-      </ReactMarkdown>
-    </div>
+        <ReactMarkdown
+          components={components}
+          remarkPlugins={[remarkGfm]}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
   );
 }
 
-export default Markdown;
+export default memo(Markdown);
