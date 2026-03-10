@@ -5,17 +5,17 @@ export type {
   AgentMessageRole,
   AgentMessageStatus,
   AgentProvider,
-  AgentRequest,
-  AgentRequestKind,
-  AgentRequestStatus,
-  AgentRuntimeStatus,
   AgentSession,
   AgentSessionRole,
   AgentSessionSnapshot,
   AgentSessionStatus,
   AgentSessionTargetType,
+  AgentRequest,
+  AgentRequestKind,
+  AgentRequestStatus,
+  AgentRuntimeStatus,
 } from "./model/agentSession.types";
-export type { AgentRuntimeDebugEvent } from "../../shared";
+export type { AgentRuntimeConversationContext, AgentRuntimeDebugEvent } from "../../shared";
 export {
   createAgentSessionLabel,
   createEmptyAgentSessionSnapshot,

@@ -21,6 +21,7 @@ export type {
   AgentRequest,
   AgentRequestKind,
   AgentRequestStatus,
+  AgentRuntimeConversationContext,
   AgentRuntimeDebugEvent,
   AgentRuntimeStatus,
   AgentSession,

@@ -28,6 +28,7 @@ export function mapAgentRuntimeSnapshot(
     currentTurnStartedAtMs: snapshot.currentTurnStartedAtMs ?? null,
     lastRuntimeEventAtMs: snapshot.lastRuntimeEventAtMs ?? null,
     runtimePhase: snapshot.runtimePhase ?? null,
+    conversationContext: snapshot.conversationContext ?? null,
     runtimeEvents: snapshot.runtimeEvents,
     messages: snapshot.messages,
     activities: snapshot.activities,

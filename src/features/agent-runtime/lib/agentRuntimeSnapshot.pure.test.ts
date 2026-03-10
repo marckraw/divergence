@@ -24,6 +24,14 @@ describe("mapAgentRuntimeSnapshot", () => {
       currentTurnStartedAtMs: 12,
       lastRuntimeEventAtMs: 18,
       runtimePhase: "Waiting for model",
+      conversationContext: {
+        status: "available",
+        label: "12% left",
+        fractionUsed: 0.88,
+        fractionRemaining: 0.12,
+        detail: "Current conversation context remaining.",
+        source: "codex",
+      },
       runtimeEvents: [],
       messages: [],
       activities: [],
@@ -38,6 +46,7 @@ describe("mapAgentRuntimeSnapshot", () => {
     expect(snapshot.currentTurnStartedAtMs).toBe(12);
     expect(snapshot.lastRuntimeEventAtMs).toBe(18);
     expect(snapshot.runtimePhase).toBe("Waiting for model");
+    expect(snapshot.conversationContext?.label).toBe("12% left");
     expect(snapshot.lastActivity?.getTime()).toBe(20);
   });
 });
