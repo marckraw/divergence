@@ -420,6 +420,27 @@ impl AgentRuntimeState {
                 })?;
                 self.emit_snapshot_update(app, &snapshot);
             }
+            "thread/tokenUsage/updated" => {
+                let usage = params.get("usage").unwrap_or(&params);
+                let snapshot = self.mutate_session(session_id, |session| {
+                    session.conversation_context = Some(
+                        normalize_codex_conversation_context(usage).unwrap_or_else(|| {
+                            codex_unavailable_conversation_context(
+                                "Codex did not provide a usable conversation-context update.",
+                            )
+                        }),
+                    );
+                    push_runtime_event(
+                        session,
+                        "Context updated",
+                        "Codex reported current conversation context.",
+                        None,
+                    );
+                    session.updated_at_ms = now_ms();
+                    Ok(())
+                })?;
+                self.emit_snapshot_update(app, &snapshot);
+            }
             "item/agentMessage/delta" => {
                 let item_id = read_codex_route_item_id(&params);
                 let delta = params
@@ -673,7 +694,14 @@ impl AgentRuntimeState {
                     .and_then(|error| error.get("message"))
                     .and_then(Value::as_str)
                     .map(str::to_string);
+                let conversation_context = turn
+                    .get("usage")
+                    .and_then(normalize_codex_conversation_context)
+                    .or_else(|| params.get("usage").and_then(normalize_codex_conversation_context));
                 let snapshot = self.mutate_session(session_id, |session| {
+                    if let Some(next_context) = conversation_context.clone() {
+                        session.conversation_context = Some(next_context);
+                    }
                     if let Some(message) = last_assistant_message_mut(session) {
                         if matches!(message.status, AgentMessageStatus::Streaming) {
                             message.status = if error_message.is_some() {
@@ -960,6 +988,175 @@ fn read_codex_thread_id_from_response(response: &Value) -> Option<String> {
         .or_else(|| response.get("threadId").and_then(Value::as_str).map(str::to_string))
 }
 
+fn codex_unavailable_conversation_context(detail: &str) -> AgentConversationContext {
+    AgentConversationContext {
+        status: AgentConversationContextStatus::Unavailable,
+        label: "Unavailable".to_string(),
+        fraction_used: None,
+        fraction_remaining: None,
+        detail: Some(detail.to_string()),
+        source: AgentConversationContextSource::Codex,
+    }
+}
+
+fn normalize_codex_conversation_context(value: &Value) -> Option<AgentConversationContext> {
+    let fraction_remaining = find_fraction(
+        value,
+        &[
+            "fractionRemaining",
+            "remainingFraction",
+            "fraction_remaining",
+            "remaining_fraction",
+        ],
+    )
+    .or_else(|| {
+        find_percent_fraction(
+            value,
+            &[
+                "remainingPercent",
+                "percentRemaining",
+                "remaining_percent",
+                "percent_remaining",
+            ],
+        )
+    })
+    .or_else(|| {
+        let remaining_tokens = find_numeric(
+            value,
+            &[
+                "remainingTokens",
+                "tokensRemaining",
+                "remaining_tokens",
+                "tokens_remaining",
+            ],
+        )?;
+        let token_limit = find_numeric(
+            value,
+            &[
+                "maxTokens",
+                "tokenLimit",
+                "contextWindow",
+                "maxContextTokens",
+                "max_tokens",
+                "token_limit",
+                "context_window",
+                "max_context_tokens",
+                "limit",
+            ],
+        )?;
+        Some(clamp_fraction(remaining_tokens / token_limit))
+    });
+
+    let fraction_used = find_fraction(
+        value,
+        &[
+            "fractionUsed",
+            "usedFraction",
+            "fraction_used",
+            "used_fraction",
+        ],
+    )
+    .or_else(|| {
+        find_percent_fraction(
+            value,
+            &[
+                "usedPercent",
+                "percentUsed",
+                "used_percent",
+                "percent_used",
+                "utilization",
+            ],
+        )
+    })
+    .or_else(|| {
+        let used_tokens = find_numeric(
+            value,
+            &[
+                "usedTokens",
+                "tokensUsed",
+                "totalTokens",
+                "tokenCount",
+                "used_tokens",
+                "tokens_used",
+                "total_tokens",
+                "token_count",
+            ],
+        )?;
+        let token_limit = find_numeric(
+            value,
+            &[
+                "maxTokens",
+                "tokenLimit",
+                "contextWindow",
+                "maxContextTokens",
+                "max_tokens",
+                "token_limit",
+                "context_window",
+                "max_context_tokens",
+                "limit",
+            ],
+        )?;
+        Some(clamp_fraction(used_tokens / token_limit))
+    })
+    .or_else(|| fraction_remaining.map(|remaining| clamp_fraction(1.0 - remaining)));
+
+    let fraction_remaining = fraction_remaining
+        .or_else(|| fraction_used.map(|used| clamp_fraction(1.0 - used)))?;
+    let fraction_used = fraction_used.unwrap_or_else(|| clamp_fraction(1.0 - fraction_remaining));
+
+    Some(AgentConversationContext {
+        status: AgentConversationContextStatus::Available,
+        label: format!("{}% left", (fraction_remaining * 100.0).round() as i64),
+        fraction_used: Some(fraction_used),
+        fraction_remaining: Some(fraction_remaining),
+        detail: Some("Current conversation context remaining.".to_string()),
+        source: AgentConversationContextSource::Codex,
+    })
+}
+
+fn find_fraction(value: &Value, keys: &[&str]) -> Option<f64> {
+    find_numeric(value, keys).map(clamp_fraction)
+}
+
+fn find_percent_fraction(value: &Value, keys: &[&str]) -> Option<f64> {
+    find_numeric(value, keys).map(|value| {
+        let normalized = if value > 1.0 { value / 100.0 } else { value };
+        clamp_fraction(normalized)
+    })
+}
+
+fn find_numeric(value: &Value, keys: &[&str]) -> Option<f64> {
+    match value {
+        Value::Object(map) => {
+            for key in keys {
+                if let Some(number) = map.get(*key).and_then(value_as_f64) {
+                    return Some(number);
+                }
+            }
+            for child in map.values() {
+                if let Some(number) = find_numeric(child, keys) {
+                    return Some(number);
+                }
+            }
+            None
+        }
+        Value::Array(items) => items.iter().find_map(|item| find_numeric(item, keys)),
+        _ => None,
+    }
+}
+
+fn value_as_f64(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(number) => number.as_f64(),
+        Value::String(string) => string.parse::<f64>().ok(),
+        _ => None,
+    }
+}
+
+fn clamp_fraction(value: f64) -> f64 {
+    value.clamp(0.0, 1.0)
+}
+
 fn collect_codex_approval_decisions(
     available_decisions: Option<&Vec<Value>>,
 ) -> Vec<(AgentRequestOption, Value)> {
@@ -984,6 +1181,48 @@ fn collect_codex_approval_decisions(
     }
 
     decisions
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn normalizes_codex_context_from_percentage_payload() {
+        let context = normalize_codex_conversation_context(&json!({
+            "remainingPercent": 7
+        }))
+        .expect("expected context");
+
+        assert!(matches!(
+            context.status,
+            AgentConversationContextStatus::Available
+        ));
+        assert_eq!(context.label, "7% left");
+        assert_eq!(context.fraction_remaining, Some(0.07));
+        assert_eq!(context.fraction_used, Some(0.93));
+    }
+
+    #[test]
+    fn normalizes_codex_context_from_used_tokens_payload() {
+        let context = normalize_codex_conversation_context(&json!({
+            "usedTokens": 9300,
+            "maxTokens": 10000
+        }))
+        .expect("expected context");
+
+        assert_eq!(context.label, "7% left");
+        assert_eq!(context.fraction_remaining, Some(0.07));
+    }
+
+    #[test]
+    fn returns_none_for_unusable_codex_context_payload() {
+        assert!(normalize_codex_conversation_context(&json!({
+            "foo": "bar"
+        }))
+        .is_none());
+    }
 }
 
 fn default_codex_approval_decisions() -> HashMap<String, Value> {

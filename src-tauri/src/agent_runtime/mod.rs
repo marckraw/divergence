@@ -186,6 +186,34 @@ pub enum AgentMessageStatus {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentConversationContextStatus {
+    Available,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentConversationContextSource {
+    Codex,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentConversationContext {
+    pub status: AgentConversationContextStatus,
+    pub label: String,
+    #[serde(default)]
+    pub fraction_used: Option<f64>,
+    #[serde(default)]
+    pub fraction_remaining: Option<f64>,
+    #[serde(default)]
+    pub detail: Option<String>,
+    pub source: AgentConversationContextSource,
+}
+
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentAttachmentKind {
@@ -329,6 +357,8 @@ pub struct AgentSessionSnapshot {
     pub last_runtime_event_at_ms: Option<i64>,
     #[serde(default)]
     pub runtime_phase: Option<String>,
+    #[serde(default)]
+    pub conversation_context: Option<AgentConversationContext>,
     #[serde(default)]
     pub runtime_events: Vec<AgentRuntimeDebugEvent>,
     pub messages: Vec<AgentMessage>,
@@ -564,6 +594,7 @@ impl AgentRuntimeState {
             current_turn_started_at_ms: None,
             last_runtime_event_at_ms: None,
             runtime_phase: None,
+            conversation_context: None,
             runtime_events: Vec::new(),
             messages: Vec::new(),
             activities: Vec::new(),

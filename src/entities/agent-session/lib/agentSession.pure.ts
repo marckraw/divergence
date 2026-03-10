@@ -6,6 +6,7 @@ export function createEmptyAgentSessionSnapshot(session: AgentSession): AgentSes
     currentTurnStartedAtMs: null,
     lastRuntimeEventAtMs: null,
     runtimePhase: null,
+    conversationContext: null,
     runtimeEvents: [],
     messages: [],
     activities: [],

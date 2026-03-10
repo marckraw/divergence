@@ -15,6 +15,8 @@ export type AgentRuntimeStatus = "idle" | "running" | "waiting" | "error" | "sto
 
 export type AgentRuntimeInteractionMode = "default" | "plan";
 export type AgentRuntimeAttachmentKind = "image" | "pdf";
+export type AgentRuntimeConversationContextStatus = "available" | "unavailable";
+export type AgentRuntimeConversationContextSource = "codex" | "unavailable";
 
 export type AgentRuntimeMessageRole = "user" | "assistant" | "system";
 
@@ -115,6 +117,15 @@ export interface AgentRuntimeDebugEvent {
   details?: string;
 }
 
+export interface AgentRuntimeConversationContext {
+  status: AgentRuntimeConversationContextStatus;
+  label: string;
+  fractionUsed?: number | null;
+  fractionRemaining?: number | null;
+  detail?: string | null;
+  source: AgentRuntimeConversationContextSource;
+}
+
 export interface AgentRuntimeRequest {
   id: string;
   kind: AgentRuntimeRequestKind;
@@ -157,6 +168,7 @@ export interface AgentRuntimeSessionSnapshot {
   currentTurnStartedAtMs?: number | null;
   lastRuntimeEventAtMs?: number | null;
   runtimePhase?: string | null;
+  conversationContext?: AgentRuntimeConversationContext | null;
   runtimeEvents: AgentRuntimeDebugEvent[];
   messages: AgentRuntimeMessage[];
   activities: AgentRuntimeActivity[];

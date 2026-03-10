@@ -1,5 +1,6 @@
 import type {
   AgentRuntimeAttachment,
+  AgentRuntimeConversationContext,
   AgentRuntimeDebugEvent,
   AgentRuntimeInteractionMode,
   AgentRuntimeProvider,
@@ -104,6 +105,7 @@ export interface AgentSessionSnapshot extends AgentSession {
   currentTurnStartedAtMs?: number | null;
   lastRuntimeEventAtMs?: number | null;
   runtimePhase?: string | null;
+  conversationContext?: AgentRuntimeConversationContext | null;
   runtimeEvents: AgentRuntimeDebugEvent[];
   messages: AgentMessage[];
   activities: AgentActivity[];

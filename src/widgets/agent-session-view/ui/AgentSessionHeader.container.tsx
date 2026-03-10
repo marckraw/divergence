@@ -4,12 +4,18 @@ import {
   getAgentProviderLabel,
   getAgentRuntimeProviderModelOptions,
   Markdown,
+  ProgressBar,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "../../../shared";
+import { buildAgentConversationContextSummary } from "../lib/agentConversationContext.pure";
 import {
   buildAgentRuntimeTelemetrySummary,
   formatRuntimeEventOffset,
@@ -37,6 +43,10 @@ function AgentSessionHeaderContainer({
   const modelOptions = getAgentRuntimeProviderModelOptions(capabilities, session.provider);
   const providerLabel = getAgentProviderLabel(session.provider);
   const selectedModelLabel = getModelLabel(session.provider, session.model, capabilities);
+  const conversationContext = useMemo(
+    () => buildAgentConversationContextSummary(session),
+    [session],
+  );
   const telemetry = useMemo(
     () => buildAgentRuntimeTelemetrySummary(session, nowMs),
     [session, nowMs],
@@ -75,6 +85,35 @@ function AgentSessionHeaderContainer({
             </span>
           </div>
           <p className="mt-1 text-xs text-subtext truncate">{session.path}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-surface bg-main/50 px-2.5 py-1 text-[11px] text-subtext">
+                    <span className="uppercase tracking-[0.16em]">Context</span>
+                    {conversationContext.isAvailable && conversationContext.fractionUsed !== null ? (
+                      <ProgressBar
+                        value={conversationContext.fractionUsed * 100}
+                        max={100}
+                        className="h-1.5 w-12 bg-surface/90"
+                        barClassName={
+                          conversationContext.tone === "danger"
+                            ? "bg-red"
+                            : conversationContext.tone === "warning"
+                              ? "bg-yellow"
+                              : "bg-emerald-300"
+                        }
+                      />
+                    ) : null}
+                    <span>{conversationContext.label}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {conversationContext.detail}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
           {(session.runtimeStatus === "running"
             || session.runtimeStatus === "waiting"
             || hasRuntimeTelemetry) && (
