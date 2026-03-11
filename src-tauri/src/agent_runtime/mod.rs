@@ -247,7 +247,7 @@ pub struct AgentMessage {
     pub attachments: Option<Vec<AgentAttachment>>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentActivityStatus {
     Running,
@@ -261,6 +261,12 @@ pub struct AgentActivity {
     pub id: String,
     pub kind: String,
     pub title: String,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub subject: Option<String>,
+    #[serde(default)]
+    pub group_key: Option<String>,
     pub status: AgentActivityStatus,
     pub details: Option<String>,
     pub started_at_ms: i64,
@@ -1716,27 +1722,287 @@ fn complete_activity(
 ) {
     let completed_at_ms = now_ms();
     if let Some(activity) = session.activities.iter_mut().find(|item| item.id == activity_id) {
+        let had_metadata =
+            activity.summary.is_some() || activity.subject.is_some() || activity.group_key.is_some();
         activity.status = status;
         activity.completed_at_ms = Some(completed_at_ms);
         if let Some(details) = details {
             activity.details = Some(details);
         }
+        if !had_metadata {
+            refresh_activity_metadata(activity);
+        }
         return;
     }
 
-    session.activities.push(AgentActivity {
-        id: activity_id.to_string(),
-        kind: "tool".to_string(),
-        title: activity_id.to_string(),
+    session.activities.push(create_activity(
+        activity_id.to_string(),
+        "tool".to_string(),
+        activity_id.to_string(),
         status,
         details,
-        started_at_ms: completed_at_ms,
-        completed_at_ms: Some(completed_at_ms),
-    });
+        completed_at_ms,
+        Some(completed_at_ms),
+    ));
 }
 
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
+}
+
+fn create_activity(
+    id: String,
+    kind: String,
+    title: String,
+    status: AgentActivityStatus,
+    details: Option<String>,
+    started_at_ms: i64,
+    completed_at_ms: Option<i64>,
+) -> AgentActivity {
+    let (summary, subject, group_key) = derive_activity_metadata(&kind, &title, details.as_deref());
+
+    AgentActivity {
+        id,
+        kind,
+        title,
+        summary,
+        subject,
+        group_key,
+        status,
+        details,
+        started_at_ms,
+        completed_at_ms,
+    }
+}
+
+fn refresh_activity_metadata(activity: &mut AgentActivity) {
+    let (summary, subject, group_key) =
+        derive_activity_metadata(&activity.kind, &activity.title, activity.details.as_deref());
+    activity.summary = summary;
+    activity.subject = subject;
+    activity.group_key = group_key;
+}
+
+fn derive_activity_metadata(
+    kind: &str,
+    title: &str,
+    details: Option<&str>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let trimmed_title = title.trim();
+    let normalized_title = trimmed_title.to_ascii_lowercase();
+    let normalized_kind = kind.trim().to_ascii_lowercase();
+    let is_command_like = normalized_kind == "command_execution"
+        || matches!(normalized_title.as_str(), "bash" | "shell" | "command");
+    let subject = if is_command_like {
+        compact_command(trimmed_title).or_else(|| details.and_then(extract_activity_command_subject))
+    } else {
+        details.and_then(extract_activity_subject)
+    };
+    let subject_ref = subject.as_deref();
+
+    let (summary, group_key) = if is_command_like {
+        (
+            Some(format!(
+                "Ran {}",
+                subject_ref
+                    .map(str::to_string)
+                    .unwrap_or_else(|| trimmed_title.to_string())
+            )),
+            Some("command".to_string()),
+        )
+    } else if normalized_kind == "mcp_tool" {
+        (
+            Some(format!("Ran {}", compact_label(trimmed_title))),
+            Some(format!("mcp:{}", normalized_title)),
+        )
+    } else if normalized_title == "read" {
+        (
+            Some(match subject_ref {
+                Some(subject) => format!("Read {subject}"),
+                None => "Read file".to_string(),
+            }),
+            Some("read".to_string()),
+        )
+    } else if matches!(
+        normalized_title.as_str(),
+        "edit" | "multiedit" | "write" | "filechange"
+    ) || normalized_kind == "file_change"
+    {
+        (
+            Some(match subject_ref {
+                Some(subject) => format!("Edited {subject}"),
+                None => "Edited file".to_string(),
+            }),
+            Some("edit".to_string()),
+        )
+    } else if normalized_title == "todowrite" {
+        (
+            Some("Updated todo list".to_string()),
+            Some("todo".to_string()),
+        )
+    } else if matches!(normalized_title.as_str(), "search" | "grep" | "glob" | "ls") {
+        (
+            Some(match subject_ref {
+                Some(subject) => format!("Searched {subject}"),
+                None => format!("Ran {}", compact_label(trimmed_title)),
+            }),
+            Some("search".to_string()),
+        )
+    } else if normalized_title == "thinking" || normalized_kind == "thought_process" {
+        (
+            Some("Thinking".to_string()),
+            Some("thinking".to_string()),
+        )
+    } else {
+        (
+            Some(compact_label(trimmed_title)),
+            Some(format!("{}:{}", normalized_kind, normalized_title)),
+        )
+    };
+
+    (summary, subject, group_key)
+}
+
+fn extract_activity_subject(details: &str) -> Option<String> {
+    let trimmed = details.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        return extract_activity_subject_from_value(&value);
+    }
+
+    compact_subject(trimmed)
+}
+
+fn extract_activity_command_subject(details: &str) -> Option<String> {
+    let trimmed = details.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
+        for key in ["command", "cmd"] {
+            if let Some(subject) = extract_stringish_value(value.get(key)) {
+                return compact_command(&subject);
+            }
+        }
+        return extract_activity_subject_from_value(&value);
+    }
+
+    compact_command(trimmed)
+}
+
+fn extract_activity_subject_from_value(value: &Value) -> Option<String> {
+    let path_keys = [
+        "file_path",
+        "path",
+        "paths",
+        "filename",
+        "file",
+        "relative_workspace_path",
+    ];
+    for key in path_keys {
+        if let Some(subject) = extract_stringish_value(value.get(key)) {
+            return compact_subject(&subject);
+        }
+    }
+
+    let command_keys = ["command", "cmd"];
+    for key in command_keys {
+        if let Some(subject) = extract_stringish_value(value.get(key)) {
+            return compact_command(&subject);
+        }
+    }
+
+    let query_keys = ["pattern", "query", "term", "glob"];
+    for key in query_keys {
+        if let Some(subject) = extract_stringish_value(value.get(key)) {
+            return compact_subject(&subject);
+        }
+    }
+
+    None
+}
+
+fn extract_stringish_value(value: Option<&Value>) -> Option<String> {
+    match value {
+        Some(Value::String(text)) => Some(text.to_string()),
+        Some(Value::Array(items)) => items.iter().find_map(|item| match item {
+            Value::String(text) => Some(text.to_string()),
+            _ => None,
+        }),
+        _ => None,
+    }
+}
+
+fn compact_subject(subject: &str) -> Option<String> {
+    let trimmed = subject.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let display = if trimmed.contains('/') || trimmed.contains('\\') {
+        let basename = trimmed
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(trimmed)
+            .trim();
+        if basename.is_empty() { trimmed } else { basename }
+    } else {
+        trimmed
+    };
+
+    Some(truncate_inline(display, 48))
+}
+
+fn compact_command(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(truncate_inline(strip_shell_wrapper(trimmed), 56))
+}
+
+fn compact_label(label: &str) -> String {
+    truncate_inline(label.trim(), 56)
+}
+
+fn truncate_inline(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim().trim_end_matches("...[truncated]").trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+
+    let mut output: String = trimmed.chars().take(max_chars.saturating_sub(1)).collect();
+    output.push('…');
+    output
+}
+
+fn strip_shell_wrapper(command: &str) -> &str {
+    const PREFIXES: [&str; 6] = [
+        "/bin/zsh -lc ",
+        "zsh -lc ",
+        "/bin/bash -lc ",
+        "bash -lc ",
+        "/bin/sh -lc ",
+        "sh -lc ",
+    ];
+
+    for prefix in PREFIXES {
+        if let Some(rest) = command.strip_prefix(prefix) {
+            return rest
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+                .or_else(|| rest.strip_prefix('\'').and_then(|value| value.strip_suffix('\'')))
+                .unwrap_or(rest)
+                .trim();
+        }
+    }
+
+    command
 }
 
 fn truncate_details(input: &str) -> String {
@@ -1751,4 +2017,94 @@ fn truncate_details(input: &str) -> String {
 
 fn truncate_json_details(input: &Value) -> String {
     truncate_details(&input.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        create_activity, derive_activity_metadata, complete_activity, strip_shell_wrapper,
+        AgentActivityStatus, AgentAttachment, AgentConversationContext, AgentMessage,
+        AgentProvider, AgentRequest, AgentRuntimeDebugEvent, AgentRuntimeStatus,
+        AgentSessionNameMode, AgentSessionSnapshot, AgentSessionStatus, AgentSessionRole,
+        AgentTargetType,
+    };
+
+    #[test]
+    fn strip_shell_wrapper_removes_common_shell_prefixes() {
+        assert_eq!(
+            strip_shell_wrapper("/bin/zsh -lc \"sed -n '1,220p' package.json\""),
+            "sed -n '1,220p' package.json"
+        );
+        assert_eq!(
+            strip_shell_wrapper("bash -lc 'rg --files src'"),
+            "rg --files src"
+        );
+        assert_eq!(strip_shell_wrapper("pnpm lint"), "pnpm lint");
+    }
+
+    #[test]
+    fn derive_activity_metadata_treats_bash_as_command() {
+        let (summary, subject, group_key) = derive_activity_metadata(
+            "tool",
+            "Bash",
+            Some(r#"{"command":"/bin/zsh -lc \"sed -n '1,220p' package.json\""}"#),
+        );
+
+        assert_eq!(summary.as_deref(), Some("Ran sed -n '1,220p' package.json"));
+        assert_eq!(subject.as_deref(), Some("sed -n '1,220p' package.json"));
+        assert_eq!(group_key.as_deref(), Some("command"));
+    }
+
+    #[test]
+    fn complete_activity_preserves_existing_summary_metadata() {
+        let mut session = AgentSessionSnapshot {
+            id: "session-1".to_string(),
+            provider: AgentProvider::Claude,
+            model: "sonnet".to_string(),
+            target_type: AgentTargetType::Project,
+            target_id: 1,
+            project_id: 1,
+            workspace_owner_id: None,
+            workspace_key: "project:1".to_string(),
+            session_role: AgentSessionRole::Default,
+            name_mode: AgentSessionNameMode::Default,
+            name: "Session".to_string(),
+            path: "/tmp/project".to_string(),
+            status: AgentSessionStatus::Active,
+            runtime_status: AgentRuntimeStatus::Running,
+            is_open: true,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+            thread_id: None,
+            current_turn_started_at_ms: None,
+            last_runtime_event_at_ms: None,
+            runtime_phase: None,
+            conversation_context: None,
+            runtime_events: Vec::<AgentRuntimeDebugEvent>::new(),
+            messages: Vec::<AgentMessage>::new(),
+            activities: vec![create_activity(
+                "activity-1".to_string(),
+                "tool".to_string(),
+                "Bash".to_string(),
+                AgentActivityStatus::Running,
+                Some(r#"{"command":"ls apps"}"#.to_string()),
+                1,
+                None,
+            )],
+            pending_request: Option::<AgentRequest>::None,
+            error_message: None,
+        };
+
+        complete_activity(
+            &mut session,
+            "activity-1",
+            Some("/tmp/project/apps\n/tmp/project/apps/api".to_string()),
+            AgentActivityStatus::Completed,
+        );
+
+        let activity = &session.activities[0];
+        assert_eq!(activity.summary.as_deref(), Some("Ran ls apps"));
+        assert_eq!(activity.group_key.as_deref(), Some("command"));
+        assert_eq!(activity.details.as_deref(), Some("/tmp/project/apps\n/tmp/project/apps/api"));
+    }
 }
