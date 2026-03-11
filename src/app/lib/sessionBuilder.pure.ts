@@ -37,8 +37,19 @@ export interface BuildWorkspaceDivergenceSessionInput {
   portAllocation?: PortAllocation | null;
 }
 
+let lastEntropyTimestamp = 0;
+let entropyCounter = 0;
+
 export function generateSessionEntropy(): string {
-  return `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  const timestamp = Date.now();
+  if (timestamp === lastEntropyTimestamp) {
+    entropyCounter += 1;
+  } else {
+    lastEntropyTimestamp = timestamp;
+    entropyCounter = 0;
+  }
+
+  return `${timestamp}-${entropyCounter}`;
 }
 
 export function buildWorkspaceKey(type: "project" | "divergence" | "workspace" | "workspace_divergence", targetId: number): string {
