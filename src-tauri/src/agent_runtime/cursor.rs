@@ -185,15 +185,15 @@ impl AgentRuntimeState {
                                 };
                                 activity.details = Some(truncate_details(&next_details));
                             } else {
-                                session.activities.push(AgentActivity {
-                                    id: format!("cursor-thinking-{}", Uuid::new_v4()),
-                                    kind: "thought_process".to_string(),
-                                    title: "Thinking".to_string(),
-                                    status: AgentActivityStatus::Running,
-                                    details: Some(truncate_details(&details)),
-                                    started_at_ms: now_ms(),
-                                    completed_at_ms: None,
-                                });
+                                session.activities.push(create_activity(
+                                    format!("cursor-thinking-{}", Uuid::new_v4()),
+                                    "thought_process".to_string(),
+                                    "Thinking".to_string(),
+                                    AgentActivityStatus::Running,
+                                    Some(truncate_details(&details)),
+                                    now_ms(),
+                                    None,
+                                ));
                             }
                         }
                         "completed" => {
@@ -259,15 +259,15 @@ impl AgentRuntimeState {
                     let activity_title = title.clone();
                     let activity_details = details.clone();
                     if !session.activities.iter().any(|item| item.id == activity_id) {
-                        session.activities.push(AgentActivity {
-                            id: activity_id.clone(),
-                            kind: "tool".to_string(),
-                            title: activity_title,
-                            status: AgentActivityStatus::Running,
-                            details: activity_details,
-                            started_at_ms: now_ms(),
-                            completed_at_ms: None,
-                        });
+                        session.activities.push(create_activity(
+                            activity_id.clone(),
+                            "tool".to_string(),
+                            activity_title,
+                            AgentActivityStatus::Running,
+                            activity_details,
+                            now_ms(),
+                            None,
+                        ));
                     }
                     push_runtime_event(
                         session,

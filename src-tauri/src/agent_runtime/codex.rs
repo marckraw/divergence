@@ -504,15 +504,15 @@ impl AgentRuntimeState {
                     let snapshot = self.mutate_session(session_id, |session| {
                         let cwd_details = cwd.clone();
                         if !session.activities.iter().any(|activity| activity.id == activity_id) {
-                            session.activities.push(AgentActivity {
-                                id: activity_id.clone(),
-                                kind: "command_execution".to_string(),
-                                title: command.clone(),
-                                status: AgentActivityStatus::Running,
-                                details: cwd_details,
-                                started_at_ms: now_ms(),
-                                completed_at_ms: None,
-                            });
+                            session.activities.push(create_activity(
+                                activity_id.clone(),
+                                "command_execution".to_string(),
+                                command.clone(),
+                                AgentActivityStatus::Running,
+                                cwd_details,
+                                now_ms(),
+                                None,
+                            ));
                         }
                         push_runtime_event(
                             session,
@@ -540,15 +540,15 @@ impl AgentRuntimeState {
                         let activity_title = title.clone();
                         let activity_details = details.clone();
                         if !session.activities.iter().any(|activity| activity.id == activity_id) {
-                            session.activities.push(AgentActivity {
-                                id: activity_id.clone(),
-                                kind: "mcp_tool".to_string(),
-                                title: activity_title,
-                                status: AgentActivityStatus::Running,
-                                details: activity_details,
-                                started_at_ms: now_ms(),
-                                completed_at_ms: None,
-                            });
+                            session.activities.push(create_activity(
+                                activity_id.clone(),
+                                "mcp_tool".to_string(),
+                                activity_title,
+                                AgentActivityStatus::Running,
+                                activity_details,
+                                now_ms(),
+                                None,
+                            ));
                         }
                         push_runtime_event(
                             session,
@@ -634,12 +634,29 @@ impl AgentRuntimeState {
                         .to_string();
                     let details = item.get("changes").map(truncate_json_details);
                     let snapshot = self.mutate_session(session_id, |session| {
-                        complete_activity(
-                            session,
-                            &activity_id,
-                            details,
-                            AgentActivityStatus::Completed,
-                        );
+                        let completed_at_ms = now_ms();
+                        if let Some(activity) = session
+                            .activities
+                            .iter_mut()
+                            .find(|activity| activity.id == activity_id)
+                        {
+                            activity.status = AgentActivityStatus::Completed;
+                            activity.completed_at_ms = Some(completed_at_ms);
+                            if let Some(details) = details.clone() {
+                                activity.details = Some(details);
+                            }
+                            refresh_activity_metadata(activity);
+                        } else {
+                            session.activities.push(create_activity(
+                                activity_id.clone(),
+                                "file_change".to_string(),
+                                "fileChange".to_string(),
+                                AgentActivityStatus::Completed,
+                                details,
+                                completed_at_ms,
+                                Some(completed_at_ms),
+                            ));
+                        }
                         push_runtime_event(
                             session,
                             "Applied changes",

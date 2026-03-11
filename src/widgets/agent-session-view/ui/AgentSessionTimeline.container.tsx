@@ -65,6 +65,9 @@ function areActivitiesEqual(left: AgentActivity, right: AgentActivity): boolean 
   return left.id === right.id
     && left.kind === right.kind
     && left.title === right.title
+    && left.summary === right.summary
+    && left.subject === right.subject
+    && left.groupKey === right.groupKey
     && left.status === right.status
     && left.details === right.details
     && left.startedAtMs === right.startedAtMs
@@ -127,18 +130,67 @@ const AgentTimelineMessageRow = memo(function AgentTimelineMessageRow({
   );
 }, (previous, next) => areMessagesEqual(previous.message, next.message));
 
-function AgentTimelineActivityRow({
+function formatActivityKind(kind: string): string {
+  return kind.replace(/_/g, " ");
+}
+
+function AgentTimelineActivityStep({
   activity,
 }: {
   activity: AgentActivity;
 }) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const summary = activity.summary || activity.title;
+
+  return (
+    <div className="min-w-0 rounded-md border border-surface/60 bg-main/20 px-2 py-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 rounded-full border border-surface/80 px-1.5 py-0.5 text-[8px] uppercase tracking-[0.14em] text-subtext/80">
+          {formatActivityKind(activity.kind)}
+        </span>
+        <p className="min-w-0 flex-1 truncate text-[12px] leading-4 text-subtext">
+          {summary}
+        </p>
+        <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[8px] uppercase tracking-[0.14em] ${getActivityToneClass(activity.status)}`}>
+          {activity.status}
+        </span>
+        {activity.details && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="h-auto shrink-0 px-1 py-0 text-[9px] text-subtext/80 hover:text-text"
+            onClick={() => {
+              setIsDetailsOpen((previous) => !previous);
+            }}
+          >
+            {isDetailsOpen ? "Hide" : "Details"}
+          </Button>
+        )}
+      </div>
+      {activity.details && isDetailsOpen && (
+        <pre className="mt-1.5 overflow-x-auto rounded-lg border border-surface/80 bg-main/80 p-2 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-subtext">
+          {activity.details}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+function AgentTimelineActivityRow({
+  activity,
+  summary,
+}: {
+  activity: AgentActivity;
+  summary: string;
+}) {
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   return (
     <div className="mr-auto flex w-full max-w-[58rem] gap-2 pl-0.5">
-      <div className="relative flex w-3.5 shrink-0 justify-center">
+      <div className="relative flex w-3 shrink-0 justify-center">
         <div className="absolute inset-y-0 w-px bg-surface/40" />
-        <div className={`relative mt-2.5 h-1.5 w-1.5 rounded-full opacity-80 ${
+        <div className={`relative mt-2.5 h-1 w-1 rounded-full opacity-65 ${
           activity.status === "error"
             ? "bg-red"
             : activity.status === "running"
@@ -154,10 +206,10 @@ function AgentTimelineActivityRow({
             Thought Process
           </span>
           <span className="shrink-0 rounded-full border border-surface px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-subtext">
-            {activity.kind}
+            {formatActivityKind(activity.kind)}
           </span>
           <p className="min-w-0 flex-1 truncate text-sm leading-5 text-text">
-            {activity.title}
+            {summary}
           </p>
           <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] ${getActivityToneClass(activity.status)}`}>
             {activity.status}
@@ -188,15 +240,92 @@ function AgentTimelineActivityRow({
 
 const AgentTimelineActivityMemoRow = memo(AgentTimelineActivityRow, (previous, next) => (
   areActivitiesEqual(previous.activity, next.activity)
+  && previous.summary === next.summary
 ));
+
+function AgentTimelineActivityGroupRow({
+  activities,
+  status,
+  summary,
+}: {
+  activities: AgentActivity[];
+  status: AgentActivity["status"];
+  summary: string;
+}) {
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  return (
+    <div className="mr-auto flex w-full max-w-[58rem] gap-2 pl-0.5">
+      <div className="relative flex w-3 shrink-0 justify-center">
+        <div className="absolute inset-y-0 w-px bg-surface/40" />
+        <div className={`relative mt-2.5 h-1 w-1 rounded-full opacity-65 ${
+          status === "error"
+            ? "bg-red"
+            : status === "running"
+              ? "bg-yellow"
+              : "bg-accent"
+        }`}
+        />
+      </div>
+
+      <div className="min-w-0 flex-1 rounded-lg border border-surface/80 bg-sidebar/45 px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="shrink-0 text-[8px] uppercase tracking-[0.16em] text-subtext">
+            Thought Process
+          </span>
+          <span className="shrink-0 rounded-full border border-surface px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-subtext">
+            tool burst
+          </span>
+          <p className="min-w-0 flex-1 truncate text-sm leading-5 text-text">
+            {summary}
+          </p>
+          <span className="shrink-0 rounded-full border border-surface px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] text-subtext">
+            {activities.length} steps
+          </span>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-[0.14em] ${getActivityToneClass(status)}`}>
+            {status}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="h-auto shrink-0 px-1 py-0 text-[10px] text-subtext hover:text-text"
+            onClick={() => {
+              setIsExpanded((previous) => !previous);
+            }}
+          >
+            {isExpanded ? "Hide" : "Details"}
+          </Button>
+        </div>
+        {isExpanded && (
+          <div className="mt-2 space-y-1.5">
+            {activities.map((activity) => (
+              <AgentTimelineActivityStep key={activity.id} activity={activity} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const AgentTimelineRow = memo(function AgentTimelineRow({
   item,
 }: {
   item: AgentTimelineItem;
 }) {
+  if (item.kind === "activity_group") {
+    return (
+      <AgentTimelineActivityGroupRow
+        activities={item.activities}
+        status={item.status}
+        summary={item.summary}
+      />
+    );
+  }
+
   if (item.kind === "activity") {
-    return <AgentTimelineActivityMemoRow activity={item.activity} />;
+    return <AgentTimelineActivityMemoRow activity={item.activity} summary={item.summary} />;
   }
 
   return <AgentTimelineMessageRow message={item.message} />;
