@@ -1,6 +1,7 @@
 import type { UpdateStatus } from "../../../shared";
 import type { EditorThemeId } from "../../../shared";
 import type { AgentRuntimeCapabilities } from "../../../shared";
+import type { CustomAgentModels } from "../../../shared";
 import type { UpdaterPresentation } from "../lib/updaterPresentation.pure";
 
 export interface UpdaterProp {
@@ -34,6 +35,7 @@ export interface SettingsState {
   linearApiToken: string;
   cloudApiBaseUrl: string;
   cloudApiToken: string;
+  customAgentModels: CustomAgentModels;
 }
 
 export type SettingsCategoryId =

@@ -149,6 +149,17 @@ describe("agentProviders.pure", () => {
     expect(getAgentRuntimeProviderModelOptions(capabilities, "cursor")).toHaveLength(1);
   });
 
+  it("merges built-in and custom model options without duplicates", () => {
+    expect(
+      getAgentRuntimeProviderModelOptions(capabilities, "codex", {
+        codex: ["gpt-5.4", "o3"],
+      }),
+    ).toEqual([
+      { slug: "gpt-5.4", label: "gpt-5.4" },
+      { slug: "o3", label: "o3" },
+    ]);
+  });
+
   it("returns available providers in stable order", () => {
     expect(getAvailableAgentProviders(capabilities)).toEqual([
       "claude",

@@ -1,3 +1,5 @@
+import type { Divergence } from "../../../entities";
+
 export type GithubPrChecksState = "success" | "pending" | "failure" | "unknown";
 
 export type GithubPullRequestMergeMethod = "merge" | "squash";
@@ -11,14 +13,8 @@ export interface GithubPrProjectTarget {
   repoKey: string;
 }
 
-export interface GithubPullRequestSummary {
+export interface GithubPullRequestRemoteSummary {
   id: number;
-  projectId: number;
-  projectName: string;
-  projectPath: string;
-  owner: string;
-  repo: string;
-  repoKey: string;
   number: number;
   title: string;
   htmlUrl: string;
@@ -31,6 +27,15 @@ export interface GithubPullRequestSummary {
   draft: boolean;
   mergeable: boolean | null;
   mergeableState: string | null;
+}
+
+export interface GithubPullRequestSummary extends GithubPullRequestRemoteSummary {
+  projectId: number;
+  projectName: string;
+  projectPath: string;
+  owner: string;
+  repo: string;
+  repoKey: string;
 }
 
 export interface GithubPullRequestDetail {
@@ -74,3 +79,5 @@ export interface GithubPullRequestMergeResult {
   method: string;
   mergedAtMs: number | null;
 }
+
+export type GithubPrReviewDivergenceResult = Divergence;

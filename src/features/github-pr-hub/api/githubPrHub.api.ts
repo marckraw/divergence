@@ -1,22 +1,41 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  GithubPrReviewDivergenceResult,
   GithubPullRequestDetail,
   GithubPullRequestFile,
   GithubPullRequestMergeMethod,
   GithubPullRequestMergeResult,
-  GithubPullRequestSummary,
+  GithubPullRequestRemoteSummary,
 } from "../model/githubPrHub.types";
+import {
+  parseGithubPrReviewDivergenceResult,
+  parseGithubPullRequestDetail,
+  parseGithubPullRequestFiles,
+  parseGithubPullRequestMergeResult,
+  parseGithubPullRequestRemoteSummaries,
+} from "./githubPrHub.schemas";
+
+interface PrepareGithubPrReviewDivergenceInput {
+  token: string;
+  projectId: number;
+  projectName: string;
+  projectPath: string;
+  pullRequestOwner: string;
+  pullRequestRepo: string;
+  pullRequestNumber: number;
+  copyIgnoredSkip: string[];
+}
 
 export async function fetchGithubPullRequestsForRepo(
   token: string,
   owner: string,
   repo: string,
-): Promise<GithubPullRequestSummary[]> {
-  return invoke<GithubPullRequestSummary[]>("fetch_github_pull_requests", {
+): Promise<GithubPullRequestRemoteSummary[]> {
+  return parseGithubPullRequestRemoteSummaries(await invoke<unknown>("fetch_github_pull_requests", {
     token,
     owner,
     repo,
-  });
+  }));
 }
 
 export async function fetchGithubPullRequestDetail(
@@ -25,12 +44,12 @@ export async function fetchGithubPullRequestDetail(
   repo: string,
   number: number,
 ): Promise<GithubPullRequestDetail> {
-  return invoke<GithubPullRequestDetail>("fetch_github_pull_request_detail", {
+  return parseGithubPullRequestDetail(await invoke<unknown>("fetch_github_pull_request_detail", {
     token,
     owner,
     repo,
     number,
-  });
+  }));
 }
 
 export async function fetchGithubPullRequestFiles(
@@ -41,14 +60,14 @@ export async function fetchGithubPullRequestFiles(
   page: number = 1,
   perPage: number = 100,
 ): Promise<GithubPullRequestFile[]> {
-  return invoke<GithubPullRequestFile[]>("fetch_github_pull_request_files", {
+  return parseGithubPullRequestFiles(await invoke<unknown>("fetch_github_pull_request_files", {
     token,
     owner,
     repo,
     number,
     page,
     perPage,
-  });
+  }));
 }
 
 export async function mergeGithubPullRequest(
@@ -59,13 +78,21 @@ export async function mergeGithubPullRequest(
   method: GithubPullRequestMergeMethod,
   expectedHeadSha: string,
 ): Promise<GithubPullRequestMergeResult> {
-  return invoke<GithubPullRequestMergeResult>("merge_github_pull_request", {
+  return parseGithubPullRequestMergeResult(await invoke<unknown>("merge_github_pull_request", {
     token,
     owner,
     repo,
     number,
     method,
     expectedHeadSha,
-  });
+  }));
 }
 
+export async function prepareGithubPrReviewDivergence(
+  input: PrepareGithubPrReviewDivergenceInput,
+): Promise<GithubPrReviewDivergenceResult> {
+  return parseGithubPrReviewDivergenceResult(await invoke<unknown>(
+    "prepare_github_pr_review_divergence",
+    { input: { ...input } },
+  ));
+}

@@ -11,33 +11,45 @@ import type {
   StartAgentTurnInput,
   UpdateAgentSessionInput,
 } from "./agentRuntime.types";
+import {
+  parseAgentRuntimeAttachment,
+  parseAgentRuntimeCapabilities,
+  parseAgentRuntimeSessionSnapshot,
+  parseAgentRuntimeSessionSnapshots,
+  parseAgentRuntimeSessionUpdatedEvent,
+} from "./agentRuntime.schemas";
 
 const AGENT_RUNTIME_UPDATED_EVENT = "agent-runtime-session-updated";
 
 export async function getAgentRuntimeCapabilities(): Promise<AgentRuntimeCapabilities> {
-  return invoke<AgentRuntimeCapabilities>("get_agent_runtime_capabilities");
+  return parseAgentRuntimeCapabilities(
+    await invoke<unknown>("get_agent_runtime_capabilities")
+  );
 }
 
 export async function refreshAgentRuntimeCapabilities(): Promise<AgentRuntimeCapabilities> {
-  return invoke<AgentRuntimeCapabilities>("refresh_agent_runtime_capabilities");
+  return parseAgentRuntimeCapabilities(
+    await invoke<unknown>("refresh_agent_runtime_capabilities")
+  );
 }
 
 export async function listAgentRuntimeSessions(): Promise<AgentRuntimeSessionSnapshot[]> {
-  return invoke<AgentRuntimeSessionSnapshot[]>("list_agent_sessions");
+  return parseAgentRuntimeSessionSnapshots(await invoke<unknown>("list_agent_sessions"));
 }
 
 export async function getAgentRuntimeSession(
   sessionId: string
 ): Promise<AgentRuntimeSessionSnapshot | null> {
-  return invoke<AgentRuntimeSessionSnapshot | null>("get_agent_session", {
+  const response = await invoke<unknown>("get_agent_session", {
     sessionId,
   });
+  return response === null ? null : parseAgentRuntimeSessionSnapshot(response);
 }
 
 export async function createAgentRuntimeSession(
   input: CreateAgentSessionInput
 ): Promise<AgentRuntimeSessionSnapshot> {
-  return invoke<AgentRuntimeSessionSnapshot>("create_agent_session", {
+  return parseAgentRuntimeSessionSnapshot(await invoke<unknown>("create_agent_session", {
     input: {
       provider: input.provider,
       targetType: input.targetType,
@@ -51,13 +63,13 @@ export async function createAgentRuntimeSession(
       name: input.name,
       path: input.path,
     },
-  });
+  }));
 }
 
 export async function startAgentRuntimeTurn(
   input: StartAgentTurnInput
 ): Promise<AgentRuntimeSessionSnapshot> {
-  return invoke<AgentRuntimeSessionSnapshot>("start_agent_turn", {
+  return parseAgentRuntimeSessionSnapshot(await invoke<unknown>("start_agent_turn", {
     input: {
       sessionId: input.sessionId,
       prompt: input.prompt,
@@ -66,20 +78,20 @@ export async function startAgentRuntimeTurn(
       claudeOAuthToken: input.claudeOAuthToken,
       automationMode: input.automationMode,
     },
-  });
+  }));
 }
 
 export async function stageAgentRuntimeAttachment(
   input: StageAgentRuntimeAttachmentInput
 ): Promise<AgentRuntimeAttachment> {
-  return invoke<AgentRuntimeAttachment>("stage_agent_attachment", {
+  return parseAgentRuntimeAttachment(await invoke<unknown>("stage_agent_attachment", {
     input: {
       sessionId: input.sessionId,
       name: input.name,
       mimeType: input.mimeType,
       base64Content: input.base64Content,
     },
-  });
+  }));
 }
 
 export async function discardAgentRuntimeAttachment(
@@ -107,20 +119,20 @@ export async function deleteAgentRuntimeSession(sessionId: string): Promise<void
 export async function respondAgentRuntimeRequest(
   input: RespondAgentRequestInput
 ): Promise<AgentRuntimeSessionSnapshot> {
-  return invoke<AgentRuntimeSessionSnapshot>("respond_agent_request", {
+  return parseAgentRuntimeSessionSnapshot(await invoke<unknown>("respond_agent_request", {
     input: {
       sessionId: input.sessionId,
       requestId: input.requestId,
       decision: input.decision,
       answers: input.answers,
     },
-  });
+  }));
 }
 
 export async function updateAgentRuntimeSession(
   input: UpdateAgentSessionInput
 ): Promise<AgentRuntimeSessionSnapshot> {
-  return invoke<AgentRuntimeSessionSnapshot>("update_agent_session", {
+  return parseAgentRuntimeSessionSnapshot(await invoke<unknown>("update_agent_session", {
     input: {
       sessionId: input.sessionId,
       isOpen: input.isOpen,
@@ -128,13 +140,17 @@ export async function updateAgentRuntimeSession(
       name: input.name,
       nameMode: input.nameMode,
     },
-  });
+  }));
 }
 
 export async function onAgentRuntimeSessionUpdated(
   callback: (event: AgentRuntimeSessionUpdatedEvent) => void
 ): Promise<() => void> {
-  return listen<AgentRuntimeSessionUpdatedEvent>(AGENT_RUNTIME_UPDATED_EVENT, (event) => {
-    callback(event.payload);
+  return listen<unknown>(AGENT_RUNTIME_UPDATED_EVENT, (event) => {
+    try {
+      callback(parseAgentRuntimeSessionUpdatedEvent(event.payload));
+    } catch (error) {
+      console.warn("Dropped malformed agent runtime update event:", error);
+    }
   });
 }

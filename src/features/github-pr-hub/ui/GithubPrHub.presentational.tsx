@@ -8,10 +8,12 @@ import {
 } from "../../../shared";
 import {
   formatRelativeTime,
+  getDiffTreeRowToneClass,
   getChecksToneClass,
   getGithubFileStatusToneClass,
   hasGithubMergeConflicts,
 } from "../lib/githubPrHub.pure";
+import { buildGithubPrDiffTreeRows } from "../lib/githubPrDiffTree.pure";
 import type {
   GithubPrProjectTarget,
   GithubPullRequestDetail,
@@ -39,6 +41,8 @@ interface GithubPrHubPresentationalProps {
   selectedFilePath: string | null;
   mergeMethod: GithubPullRequestMergeMethod;
   merging: boolean;
+  openingReviewDivergence: boolean;
+  reviewDivergenceError: string | null;
   isChatOpen: boolean;
   chatSidebar: ReactNode;
   onSelectProjectFilter: (value: "all" | number) => void;
@@ -51,6 +55,7 @@ interface GithubPrHubPresentationalProps {
   onSelectFilePath: (path: string | null) => void;
   onMergeMethodChange: (method: GithubPullRequestMergeMethod) => void;
   onMerge: () => Promise<boolean>;
+  onOpenReviewDivergence: () => Promise<void>;
 }
 
 function renderProjectFilterOptions(targets: GithubPrProjectTarget[]) {
@@ -84,6 +89,8 @@ function GithubPrHubPresentational({
   selectedFilePath,
   mergeMethod,
   merging,
+  openingReviewDivergence,
+  reviewDivergenceError,
   isChatOpen,
   chatSidebar,
   onSelectProjectFilter,
@@ -96,10 +103,12 @@ function GithubPrHubPresentational({
   onSelectFilePath,
   onMergeMethodChange,
   onMerge,
+  onOpenReviewDivergence,
 }: GithubPrHubPresentationalProps) {
   const isDetailView = selectedPullRequest !== null;
   const projectOptions = renderProjectFilterOptions(projectTargets);
   const selectedFile = detailFiles.find((file) => file.filename === selectedFilePath) ?? detailFiles[0] ?? null;
+  const diffTreeRows = buildGithubPrDiffTreeRows(detailFiles);
 
   if (!isDetailView) {
     return (
@@ -278,6 +287,15 @@ function GithubPrHubPresentational({
           <div className="flex items-center gap-2 shrink-0">
             <Button
               type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => { void onOpenReviewDivergence(); }}
+              disabled={detailLoading || openingReviewDivergence}
+            >
+              {openingReviewDivergence ? "Opening Review..." : "Open Review Divergence"}
+            </Button>
+            <Button
+              type="button"
               variant={isChatOpen ? "secondary" : "ghost"}
               size="sm"
               onClick={onToggleChat}
@@ -299,6 +317,7 @@ function GithubPrHubPresentational({
       <div className={`flex-1 min-h-0 grid ${isChatOpen ? "grid-cols-[360px_minmax(0,1fr)_400px]" : "grid-cols-[360px_1fr]"}`}>
         <div className="border-r border-surface overflow-y-auto p-4 space-y-4">
           {detailError && <ErrorBanner>{detailError}</ErrorBanner>}
+          {reviewDivergenceError && <ErrorBanner>{reviewDivergenceError}</ErrorBanner>}
           {detailLoading && (
             <div className="text-sm text-subtext">
               <LoadingSpinner>Loading pull request details...</LoadingSpinner>
@@ -373,27 +392,47 @@ function GithubPrHubPresentational({
                   <p className="text-xs text-subtext">No file changes loaded.</p>
                 ) : (
                   <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                    {detailFiles.map((file) => {
-                      const isSelected = selectedFile?.filename === file.filename;
+                    {diffTreeRows.map((row) => {
+                      if (row.kind === "directory") {
+                        return (
+                          <div
+                            key={row.key}
+                            className="rounded border border-surface bg-main/30 px-2 py-1.5"
+                            style={{ paddingLeft: `${row.depth * 14 + 10}px` }}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-subtext">
+                                {row.label}
+                              </span>
+                              <span className="text-[10px] text-subtext">
+                                +{row.additions} / -{row.deletions}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const isSelected = selectedFile?.filename === row.file.filename;
                       return (
                         <Button
-                          key={file.filename}
+                          key={row.key}
                           type="button"
-                          onClick={() => onSelectFilePath(file.filename)}
+                          onClick={() => onSelectFilePath(row.file.filename)}
                           variant="ghost"
                           size="xs"
                           className={`w-full text-left p-2 rounded border ${
                             isSelected ? "border-accent/40 bg-accent/10" : "border-surface bg-sidebar/40"
                           }`}
+                          style={{ paddingLeft: `${row.depth * 14 + 10}px` }}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs text-text truncate">{file.filename}</span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${getGithubFileStatusToneClass(file.status)}`}>
-                              {file.status}
+                            <span className="text-xs text-text truncate">{row.label}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${getGithubFileStatusToneClass(row.file.status)}`}>
+                              {row.file.status}
                             </span>
                           </div>
-                          <div className="text-[10px] text-subtext mt-1">
-                            +{file.additions} / -{file.deletions}
+                          <div className={`text-[10px] mt-1 ${getDiffTreeRowToneClass(row.additions, row.deletions)}`}>
+                            +{row.additions} / -{row.deletions}
                           </div>
                         </Button>
                       );

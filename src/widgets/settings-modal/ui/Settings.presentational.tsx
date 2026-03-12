@@ -76,6 +76,28 @@ function getProviderReadinessTone(status: "ready" | "partial" | "setup-required"
   }
 }
 
+function formatCustomModelList(models: string[] | undefined): string {
+  return (models ?? []).join("\n");
+}
+
+function parseCustomModelList(value: string): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  value
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .forEach((entry) => {
+      if (!entry || seen.has(entry)) {
+        return;
+      }
+      seen.add(entry);
+      next.push(entry);
+    });
+
+  return next;
+}
+
 function CategorySidebarButton({
   category,
   active,
@@ -335,6 +357,32 @@ function SettingsPresentational({
                                   ))}
                                 </ul>
                               )}
+                            </div>
+
+                            <div className="space-y-2 rounded-lg border border-surface bg-sidebar/40 p-3">
+                              <div>
+                                <label className="block text-xs font-medium text-text">
+                                  Custom model slugs
+                                </label>
+                                <p className="mt-1 text-[11px] text-subtext">
+                                  One slug per line. These are merged after detected provider models.
+                                </p>
+                              </div>
+                              <Textarea
+                                value={formatCustomModelList(settings.customAgentModels[provider.id])}
+                                onChange={(event) => {
+                                  const parsedModels = parseCustomModelList(event.target.value);
+                                  const nextCustomModels = { ...settings.customAgentModels };
+                                  if (parsedModels.length === 0) {
+                                    delete nextCustomModels[provider.id];
+                                  } else {
+                                    nextCustomModels[provider.id] = parsedModels;
+                                  }
+                                  onUpdateSetting("customAgentModels", nextCustomModels);
+                                }}
+                                placeholder="gpt-5.1\nclaude-opus-4.2"
+                                className="min-h-[92px]"
+                              />
                             </div>
                           </div>
                         ))}

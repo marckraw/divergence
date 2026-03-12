@@ -1510,6 +1510,83 @@ fn read_provider_text_delta(value: &Value) -> Option<String> {
         })
 }
 
+#[derive(Debug)]
+enum ProviderOutputChunk {
+    Text(String),
+    Json(Value),
+}
+
+fn split_provider_output_chunks(input: &str) -> Vec<ProviderOutputChunk> {
+    let mut chunks = Vec::new();
+    let mut current_text_start = 0usize;
+    let mut json_start: Option<usize> = None;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, character) in input.char_indices() {
+        if json_start.is_some() {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                    continue;
+                }
+                match character {
+                    '\\' => escaped = true,
+                    '"' => in_string = false,
+                    _ => {}
+                }
+                continue;
+            }
+
+            match character {
+                '"' => in_string = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        let start = json_start.expect("json start should be set when parsing");
+                        if current_text_start < start {
+                            let text = input[current_text_start..start].trim();
+                            if !text.is_empty() {
+                                chunks.push(ProviderOutputChunk::Text(text.to_string()));
+                            }
+                        }
+
+                        let end = index + character.len_utf8();
+                        let candidate = &input[start..end];
+                        if let Ok(value) = serde_json::from_str::<Value>(candidate) {
+                            chunks.push(ProviderOutputChunk::Json(value));
+                            current_text_start = end;
+                        }
+                        json_start = None;
+                        in_string = false;
+                        escaped = false;
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+
+        if character == '{' {
+            json_start = Some(index);
+            depth = 1;
+            in_string = false;
+            escaped = false;
+        }
+    }
+
+    if json_start.is_some() || current_text_start < input.len() {
+        let text = input[current_text_start..].trim();
+        if !text.is_empty() {
+            chunks.push(ProviderOutputChunk::Text(text.to_string()));
+        }
+    }
+
+    chunks
+}
+
 fn read_provider_activity_id(value: &Value) -> Option<String> {
     value
         .get("tool_call_id")
@@ -1751,4 +1828,125 @@ fn truncate_details(input: &str) -> String {
 
 fn truncate_json_details(input: &Value) -> String {
     truncate_details(&input.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        complete_activity, create_activity, derive_activity_metadata, split_provider_output_chunks,
+        strip_shell_wrapper, AgentActivityStatus, AgentMessage, AgentProvider, AgentRequest,
+        AgentRuntimeDebugEvent, AgentRuntimeStatus, AgentSessionNameMode, AgentSessionRole,
+        AgentSessionSnapshot, AgentSessionStatus, AgentTargetType, ProviderOutputChunk,
+    };
+    use serde_json::Value;
+
+    #[test]
+    fn strip_shell_wrapper_removes_common_shell_prefixes() {
+        assert_eq!(
+            strip_shell_wrapper("/bin/zsh -lc \"sed -n '1,220p' package.json\""),
+            "sed -n '1,220p' package.json"
+        );
+        assert_eq!(
+            strip_shell_wrapper("bash -lc 'rg --files src'"),
+            "rg --files src"
+        );
+        assert_eq!(strip_shell_wrapper("pnpm lint"), "pnpm lint");
+    }
+
+    #[test]
+    fn derive_activity_metadata_treats_bash_as_command() {
+        let (summary, subject, group_key) = derive_activity_metadata(
+            "tool",
+            "Bash",
+            Some(r#"{"command":"/bin/zsh -lc \"sed -n '1,220p' package.json\""}"#),
+        );
+
+        assert_eq!(summary.as_deref(), Some("Ran sed -n '1,220p' package.json"));
+        assert_eq!(subject.as_deref(), Some("sed -n '1,220p' package.json"));
+        assert_eq!(group_key.as_deref(), Some("command"));
+    }
+
+    #[test]
+    fn complete_activity_preserves_existing_summary_metadata() {
+        let mut session = AgentSessionSnapshot {
+            id: "session-1".to_string(),
+            provider: AgentProvider::Claude,
+            model: "sonnet".to_string(),
+            target_type: AgentTargetType::Project,
+            target_id: 1,
+            project_id: 1,
+            workspace_owner_id: None,
+            workspace_key: "project:1".to_string(),
+            session_role: AgentSessionRole::Default,
+            name_mode: AgentSessionNameMode::Default,
+            name: "Session".to_string(),
+            path: "/tmp/project".to_string(),
+            status: AgentSessionStatus::Active,
+            runtime_status: AgentRuntimeStatus::Running,
+            is_open: true,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+            thread_id: None,
+            current_turn_started_at_ms: None,
+            last_runtime_event_at_ms: None,
+            runtime_phase: None,
+            conversation_context: None,
+            runtime_events: Vec::<AgentRuntimeDebugEvent>::new(),
+            messages: Vec::<AgentMessage>::new(),
+            activities: vec![create_activity(
+                "activity-1".to_string(),
+                "tool".to_string(),
+                "Bash".to_string(),
+                AgentActivityStatus::Running,
+                Some(r#"{"command":"ls apps"}"#.to_string()),
+                1,
+                None,
+            )],
+            pending_request: Option::<AgentRequest>::None,
+            error_message: None,
+        };
+
+        complete_activity(
+            &mut session,
+            "activity-1",
+            Some("/tmp/project/apps\n/tmp/project/apps/api".to_string()),
+            AgentActivityStatus::Completed,
+        );
+
+        let activity = &session.activities[0];
+        assert_eq!(activity.summary.as_deref(), Some("Ran ls apps"));
+        assert_eq!(activity.group_key.as_deref(), Some("command"));
+        assert_eq!(activity.details.as_deref(), Some("/tmp/project/apps\n/tmp/project/apps/api"));
+    }
+
+    #[test]
+    fn split_provider_output_chunks_extracts_inline_json_objects() {
+        let chunks = split_provider_output_chunks(
+            r#"MCP issues detected. Run /mcp list for status.{"type":"init","session_id":"session-123"}Hello! How can I help you today?"#,
+        );
+
+        assert_eq!(chunks.len(), 3);
+        match &chunks[0] {
+            ProviderOutputChunk::Text(text) => {
+                assert_eq!(text, "MCP issues detected. Run /mcp list for status.");
+            }
+            ProviderOutputChunk::Json(_) => panic!("expected provider notice text chunk"),
+        }
+        match &chunks[1] {
+            ProviderOutputChunk::Json(value) => {
+                assert_eq!(value.get("type").and_then(Value::as_str), Some("init"));
+                assert_eq!(
+                    value.get("session_id").and_then(Value::as_str),
+                    Some("session-123")
+                );
+            }
+            ProviderOutputChunk::Text(_) => panic!("expected structured JSON chunk"),
+        }
+        match &chunks[2] {
+            ProviderOutputChunk::Text(text) => {
+                assert_eq!(text, "Hello! How can I help you today?");
+            }
+            ProviderOutputChunk::Json(_) => panic!("expected trailing assistant text chunk"),
+        }
+    }
 }

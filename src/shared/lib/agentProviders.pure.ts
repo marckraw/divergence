@@ -1,9 +1,11 @@
 import type {
   AgentRuntimeAttachmentKind,
   AgentRuntimeCapabilities,
+  AgentRuntimeModelOption,
   AgentRuntimeProvider,
   AgentRuntimeProviderDescriptor,
 } from "../api/agentRuntime.types";
+import type { CustomAgentModels } from "./appSettings.pure";
 
 export const AGENT_PROVIDER_ORDER: AgentRuntimeProvider[] = [
   "claude",
@@ -84,9 +86,26 @@ export function getAgentRuntimeProviderDefaultModel(
 
 export function getAgentRuntimeProviderModelOptions(
   capabilities: AgentRuntimeCapabilities | null,
-  provider: AgentRuntimeProvider
-) {
-  return getAgentRuntimeProviderDescriptor(capabilities, provider)?.modelOptions ?? [];
+  provider: AgentRuntimeProvider,
+  customAgentModels: CustomAgentModels = {},
+): AgentRuntimeModelOption[] {
+  const builtInOptions = getAgentRuntimeProviderDescriptor(capabilities, provider)?.modelOptions ?? [];
+  const customOptions = (customAgentModels[provider] ?? []).map((slug) => ({
+    slug,
+    label: slug,
+  }));
+  const merged: AgentRuntimeModelOption[] = [];
+  const seen = new Set<string>();
+
+  [...builtInOptions, ...customOptions].forEach((option) => {
+    if (seen.has(option.slug)) {
+      return;
+    }
+    seen.add(option.slug);
+    merged.push(option);
+  });
+
+  return merged;
 }
 
 export function supportsAgentRuntimePlanMode(

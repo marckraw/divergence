@@ -9,19 +9,36 @@ import {
   IconButton,
   SOFT_SPRING,
 } from "../../../shared";
+import { getWorkspaceSessionAttentionState } from "../lib/workspaceSessionAttention.pure";
 
 interface WorkspaceSessionTabsProps {
   sessionList: WorkspaceSession[];
   activeSessionId: string | null;
   idleAttentionSessionIds: Set<string>;
+  lastViewedRuntimeEventAtMsBySessionId?: Map<string, number>;
   onSelectSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
+}
+
+function getAttentionBadgeClass(tone: "danger" | "warning" | "accent" | "success"): string {
+  switch (tone) {
+    case "danger":
+      return "bg-red/15 text-red border border-red/30";
+    case "warning":
+      return "bg-yellow/15 text-yellow border border-yellow/30";
+    case "accent":
+      return "bg-accent/15 text-accent border border-accent/30";
+    case "success":
+    default:
+      return "bg-emerald-400/15 text-emerald-200 border border-emerald-400/30";
+  }
 }
 
 function WorkspaceSessionTabsPresentational({
   sessionList,
   activeSessionId,
   idleAttentionSessionIds,
+  lastViewedRuntimeEventAtMsBySessionId,
   onSelectSession,
   onCloseSession,
 }: WorkspaceSessionTabsProps) {
@@ -38,6 +55,10 @@ function WorkspaceSessionTabsPresentational({
         const isActive = session.id === activeSessionId;
         const needsAttention = idleAttentionSessionIds.has(session.id) && !isActive;
         const isAgent = isAgentSession(session);
+        const attentionState = getWorkspaceSessionAttentionState(session, {
+          isActive,
+          lastViewedRuntimeEventAtMs: lastViewedRuntimeEventAtMsBySessionId?.get(session.id) ?? null,
+        });
 
         return (
           <motion.div
@@ -112,13 +133,6 @@ function WorkspaceSessionTabsPresentational({
             )}
 
             <span className="truncate max-w-32">{session.name}</span>
-
-            {needsAttention && (
-              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-yellow/20 text-yellow border border-yellow/40">
-                ready
-              </span>
-            )}
-
             {isAgent ? (
               <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${getAgentProviderBadgeClass(session.provider)}`}>
                 {getAgentProviderLabel(session.provider)}
@@ -126,6 +140,20 @@ function WorkspaceSessionTabsPresentational({
             ) : session.useTmux ? (
               <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">
                 tmux
+              </span>
+            ) : null}
+
+            {attentionState ? (
+              <span
+                className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${getAttentionBadgeClass(attentionState.tone)} ${
+                  attentionState.pulse ? "animate-pulse" : ""
+                }`}
+              >
+                {attentionState.label}
+              </span>
+            ) : needsAttention ? (
+              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-yellow/20 text-yellow border border-yellow/40">
+                ready
               </span>
             ) : null}
 

@@ -5,8 +5,10 @@ import {
   loadPersistedTerminalTabsState,
   savePersistedTerminalTabsState,
 } from "../api/sessionPersistence.api";
+import { createDebouncedTask } from "../../shared";
 
 const RESTORE_TABS_TOAST_TTL_MS = 4000;
+const SESSION_PERSISTENCE_DEBOUNCE_MS = 250;
 
 interface UseSessionPersistenceParams {
   sessions: Map<string, TerminalSession>;
@@ -31,12 +33,38 @@ export function useSessionPersistence({
   const [restoredTabsToastMessage, setRestoredTabsToastMessage] = useState<string | null>(null);
   const hasRestoredTabsRef = useRef(false);
   const restoredTabsToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPersistRef = useRef({
+    sessions,
+    activeSessionId,
+    restoreTabsOnRestart,
+  });
+  const persistTaskRef = useRef(createDebouncedTask(() => {
+    const pending = pendingPersistRef.current;
+    if (!pending.restoreTabsOnRestart) {
+      clearPersistedTerminalTabsState();
+      return;
+    }
+
+    savePersistedTerminalTabsState({
+      sessions: pending.sessions,
+      activeSessionId: pending.activeSessionId,
+    });
+  }, SESSION_PERSISTENCE_DEBOUNCE_MS));
+
+  pendingPersistRef.current = {
+    sessions,
+    activeSessionId,
+    restoreTabsOnRestart,
+  };
 
   useEffect(() => {
+    const persistTask = persistTaskRef.current;
     return () => {
       if (restoredTabsToastTimerRef.current) {
         clearTimeout(restoredTabsToastTimerRef.current);
       }
+      persistTask.flush();
+      persistTask.cancel();
     };
   }, []);
 
@@ -76,15 +104,24 @@ export function useSessionPersistence({
     }
 
     if (!restoreTabsOnRestart) {
+      persistTaskRef.current.cancel();
       clearPersistedTerminalTabsState();
       return;
     }
 
-    savePersistedTerminalTabsState({
-      sessions,
-      activeSessionId,
-    });
+    persistTaskRef.current.schedule();
   }, [sessions, activeSessionId, restoreTabsOnRestart]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      persistTaskRef.current.flush();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
 
   return {
     restoredTabsToastMessage,

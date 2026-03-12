@@ -20,6 +20,7 @@ function MainAreaPresentational({
   projects,
   activeSession,
   idleAttentionSessionIds,
+  lastViewedRuntimeEventAtMsBySessionId,
   onCloseSession,
   onCloseSessionAndKillTmux,
   onSelectSession,
@@ -160,6 +161,7 @@ function MainAreaPresentational({
               sessionList={sessionList}
               activeSessionId={activeSession?.id ?? null}
               idleAttentionSessionIds={idleAttentionSessionIds}
+              lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
               onSelectSession={onSelectSession}
               onCloseSession={onCloseSession}
             />
