@@ -1016,6 +1016,23 @@ pub fn checkout_existing_branch(repo_path: &Path, branch: &str) -> Result<(), St
     Ok(())
 }
 
+pub fn fetch_pull_request_head(
+    repo_path: &Path,
+    pull_request_number: i64,
+    local_branch: &str,
+) -> Result<(), String> {
+    if pull_request_number <= 0 {
+        return Err("Pull request number must be greater than 0".to_string());
+    }
+
+    let refspec = format!(
+        "refs/pull/{}/head:refs/heads/{}",
+        pull_request_number, local_branch
+    );
+    let args = vec!["fetch".to_string(), "origin".to_string(), refspec];
+    run_origin_fetch(repo_path, &args, "git fetch origin pull request head")
+}
+
 pub fn list_remote_branches(repo_path: &Path) -> Result<Vec<String>, String> {
     if get_remote_url(repo_path)?.is_none() {
         return Err("Remote origin is not configured for this repository".to_string());
@@ -1151,11 +1168,16 @@ fn fetch_origin(repo_path: &Path) {
 }
 
 fn fetch_origin_impl(repo_path: &Path) -> Result<(), String> {
+    let args = vec!["fetch".to_string(), "origin".to_string()];
+    run_origin_fetch(repo_path, &args, "git fetch origin")
+}
+
+fn run_origin_fetch(repo_path: &Path, args: &[String], label: &str) -> Result<(), String> {
     let primary = Command::new("git")
-        .args(["fetch", "origin"])
+        .args(args.iter().map(String::as_str))
         .current_dir(repo_path)
         .output()
-        .map_err(|error| format!("Failed to execute git fetch origin: {}", error))?;
+        .map_err(|error| format!("Failed to execute {}: {}", label, error))?;
 
     if primary.status.success() {
         return Ok(());
@@ -1167,10 +1189,10 @@ fn fetch_origin_impl(repo_path: &Path) -> Result<(), String> {
         let fallback = Command::new("git")
             .arg("-c")
             .arg("core.sshCommand=ssh -o Hostname=ssh.github.com -o Port=443 -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new")
-            .args(["fetch", "origin"])
+            .args(args.iter().map(String::as_str))
             .current_dir(repo_path)
             .output()
-            .map_err(|error| format!("Failed to execute git fetch origin fallback: {}", error))?;
+            .map_err(|error| format!("Failed to execute {} fallback: {}", label, error))?;
 
         if fallback.status.success() {
             return Ok(());

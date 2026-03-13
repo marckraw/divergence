@@ -23,6 +23,7 @@ export interface AgentSessionViewProps {
   sessionList: WorkspaceSession[];
   activeSessionId: string | null;
   idleAttentionSessionIds: Set<string>;
+  lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
   capabilities: AgentRuntimeCapabilities | null;
   onSelectSession: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
@@ -85,6 +86,7 @@ export interface AgentSessionViewPresentationalProps {
   sessionList: WorkspaceSession[];
   activeSessionId: string | null;
   idleAttentionSessionIds: Set<string>;
+  lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
   capabilities: AgentRuntimeCapabilities | null;
   timelineItems: AgentTimelineItem[];
   isUpdatingModel: boolean;

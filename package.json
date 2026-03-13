@@ -65,7 +65,8 @@
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
-    "tauri-pty": "^0.2.1"
+    "tauri-pty": "^0.2.1",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

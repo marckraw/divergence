@@ -1,9 +1,13 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AgentSessionSnapshot, Project } from "../../../entities";
-import type { CreateAgentSessionInput } from "../../../shared";
+import { getErrorMessage, type CreateAgentSessionInput } from "../../../shared";
 import { useGithubPrChat } from "../model/useGithubPrChat";
 import { useGithubPrHub } from "../model/useGithubPrHub";
-import type { GithubPullRequestMergeMethod } from "../model/githubPrHub.types";
+import type {
+  GithubPullRequestDetail,
+  GithubPullRequestMergeMethod,
+  GithubPullRequestSummary,
+} from "../model/githubPrHub.types";
 import GithubPrChatSidebar from "./GithubPrChatSidebar.container";
 import GithubPrHubPresentational from "./GithubPrHub.presentational";
 
@@ -14,6 +18,10 @@ interface GithubPrHubContainerProps {
   createAgentSession: (input: CreateAgentSessionInput) => Promise<{ id: string }>;
   startAgentTurn: (sessionId: string, prompt: string) => Promise<void>;
   deleteAgentSession: (sessionId: string) => Promise<void>;
+  onOpenReviewDivergence: (input: {
+    pullRequest: GithubPullRequestSummary;
+    detail: GithubPullRequestDetail;
+  }) => Promise<void>;
 }
 
 function GithubPrHubContainer({
@@ -23,7 +31,10 @@ function GithubPrHubContainer({
   createAgentSession,
   startAgentTurn,
   deleteAgentSession,
+  onOpenReviewDivergence,
 }: GithubPrHubContainerProps) {
+  const [openingReviewDivergence, setOpeningReviewDivergence] = useState(false);
+  const [reviewDivergenceError, setReviewDivergenceError] = useState<string | null>(null);
   const {
     projectTargets,
     pullRequests,
@@ -94,6 +105,30 @@ function GithubPrHubContainer({
     setIsChatOpen((current) => !current);
   }, [setIsChatOpen]);
 
+  useEffect(() => {
+    setReviewDivergenceError(null);
+    setOpeningReviewDivergence(false);
+  }, [selectedPullRequest?.id]);
+
+  const handleOpenReviewDivergence = useCallback(async () => {
+    if (!selectedPullRequest || !detail || openingReviewDivergence) {
+      return;
+    }
+
+    setOpeningReviewDivergence(true);
+    setReviewDivergenceError(null);
+    try {
+      await onOpenReviewDivergence({
+        pullRequest: selectedPullRequest,
+        detail,
+      });
+    } catch (error) {
+      setReviewDivergenceError(getErrorMessage(error, "Failed to open review divergence."));
+    } finally {
+      setOpeningReviewDivergence(false);
+    }
+  }, [detail, onOpenReviewDivergence, openingReviewDivergence, selectedPullRequest]);
+
   return (
     <GithubPrHubPresentational
       projectTargets={projectTargets}
@@ -113,6 +148,8 @@ function GithubPrHubContainer({
       selectedFilePath={selectedFilePath}
       mergeMethod={mergeMethod}
       merging={merging}
+      openingReviewDivergence={openingReviewDivergence}
+      reviewDivergenceError={reviewDivergenceError}
       isChatOpen={isChatOpen}
       chatSidebar={(
         <GithubPrChatSidebar
@@ -139,6 +176,7 @@ function GithubPrHubContainer({
       onSelectFilePath={setSelectedFilePath}
       onMergeMethodChange={handleMergeMethodChange}
       onMerge={mergeSelectedPullRequest}
+      onOpenReviewDivergence={handleOpenReviewDivergence}
     />
   );
 }

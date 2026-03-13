@@ -1,7 +1,7 @@
 use crate::agent_runtime::{
     AgentAttachment, AgentRuntimeCapabilities, AgentRuntimeState, AgentSessionSnapshot,
-    CreateAgentSessionInput, RespondAgentRequestInput, StageAgentAttachmentInput,
-    StartAgentTurnInput, UpdateAgentSessionInput,
+    AgentSessionSummary, CreateAgentSessionInput, RespondAgentRequestInput,
+    StageAgentAttachmentInput, StartAgentTurnInput, UpdateAgentSessionInput,
 };
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
@@ -36,6 +36,19 @@ pub struct Divergence {
     pub has_diverged: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareGithubPrReviewDivergenceInput {
+    pub token: String,
+    pub project_id: i64,
+    pub project_name: String,
+    pub project_path: String,
+    pub pull_request_owner: String,
+    pub pull_request_repo: String,
+    pub pull_request_number: i64,
+    pub copy_ignored_skip: Vec<String>,
+}
+
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -59,6 +72,13 @@ pub async fn list_agent_sessions(
     agent_runtime: State<'_, AgentRuntimeState>,
 ) -> Result<Vec<AgentSessionSnapshot>, String> {
     agent_runtime.list_sessions()
+}
+
+#[tauri::command]
+pub async fn list_agent_session_summaries(
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<Vec<AgentSessionSummary>, String> {
+    agent_runtime.list_session_summaries()
 }
 
 #[tauri::command]
@@ -213,6 +233,55 @@ pub async fn create_divergence(
         project_id,
         name: divergence_dir_name,
         branch: branch_name,
+        path: path_to_string(&divergence_path),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        has_diverged: false,
+    })
+}
+
+#[tauri::command]
+pub async fn prepare_github_pr_review_divergence(
+    input: PrepareGithubPrReviewDivergenceInput,
+) -> Result<Divergence, String> {
+    let token = normalize_bearer_token(&input.token)?;
+    let owner = input.pull_request_owner.trim();
+    let repo = input.pull_request_repo.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return Err("pull request owner and repo are required".to_string());
+    }
+    if input.pull_request_number <= 0 {
+        return Err("pull request number must be greater than 0".to_string());
+    }
+
+    let source_path = PathBuf::from(&input.project_path);
+    if !git::is_git_repo(&source_path) {
+        return Err("Project is not a git repository".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let pull_request =
+        fetch_github_pull_request_detail_api_item(&client, &token, owner, repo, input.pull_request_number)
+            .await?;
+    let review_branch_name =
+        build_pull_request_review_branch_name(input.pull_request_number, &pull_request.head.branch_ref);
+
+    let short_uuid = &Uuid::new_v4().to_string()[..8];
+    let safe_project_name = input.project_name.replace(' ', "-").to_lowercase();
+    let safe_branch_name = review_branch_name.replace(['/', ' '], "-");
+    let divergence_dir_name = format!("{}-{}-{}", safe_project_name, safe_branch_name, short_uuid);
+    let divergence_path = get_repos_dir().join(&divergence_dir_name);
+
+    git::clone_repo(&source_path, &divergence_path)?;
+    git::set_origin_to_source_remote(&source_path, &divergence_path)?;
+    git::fetch_pull_request_head(&divergence_path, input.pull_request_number, &review_branch_name)?;
+    git::checkout_branch(&divergence_path, &review_branch_name, false)?;
+    git::copy_ignored_paths(&source_path, &divergence_path, &input.copy_ignored_skip)?;
+
+    Ok(Divergence {
+        id: 0,
+        project_id: input.project_id,
+        name: divergence_dir_name,
+        branch: review_branch_name,
         path: path_to_string(&divergence_path),
         created_at: chrono::Utc::now().to_rfc3339(),
         has_diverged: false,
@@ -435,37 +504,7 @@ pub async fn fetch_github_pull_request_detail(
     }
 
     let client = reqwest::Client::new();
-    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}", owner, repo, number);
-    let response = client
-        .get(url)
-        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
-        .header(reqwest::header::USER_AGENT, "divergence-app")
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .send()
-        .await
-        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let response_body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| String::new())
-            .chars()
-            .take(400)
-            .collect::<String>();
-        return Err(format!(
-            "GitHub API request failed with status {}: {}",
-            status.as_u16(),
-            response_body
-        ));
-    }
-
-    let item = response
-        .json::<GithubPullRequestDetailApiItem>()
-        .await
-        .map_err(|error| format!("Failed to parse GitHub response: {}", error))?;
+    let item = fetch_github_pull_request_detail_api_item(&client, &token, owner, repo, number).await?;
 
     let created_at_ms = parse_rfc3339_millis(&item.created_at, "GitHub timestamp")?;
     let updated_at_ms = parse_rfc3339_millis(&item.updated_at, "GitHub timestamp")?;
@@ -1438,6 +1477,59 @@ fn extract_linear_error_message(response_body: &str) -> Option<String> {
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .map(|value| value.to_string())
+}
+
+async fn fetch_github_pull_request_detail_api_item(
+    client: &reqwest::Client,
+    token: &str,
+    owner: &str,
+    repo: &str,
+    number: i64,
+) -> Result<GithubPullRequestDetailApiItem, String> {
+    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}", owner, repo, number);
+    let response = client
+        .get(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(reqwest::header::USER_AGENT, "divergence-app")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let response_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new())
+            .chars()
+            .take(400)
+            .collect::<String>();
+        return Err(format!(
+            "GitHub API request failed with status {}: {}",
+            status.as_u16(),
+            response_body
+        ));
+    }
+
+    response
+        .json::<GithubPullRequestDetailApiItem>()
+        .await
+        .map_err(|error| format!("Failed to parse GitHub response: {}", error))
+}
+
+fn build_pull_request_review_branch_name(pull_request_number: i64, head_ref: &str) -> String {
+    let normalized_head_ref = head_ref
+        .trim()
+        .trim_matches('/')
+        .replace(' ', "-");
+
+    if normalized_head_ref.is_empty() {
+        return format!("pr/{}", pull_request_number);
+    }
+
+    format!("pr/{}/{}", pull_request_number, normalized_head_ref)
 }
 
 fn parse_rfc3339_millis(value: &str, context: &str) -> Result<i64, String> {

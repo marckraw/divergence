@@ -243,14 +243,19 @@ pub(super) fn build_gemini_command(
     if gemini_supports_stream_json() {
         command.arg("--output-format").arg("stream-json");
     }
-    command.arg("-m").arg(session.model.trim()).arg("-y");
-    if matches!(interaction_mode, AgentInteractionMode::Plan) {
-        command.arg("--approval-mode").arg("plan");
-    }
+    command.arg("-m").arg(session.model.trim());
+    command.args(gemini_approval_args(interaction_mode));
     for attachment_dir in attachment_dirs {
         command.arg("--include-directories").arg(attachment_dir);
     }
     Ok(command)
+}
+
+fn gemini_approval_args(interaction_mode: AgentInteractionMode) -> &'static [&'static str] {
+    match interaction_mode {
+        AgentInteractionMode::Default => &["-y"],
+        AgentInteractionMode::Plan => &["--approval-mode", "plan"],
+    }
 }
 
 fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
@@ -389,6 +394,24 @@ fn strip_ansi_sequences(input: &str) -> String {
     }
 
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{gemini_approval_args, AgentInteractionMode};
+
+    #[test]
+    fn gemini_default_mode_uses_yolo_flag() {
+        assert_eq!(gemini_approval_args(AgentInteractionMode::Default), ["-y"]);
+    }
+
+    #[test]
+    fn gemini_plan_mode_uses_plan_approval_without_yolo() {
+        assert_eq!(
+            gemini_approval_args(AgentInteractionMode::Plan),
+            ["--approval-mode", "plan"]
+        );
+    }
 }
 
 fn detect_cursor_binary() -> Option<String> {

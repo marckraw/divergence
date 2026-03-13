@@ -373,6 +373,36 @@ pub struct AgentSessionSnapshot {
     pub error_message: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionSummary {
+    pub id: String,
+    pub provider: AgentProvider,
+    pub model: String,
+    pub target_type: AgentTargetType,
+    pub target_id: i64,
+    pub project_id: i64,
+    pub workspace_owner_id: Option<i64>,
+    pub workspace_key: String,
+    pub session_role: AgentSessionRole,
+    pub name_mode: AgentSessionNameMode,
+    pub name: String,
+    pub path: String,
+    pub status: AgentSessionStatus,
+    pub runtime_status: AgentRuntimeStatus,
+    pub is_open: bool,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub thread_id: Option<String>,
+    pub current_turn_started_at_ms: Option<i64>,
+    pub last_runtime_event_at_ms: Option<i64>,
+    pub runtime_phase: Option<String>,
+    pub pending_request: Option<AgentRequest>,
+    pub error_message: Option<String>,
+    pub latest_assistant_message_interaction_mode: Option<AgentInteractionMode>,
+    pub latest_assistant_message_status: Option<AgentMessageStatus>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAgentSessionInput {
@@ -443,6 +473,43 @@ pub struct UpdateAgentSessionInput {
 pub struct AgentRuntimeSessionUpdatedEvent {
     pub session_id: String,
     pub snapshot: AgentSessionSnapshot,
+}
+
+fn summarize_session(session: &AgentSessionSnapshot) -> AgentSessionSummary {
+    let latest_assistant_message = session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, AgentMessageRole::Assistant));
+
+    AgentSessionSummary {
+        id: session.id.clone(),
+        provider: session.provider.clone(),
+        model: session.model.clone(),
+        target_type: session.target_type,
+        target_id: session.target_id,
+        project_id: session.project_id,
+        workspace_owner_id: session.workspace_owner_id,
+        workspace_key: session.workspace_key.clone(),
+        session_role: session.session_role,
+        name_mode: session.name_mode,
+        name: session.name.clone(),
+        path: session.path.clone(),
+        status: session.status,
+        runtime_status: session.runtime_status,
+        is_open: session.is_open,
+        created_at_ms: session.created_at_ms,
+        updated_at_ms: session.updated_at_ms,
+        thread_id: session.thread_id.clone(),
+        current_turn_started_at_ms: session.current_turn_started_at_ms,
+        last_runtime_event_at_ms: session.last_runtime_event_at_ms,
+        runtime_phase: session.runtime_phase.clone(),
+        pending_request: session.pending_request.clone(),
+        error_message: session.error_message.clone(),
+        latest_assistant_message_interaction_mode: latest_assistant_message
+            .and_then(|message| message.interaction_mode),
+        latest_assistant_message_status: latest_assistant_message.map(|message| message.status),
+    }
 }
 
 #[derive(Clone)]
@@ -539,6 +606,18 @@ impl AgentRuntimeState {
             .lock()
             .map_err(|error| format!("Agent runtime lock poisoned: {error}"))?;
         let mut items: Vec<AgentSessionSnapshot> = sessions.values().cloned().collect();
+        items.sort_by(|left, right| right.updated_at_ms.cmp(&left.updated_at_ms));
+        Ok(items)
+    }
+
+    pub fn list_session_summaries(&self) -> Result<Vec<AgentSessionSummary>, String> {
+        let sessions = self
+            .inner
+            .sessions
+            .lock()
+            .map_err(|error| format!("Agent runtime lock poisoned: {error}"))?;
+        let mut items: Vec<AgentSessionSummary> =
+            sessions.values().map(summarize_session).collect();
         items.sort_by(|left, right| right.updated_at_ms.cmp(&left.updated_at_ms));
         Ok(items)
     }
@@ -1516,6 +1595,83 @@ fn read_provider_text_delta(value: &Value) -> Option<String> {
         })
 }
 
+#[derive(Debug)]
+enum ProviderOutputChunk {
+    Text(String),
+    Json(Value),
+}
+
+fn split_provider_output_chunks(input: &str) -> Vec<ProviderOutputChunk> {
+    let mut chunks = Vec::new();
+    let mut current_text_start = 0usize;
+    let mut json_start: Option<usize> = None;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, character) in input.char_indices() {
+        if json_start.is_some() {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                    continue;
+                }
+                match character {
+                    '\\' => escaped = true,
+                    '"' => in_string = false,
+                    _ => {}
+                }
+                continue;
+            }
+
+            match character {
+                '"' => in_string = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        let start = json_start.expect("json start should be set when parsing");
+                        if current_text_start < start {
+                            let text = input[current_text_start..start].trim();
+                            if !text.is_empty() {
+                                chunks.push(ProviderOutputChunk::Text(text.to_string()));
+                            }
+                        }
+
+                        let end = index + character.len_utf8();
+                        let candidate = &input[start..end];
+                        if let Ok(value) = serde_json::from_str::<Value>(candidate) {
+                            chunks.push(ProviderOutputChunk::Json(value));
+                            current_text_start = end;
+                        }
+                        json_start = None;
+                        in_string = false;
+                        escaped = false;
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+
+        if character == '{' {
+            json_start = Some(index);
+            depth = 1;
+            in_string = false;
+            escaped = false;
+        }
+    }
+
+    if json_start.is_some() || current_text_start < input.len() {
+        let text = input[current_text_start..].trim();
+        if !text.is_empty() {
+            chunks.push(ProviderOutputChunk::Text(text.to_string()));
+        }
+    }
+
+    chunks
+}
+
 fn read_provider_activity_id(value: &Value) -> Option<String> {
     value
         .get("tool_call_id")
@@ -2022,12 +2178,14 @@ fn truncate_json_details(input: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_activity, derive_activity_metadata, complete_activity, strip_shell_wrapper,
-        AgentActivityStatus, AgentAttachment, AgentConversationContext, AgentMessage,
+        complete_activity, create_activity, derive_activity_metadata, split_provider_output_chunks,
+        strip_shell_wrapper, AgentActivityStatus, AgentAttachment, AgentConversationContext,
+        AgentMessage,
         AgentProvider, AgentRequest, AgentRuntimeDebugEvent, AgentRuntimeStatus,
-        AgentSessionNameMode, AgentSessionSnapshot, AgentSessionStatus, AgentSessionRole,
-        AgentTargetType,
+        AgentSessionNameMode, AgentSessionRole, AgentSessionSnapshot, AgentSessionStatus,
+        AgentTargetType, ProviderOutputChunk,
     };
+    use serde_json::Value;
 
     #[test]
     fn strip_shell_wrapper_removes_common_shell_prefixes() {
@@ -2106,5 +2264,35 @@ mod tests {
         assert_eq!(activity.summary.as_deref(), Some("Ran ls apps"));
         assert_eq!(activity.group_key.as_deref(), Some("command"));
         assert_eq!(activity.details.as_deref(), Some("/tmp/project/apps\n/tmp/project/apps/api"));
+    }
+    #[test]
+    fn split_provider_output_chunks_extracts_inline_json_objects() {
+        let chunks = split_provider_output_chunks(
+            r#"MCP issues detected. Run /mcp list for status.{"type":"init","session_id":"session-123"}Hello! How can I help you today?"#,
+        );
+
+        assert_eq!(chunks.len(), 3);
+        match &chunks[0] {
+            ProviderOutputChunk::Text(text) => {
+                assert_eq!(text, "MCP issues detected. Run /mcp list for status.");
+            }
+            ProviderOutputChunk::Json(_) => panic!("expected provider notice text chunk"),
+        }
+        match &chunks[1] {
+            ProviderOutputChunk::Json(value) => {
+                assert_eq!(value.get("type").and_then(Value::as_str), Some("init"));
+                assert_eq!(
+                    value.get("session_id").and_then(Value::as_str),
+                    Some("session-123")
+                );
+            }
+            ProviderOutputChunk::Text(_) => panic!("expected structured JSON chunk"),
+        }
+        match &chunks[2] {
+            ProviderOutputChunk::Text(text) => {
+                assert_eq!(text, "Hello! How can I help you today?");
+            }
+            ProviderOutputChunk::Json(_) => panic!("expected trailing assistant text chunk"),
+        }
     }
 }

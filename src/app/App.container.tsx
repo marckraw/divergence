@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import Sidebar from "../widgets/sidebar";
 import MainArea from "../widgets/main-area";
@@ -64,7 +64,12 @@ import { useReviewAgentSession } from "./model/useReviewAgentSession";
 import { useTaskCenterAttachment } from "./model/useTaskCenterAttachment";
 import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
-import { GithubPrHub } from "../features/github-pr-hub";
+import {
+  GithubPrHub,
+  openPrReviewDivergence,
+  type GithubPullRequestDetail,
+  type GithubPullRequestSummary,
+} from "../features/github-pr-hub";
 import { buildWorkspaceKey } from "./lib/sessionBuilder.pure";
 
 function App() {
@@ -448,15 +453,46 @@ function App() {
   });
 
   // Wrap handleSelectProject / handleSelectDivergence to also set sidebar mode
-  const handleSelectProject = (project: Project) => {
+  const handleSelectProject = useCallback((project: Project) => {
     handleSelectProjectRaw(project);
     setSidebarMode("projects");
-  };
+  }, [handleSelectProjectRaw, setSidebarMode]);
 
-  const handleSelectDivergence = (divergence: Divergence) => {
+  const handleSelectDivergence = useCallback((divergence: Divergence) => {
     handleSelectDivergenceRaw(divergence);
     setSidebarMode("projects");
-  };
+  }, [handleSelectDivergenceRaw, setSidebarMode]);
+
+  const handleOpenPrReviewDivergence = useCallback(async (input: {
+    pullRequest: GithubPullRequestSummary;
+    detail: GithubPullRequestDetail;
+  }) => {
+    await openPrReviewDivergence({
+      pullRequest: input.pullRequest,
+      detail: input.detail,
+      githubToken: appSettings.githubToken ?? "",
+      runTask,
+      refreshDivergences,
+      refreshPortAllocations,
+      onSelectDivergence: handleSelectDivergence,
+      setActiveSessionId,
+      createAgentSession,
+      startAgentTurn,
+      agentRuntimeCapabilities,
+    });
+    setSidebarMode("projects");
+  }, [
+    agentRuntimeCapabilities,
+    appSettings.githubToken,
+    createAgentSession,
+    handleSelectDivergence,
+    refreshDivergences,
+    refreshPortAllocations,
+    runTask,
+    setSidebarMode,
+    setActiveSessionId,
+    startAgentTurn,
+  ]);
 
   const workspaceSessions = useMemo(() => {
     const next = new Map<string, WorkspaceSession>();
@@ -735,11 +771,49 @@ function App() {
     () => Array.from(workspaceSessions.values()),
     [workspaceSessions],
   );
+  const [lastViewedRuntimeEventAtMsBySessionId, setLastViewedRuntimeEventAtMsBySessionId] = useState<Map<string, number>>(
+    () => new Map(),
+  );
   const agentProviders = useMemo(() => {
     const available = getAvailableAgentProviders(agentRuntimeCapabilities);
     return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
   }, [agentRuntimeCapabilities]);
   const renamingAgentSessionIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    setLastViewedRuntimeEventAtMsBySessionId((previous) => {
+      let changed = false;
+      const next = new Map<string, number>();
+      previous.forEach((timestamp, sessionId) => {
+        if (workspaceSessions.has(sessionId)) {
+          next.set(sessionId, timestamp);
+          return;
+        }
+        changed = true;
+      });
+      return changed ? next : previous;
+    });
+  }, [workspaceSessions]);
+
+  useEffect(() => {
+    if (!activeAgentSession) {
+      return;
+    }
+
+    const lastRuntimeEventAtMs = activeAgentSession.lastRuntimeEventAtMs ?? activeAgentSession.updatedAtMs;
+    if (!lastRuntimeEventAtMs) {
+      return;
+    }
+
+    setLastViewedRuntimeEventAtMsBySessionId((previous) => {
+      if (previous.get(activeAgentSession.id) === lastRuntimeEventAtMs) {
+        return previous;
+      }
+      const next = new Map(previous);
+      next.set(activeAgentSession.id, lastRuntimeEventAtMs);
+      return next;
+    });
+  }, [activeAgentSession]);
 
   return (
     <div className="flex h-full w-full">
@@ -829,6 +903,7 @@ function App() {
               createAgentSession={createAgentSession}
               startAgentTurn={startAgentTurn}
               deleteAgentSession={deleteAgentSession}
+              onOpenReviewDivergence={handleOpenPrReviewDivergence}
             />
           )}
           {workTab === "task_center" && (
@@ -873,6 +948,7 @@ function App() {
           sessionList={workspaceSessionList}
           activeSessionId={activeSessionId}
           idleAttentionSessionIds={idleAttentionSessionIds}
+          lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
           capabilities={agentRuntimeCapabilities}
           onSelectSession={(sessionId) => {
             void handleSelectWorkspaceSession(sessionId);
@@ -890,6 +966,7 @@ function App() {
           projects={projects}
           sessions={workspaceSessions}
           idleAttentionSessionIds={idleAttentionSessionIds}
+          lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
           activeSession={activeSession}
           onCloseSession={handleCloseWorkspaceSession}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}

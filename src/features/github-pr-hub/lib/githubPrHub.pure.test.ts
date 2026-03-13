@@ -5,6 +5,7 @@ import {
   formatRelativeTime,
   getChecksToneClass,
   getDiffLineClass,
+  getDiffTreeRowToneClass,
   getGithubFileStatusToneClass,
   hasGithubMergeConflicts,
   parseUnifiedDiffLines,
@@ -97,6 +98,9 @@ describe("githubPrHub.pure", () => {
     expect(getGithubFileStatusToneClass("removed")).toContain("text-red");
     expect(getGithubFileStatusToneClass("renamed")).toContain("text-accent");
     expect(getGithubFileStatusToneClass("copied")).toContain("text-subtext");
+    expect(getDiffTreeRowToneClass(3, 0)).toContain("text-green");
+    expect(getDiffTreeRowToneClass(0, 2)).toContain("text-red");
+    expect(getDiffTreeRowToneClass(4, 1)).toContain("text-yellow");
   });
 
   it("detects merge conflicts from mergeable metadata", () => {
