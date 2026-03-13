@@ -103,6 +103,9 @@ export interface AgentRuntimeActivity {
   id: string;
   kind: string;
   title: string;
+  summary?: string;
+  subject?: string | null;
+  groupKey?: string | null;
   status: AgentRuntimeActivityStatus;
   details?: string;
   startedAtMs: number;

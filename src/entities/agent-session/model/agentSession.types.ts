@@ -45,6 +45,9 @@ export interface AgentActivity {
   id: string;
   kind: string;
   title: string;
+  summary?: string;
+  subject?: string | null;
+  groupKey?: string | null;
   status: AgentActivityStatus;
   details?: string;
   startedAtMs: number;

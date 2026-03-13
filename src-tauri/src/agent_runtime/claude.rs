@@ -253,15 +253,15 @@ impl AgentRuntimeState {
 
                         let snapshot = self.mutate_session(session_id, |session| {
                             if !session.activities.iter().any(|item| item.id == activity_id) {
-                                session.activities.push(AgentActivity {
-                                    id: activity_id.clone(),
-                                    kind: "tool".to_string(),
-                                    title: tool_name.clone(),
-                                    status: AgentActivityStatus::Running,
+                                session.activities.push(create_activity(
+                                    activity_id.clone(),
+                                    "tool".to_string(),
+                                    tool_name.clone(),
+                                    AgentActivityStatus::Running,
                                     details,
-                                    started_at_ms: now_ms(),
-                                    completed_at_ms: None,
-                                });
+                                    now_ms(),
+                                    None,
+                                ));
                             }
                             push_runtime_event(
                                 session,

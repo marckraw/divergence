@@ -37,7 +37,19 @@ describe("mapAgentRuntimeSnapshot", () => {
       },
       runtimeEvents: [],
       messages: [],
-      activities: [],
+      activities: [
+        {
+          id: "activity-1",
+          kind: "tool",
+          title: "Read",
+          summary: "Read CLAUDE.md",
+          subject: "CLAUDE.md",
+          groupKey: "read",
+          status: "completed",
+          startedAtMs: 15,
+          completedAtMs: 16,
+        },
+      ],
       pendingRequest: null,
       errorMessage: null,
     });
@@ -50,6 +62,8 @@ describe("mapAgentRuntimeSnapshot", () => {
     expect(snapshot.lastRuntimeEventAtMs).toBe(18);
     expect(snapshot.runtimePhase).toBe("Waiting for model");
     expect(snapshot.conversationContext?.label).toBe("12% left");
+    expect(snapshot.activities[0]?.summary).toBe("Read CLAUDE.md");
+    expect(snapshot.activities[0]?.groupKey).toBe("read");
     expect(snapshot.lastActivity?.getTime()).toBe(20);
     expect(snapshot.hydrationState).toBe("full");
   });
