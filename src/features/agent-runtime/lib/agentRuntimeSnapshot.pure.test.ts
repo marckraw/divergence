@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mapAgentRuntimeSnapshot } from "./agentRuntimeSnapshot.pure";
+import {
+  mapAgentRuntimeSessionSummary,
+  mapAgentRuntimeSnapshot,
+} from "./agentRuntimeSnapshot.pure";
 
 describe("mapAgentRuntimeSnapshot", () => {
   it("maps runtime snapshots into agent session snapshots", () => {
@@ -48,5 +51,43 @@ describe("mapAgentRuntimeSnapshot", () => {
     expect(snapshot.runtimePhase).toBe("Waiting for model");
     expect(snapshot.conversationContext?.label).toBe("12% left");
     expect(snapshot.lastActivity?.getTime()).toBe(20);
+    expect(snapshot.hydrationState).toBe("full");
+  });
+});
+
+describe("mapAgentRuntimeSessionSummary", () => {
+  it("maps runtime summaries into lightweight agent session snapshots", () => {
+    const summary = mapAgentRuntimeSessionSummary({
+      id: "agent-2",
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      targetType: "project",
+      targetId: 2,
+      projectId: 2,
+      workspaceKey: "project:2",
+      sessionRole: "default",
+      nameMode: "manual",
+      name: "Beta",
+      path: "/tmp/beta",
+      status: "idle",
+      runtimeStatus: "idle",
+      isOpen: false,
+      createdAtMs: 100,
+      updatedAtMs: 120,
+      threadId: undefined,
+      currentTurnStartedAtMs: null,
+      lastRuntimeEventAtMs: 119,
+      runtimePhase: "Completed",
+      pendingRequest: null,
+      errorMessage: null,
+      latestAssistantMessageInteractionMode: "plan",
+      latestAssistantMessageStatus: "done",
+    });
+
+    expect(summary.hydrationState).toBe("summary");
+    expect(summary.messages).toEqual([]);
+    expect(summary.activities).toEqual([]);
+    expect(summary.latestAssistantMessageInteractionMode).toBe("plan");
+    expect(summary.latestAssistantMessageStatus).toBe("done");
   });
 });

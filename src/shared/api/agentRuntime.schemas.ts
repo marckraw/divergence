@@ -3,6 +3,7 @@ import type {
   AgentRuntimeAttachment,
   AgentRuntimeCapabilities,
   AgentRuntimeSessionSnapshot,
+  AgentRuntimeSessionSummary,
   AgentRuntimeSessionUpdatedEvent,
 } from "./agentRuntime.types";
 
@@ -186,6 +187,34 @@ export const agentRuntimeSessionSnapshotSchema = z.object({
   errorMessage: z.string().nullable().optional(),
 });
 
+export const agentRuntimeSessionSummarySchema = z.object({
+  id: z.string(),
+  provider: providerSchema,
+  model: z.string(),
+  targetType: targetTypeSchema,
+  targetId: z.number(),
+  projectId: z.number(),
+  workspaceOwnerId: optionalNullToUndefined(z.number()),
+  workspaceKey: z.string(),
+  sessionRole: sessionRoleSchema,
+  nameMode: nameModeSchema,
+  name: z.string(),
+  path: z.string(),
+  status: sessionStatusSchema,
+  runtimeStatus: runtimeStatusSchema,
+  isOpen: z.boolean(),
+  createdAtMs: z.number(),
+  updatedAtMs: z.number(),
+  threadId: optionalNullToUndefined(z.string()),
+  currentTurnStartedAtMs: z.number().nullable().optional(),
+  lastRuntimeEventAtMs: z.number().nullable().optional(),
+  runtimePhase: z.string().nullable().optional(),
+  pendingRequest: agentRuntimeRequestSchema.nullable(),
+  errorMessage: z.string().nullable().optional(),
+  latestAssistantMessageInteractionMode: optionalNullToUndefined(interactionModeSchema),
+  latestAssistantMessageStatus: optionalNullToUndefined(messageStatusSchema),
+});
+
 export const agentRuntimeSessionUpdatedEventSchema = z.object({
   sessionId: z.string(),
   snapshot: agentRuntimeSessionSnapshotSchema,
@@ -221,11 +250,23 @@ export function parseAgentRuntimeSessionSnapshot(value: unknown): AgentRuntimeSe
   return parseWithSchema(agentRuntimeSessionSnapshotSchema, value, "agent runtime session snapshot");
 }
 
+export function parseAgentRuntimeSessionSummary(value: unknown): AgentRuntimeSessionSummary {
+  return parseWithSchema(agentRuntimeSessionSummarySchema, value, "agent runtime session summary");
+}
+
 export function parseAgentRuntimeSessionSnapshots(value: unknown): AgentRuntimeSessionSnapshot[] {
   return parseWithSchema(
     z.array(agentRuntimeSessionSnapshotSchema),
     value,
     "agent runtime session snapshots",
+  );
+}
+
+export function parseAgentRuntimeSessionSummaries(value: unknown): AgentRuntimeSessionSummary[] {
+  return parseWithSchema(
+    z.array(agentRuntimeSessionSummarySchema),
+    value,
+    "agent runtime session summaries",
   );
 }
 

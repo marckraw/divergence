@@ -5,7 +5,7 @@ import {
   deleteAgentRuntimeSession,
   discardAgentRuntimeAttachment,
   getAgentRuntimeSession,
-  listAgentRuntimeSessions,
+  listAgentRuntimeSessionSummaries,
   onAgentRuntimeSessionUpdated,
   refreshAgentRuntimeCapabilities,
   respondAgentRuntimeRequest,
@@ -19,7 +19,10 @@ import {
   type CreateAgentSessionInput,
   createFrameTask,
 } from "../../../shared";
-import { mapAgentRuntimeSnapshot } from "../lib/agentRuntimeSnapshot.pure";
+import {
+  mapAgentRuntimeSessionSummary,
+  mapAgentRuntimeSnapshot,
+} from "../lib/agentRuntimeSnapshot.pure";
 
 interface AgentRuntimeStoreState {
   capabilities: AgentRuntimeCapabilities | null;
@@ -40,6 +43,7 @@ let initialized = false;
 let removeListener: (() => void) | null = null;
 const listeners = new Set<() => void>();
 let pendingSessionUpdates = new Map<string, AgentSessionSnapshot>();
+const pendingSessionHydrations = new Map<string, Promise<AgentSessionSnapshot | null>>();
 const sessionUpdateScheduler = createFrameTask(() => {
   if (pendingSessionUpdates.size === 0) {
     return;
@@ -97,6 +101,30 @@ function queueSessionUpdate(snapshot: AgentSessionSnapshot): void {
   sessionUpdateScheduler.schedule();
 }
 
+function hydrateSessionSnapshot(sessionId: string): Promise<AgentSessionSnapshot | null> {
+  const pendingHydration = pendingSessionHydrations.get(sessionId);
+  if (pendingHydration) {
+    return pendingHydration;
+  }
+
+  const hydration = getAgentRuntimeSession(sessionId)
+    .then((snapshot) => {
+      if (!snapshot) {
+        return null;
+      }
+
+      const mapped = mapAgentRuntimeSnapshot(snapshot);
+      upsertSession(mapped);
+      return mapped;
+    })
+    .finally(() => {
+      pendingSessionHydrations.delete(sessionId);
+    });
+
+  pendingSessionHydrations.set(sessionId, hydration);
+  return hydration;
+}
+
 function removeSession(sessionId: string): void {
   pendingSessionUpdates.delete(sessionId);
   updateSessionsMap((previous) => {
@@ -118,7 +146,7 @@ async function initializeAgentRuntimeStore(): Promise<void> {
 
   const [capabilitiesResult, sessionsResult] = await Promise.allSettled([
     refreshAgentRuntimeCapabilities(),
-    listAgentRuntimeSessions(),
+    listAgentRuntimeSessionSummaries(),
   ]);
 
   let nextCapabilities = state.capabilities;
@@ -133,7 +161,7 @@ async function initializeAgentRuntimeStore(): Promise<void> {
   if (sessionsResult.status === "fulfilled") {
     nextSessions = new Map(
       sessionsResult.value
-        .map((snapshot) => mapAgentRuntimeSnapshot(snapshot))
+        .map((summary) => mapAgentRuntimeSessionSummary(summary))
         .map((snapshot) => [snapshot.id, snapshot] as const),
     );
   } else {
@@ -156,6 +184,14 @@ async function initializeAgentRuntimeStore(): Promise<void> {
   } catch (error) {
     console.warn("Failed to subscribe to agent runtime updates:", error);
   }
+
+  orderedSessions
+    .filter((session) => session.isOpen)
+    .forEach((session) => {
+      void hydrateSessionSnapshot(session.id).catch((error) => {
+        console.warn(`Failed to hydrate open agent session ${session.id}:`, error);
+      });
+    });
 }
 
 function subscribe(listener: () => void): () => void {
@@ -228,18 +264,10 @@ export async function getAgentRuntimeSessionState(
   sessionId: string
 ): Promise<AgentSessionSnapshot | null> {
   const cached = state.sessions.get(sessionId);
-  if (cached) {
+  if (cached?.hydrationState === "full") {
     return cached;
   }
-
-  const snapshot = await getAgentRuntimeSession(sessionId);
-  if (!snapshot) {
-    return null;
-  }
-
-  const mapped = mapAgentRuntimeSnapshot(snapshot);
-  upsertSession(mapped);
-  return mapped;
+  return hydrateSessionSnapshot(sessionId);
 }
 
 export async function createAgentRuntimeSessionState(

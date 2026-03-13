@@ -1,7 +1,7 @@
 use crate::agent_runtime::{
     AgentAttachment, AgentRuntimeCapabilities, AgentRuntimeState, AgentSessionSnapshot,
-    CreateAgentSessionInput, RespondAgentRequestInput, StageAgentAttachmentInput,
-    StartAgentTurnInput, UpdateAgentSessionInput,
+    AgentSessionSummary, CreateAgentSessionInput, RespondAgentRequestInput,
+    StageAgentAttachmentInput, StartAgentTurnInput, UpdateAgentSessionInput,
 };
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
@@ -72,6 +72,13 @@ pub async fn list_agent_sessions(
     agent_runtime: State<'_, AgentRuntimeState>,
 ) -> Result<Vec<AgentSessionSnapshot>, String> {
     agent_runtime.list_sessions()
+}
+
+#[tauri::command]
+pub async fn list_agent_session_summaries(
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<Vec<AgentSessionSummary>, String> {
+    agent_runtime.list_session_summaries()
 }
 
 #[tauri::command]

@@ -367,6 +367,36 @@ pub struct AgentSessionSnapshot {
     pub error_message: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionSummary {
+    pub id: String,
+    pub provider: AgentProvider,
+    pub model: String,
+    pub target_type: AgentTargetType,
+    pub target_id: i64,
+    pub project_id: i64,
+    pub workspace_owner_id: Option<i64>,
+    pub workspace_key: String,
+    pub session_role: AgentSessionRole,
+    pub name_mode: AgentSessionNameMode,
+    pub name: String,
+    pub path: String,
+    pub status: AgentSessionStatus,
+    pub runtime_status: AgentRuntimeStatus,
+    pub is_open: bool,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub thread_id: Option<String>,
+    pub current_turn_started_at_ms: Option<i64>,
+    pub last_runtime_event_at_ms: Option<i64>,
+    pub runtime_phase: Option<String>,
+    pub pending_request: Option<AgentRequest>,
+    pub error_message: Option<String>,
+    pub latest_assistant_message_interaction_mode: Option<AgentInteractionMode>,
+    pub latest_assistant_message_status: Option<AgentMessageStatus>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAgentSessionInput {
@@ -437,6 +467,43 @@ pub struct UpdateAgentSessionInput {
 pub struct AgentRuntimeSessionUpdatedEvent {
     pub session_id: String,
     pub snapshot: AgentSessionSnapshot,
+}
+
+fn summarize_session(session: &AgentSessionSnapshot) -> AgentSessionSummary {
+    let latest_assistant_message = session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, AgentMessageRole::Assistant));
+
+    AgentSessionSummary {
+        id: session.id.clone(),
+        provider: session.provider.clone(),
+        model: session.model.clone(),
+        target_type: session.target_type,
+        target_id: session.target_id,
+        project_id: session.project_id,
+        workspace_owner_id: session.workspace_owner_id,
+        workspace_key: session.workspace_key.clone(),
+        session_role: session.session_role,
+        name_mode: session.name_mode,
+        name: session.name.clone(),
+        path: session.path.clone(),
+        status: session.status,
+        runtime_status: session.runtime_status,
+        is_open: session.is_open,
+        created_at_ms: session.created_at_ms,
+        updated_at_ms: session.updated_at_ms,
+        thread_id: session.thread_id.clone(),
+        current_turn_started_at_ms: session.current_turn_started_at_ms,
+        last_runtime_event_at_ms: session.last_runtime_event_at_ms,
+        runtime_phase: session.runtime_phase.clone(),
+        pending_request: session.pending_request.clone(),
+        error_message: session.error_message.clone(),
+        latest_assistant_message_interaction_mode: latest_assistant_message
+            .and_then(|message| message.interaction_mode),
+        latest_assistant_message_status: latest_assistant_message.map(|message| message.status),
+    }
 }
 
 #[derive(Clone)]
@@ -533,6 +600,18 @@ impl AgentRuntimeState {
             .lock()
             .map_err(|error| format!("Agent runtime lock poisoned: {error}"))?;
         let mut items: Vec<AgentSessionSnapshot> = sessions.values().cloned().collect();
+        items.sort_by(|left, right| right.updated_at_ms.cmp(&left.updated_at_ms));
+        Ok(items)
+    }
+
+    pub fn list_session_summaries(&self) -> Result<Vec<AgentSessionSummary>, String> {
+        let sessions = self
+            .inner
+            .sessions
+            .lock()
+            .map_err(|error| format!("Agent runtime lock poisoned: {error}"))?;
+        let mut items: Vec<AgentSessionSummary> =
+            sessions.values().map(summarize_session).collect();
         items.sort_by(|left, right| right.updated_at_ms.cmp(&left.updated_at_ms));
         Ok(items)
     }

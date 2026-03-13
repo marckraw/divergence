@@ -4,6 +4,7 @@ import type {
   AgentRuntimeAttachment,
   AgentRuntimeCapabilities,
   AgentRuntimeSessionSnapshot,
+  AgentRuntimeSessionSummary,
   AgentRuntimeSessionUpdatedEvent,
   CreateAgentSessionInput,
   RespondAgentRequestInput,
@@ -16,6 +17,7 @@ import {
   parseAgentRuntimeCapabilities,
   parseAgentRuntimeSessionSnapshot,
   parseAgentRuntimeSessionSnapshots,
+  parseAgentRuntimeSessionSummaries,
   parseAgentRuntimeSessionUpdatedEvent,
 } from "./agentRuntime.schemas";
 
@@ -35,6 +37,10 @@ export async function refreshAgentRuntimeCapabilities(): Promise<AgentRuntimeCap
 
 export async function listAgentRuntimeSessions(): Promise<AgentRuntimeSessionSnapshot[]> {
   return parseAgentRuntimeSessionSnapshots(await invoke<unknown>("list_agent_sessions"));
+}
+
+export async function listAgentRuntimeSessionSummaries(): Promise<AgentRuntimeSessionSummary[]> {
+  return parseAgentRuntimeSessionSummaries(await invoke<unknown>("list_agent_session_summaries"));
 }
 
 export async function getAgentRuntimeSession(

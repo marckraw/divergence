@@ -8,9 +8,9 @@ mod ws_mdns;
 mod ws_server;
 
 #[cfg(desktop)]
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-#[cfg(desktop)]
 use tauri::image::Image;
+#[cfg(desktop)]
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 #[allow(unused_imports)]
 use tauri::{Manager, WindowEvent};
@@ -47,14 +47,12 @@ pub fn run() {
             {
                 let show_item =
                     MenuItem::with_id(app, "tray_show", "Show Divergence", true, None::<&str>)?;
-                let quit_item =
-                    MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "tray_quit", "Quit", true, None::<&str>)?;
                 let separator = PredefinedMenuItem::separator(app)?;
                 let tray_menu = Menu::with_items(app, &[&show_item, &separator, &quit_item])?;
 
-                let tray_icon_image = Image::from_bytes(include_bytes!(
-                    "../icons/tray-iconTemplate@2x.png"
-                ))?;
+                let tray_icon_image =
+                    Image::from_bytes(include_bytes!("../icons/tray-iconTemplate@2x.png"))?;
 
                 let _tray_icon = TrayIconBuilder::with_id("main-tray")
                     .icon(tray_icon_image)
@@ -141,6 +139,7 @@ pub fn run() {
             commands::get_agent_runtime_capabilities,
             commands::refresh_agent_runtime_capabilities,
             commands::list_agent_sessions,
+            commands::list_agent_session_summaries,
             commands::get_agent_session,
             commands::create_agent_session,
             commands::start_agent_turn,
