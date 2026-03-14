@@ -38,13 +38,16 @@ A Tauri + React desktop app for managing multiple projects, branches, and parall
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 24.14.0 (or newer 24.x; see `.nvmrc`)
 - Rust 1.70+
 - macOS (for building macOS apps)
 
 ### Setup
 
 ```bash
+# Match the repo-pinned Node.js version
+fnm use
+
 # Install dependencies
 npm install
 
