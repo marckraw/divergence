@@ -43,6 +43,8 @@ interface GithubPrHubPresentationalProps {
   merging: boolean;
   openingReviewDivergence: boolean;
   reviewDivergenceError: string | null;
+  openingConflictResolutionDivergence: boolean;
+  conflictResolutionError: string | null;
   isChatOpen: boolean;
   chatSidebar: ReactNode;
   onSelectProjectFilter: (value: "all" | number) => void;
@@ -56,6 +58,7 @@ interface GithubPrHubPresentationalProps {
   onMergeMethodChange: (method: GithubPullRequestMergeMethod) => void;
   onMerge: () => Promise<boolean>;
   onOpenReviewDivergence: () => Promise<void>;
+  onOpenConflictResolutionDivergence: () => Promise<void>;
 }
 
 function renderProjectFilterOptions(targets: GithubPrProjectTarget[]) {
@@ -91,6 +94,8 @@ function GithubPrHubPresentational({
   merging,
   openingReviewDivergence,
   reviewDivergenceError,
+  openingConflictResolutionDivergence,
+  conflictResolutionError,
   isChatOpen,
   chatSidebar,
   onSelectProjectFilter,
@@ -104,6 +109,7 @@ function GithubPrHubPresentational({
   onMergeMethodChange,
   onMerge,
   onOpenReviewDivergence,
+  onOpenConflictResolutionDivergence,
 }: GithubPrHubPresentationalProps) {
   const isDetailView = selectedPullRequest !== null;
   const projectOptions = renderProjectFilterOptions(projectTargets);
@@ -284,7 +290,7 @@ function GithubPrHubPresentational({
               {selectedPullRequest.repoKey} • {selectedPullRequest.baseRef || "base"} ← {selectedPullRequest.headRef || "head"}
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center justify-end gap-2 shrink-0 flex-wrap">
             <Button
               type="button"
               variant="secondary"
@@ -293,6 +299,19 @@ function GithubPrHubPresentational({
               disabled={detailLoading || openingReviewDivergence}
             >
               {openingReviewDivergence ? "Opening Review..." : "Open Review Divergence"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => { void onOpenConflictResolutionDivergence(); }}
+              disabled={
+                detailLoading
+                || openingConflictResolutionDivergence
+                || !detailHasConflicts
+              }
+            >
+              {openingConflictResolutionDivergence ? "Preparing Conflicts..." : "Resolve Conflicts"}
             </Button>
             <Button
               type="button"
@@ -318,6 +337,7 @@ function GithubPrHubPresentational({
         <div className="border-r border-surface overflow-y-auto p-4 space-y-4">
           {detailError && <ErrorBanner>{detailError}</ErrorBanner>}
           {reviewDivergenceError && <ErrorBanner>{reviewDivergenceError}</ErrorBanner>}
+          {conflictResolutionError && <ErrorBanner>{conflictResolutionError}</ErrorBanner>}
           {detailLoading && (
             <div className="text-sm text-subtext">
               <LoadingSpinner>Loading pull request details...</LoadingSpinner>

@@ -66,6 +66,7 @@ import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
 import {
   GithubPrHub,
+  openPrConflictResolutionDivergence,
   openPrReviewDivergence,
   type GithubPullRequestDetail,
   type GithubPullRequestSummary,
@@ -463,11 +464,18 @@ function App() {
     setSidebarMode("projects");
   }, [handleSelectDivergenceRaw, setSidebarMode]);
 
-  const handleOpenPrReviewDivergence = useCallback(async (input: {
-    pullRequest: GithubPullRequestSummary;
-    detail: GithubPullRequestDetail;
-  }) => {
-    await openPrReviewDivergence({
+  const handleOpenGithubPrDivergence = useCallback(async (
+    mode: "review" | "conflict-resolution",
+    input: {
+      pullRequest: GithubPullRequestSummary;
+      detail: GithubPullRequestDetail;
+    },
+  ) => {
+    const openPrDivergence = mode === "conflict-resolution"
+      ? openPrConflictResolutionDivergence
+      : openPrReviewDivergence;
+
+    await openPrDivergence({
       pullRequest: input.pullRequest,
       detail: input.detail,
       githubToken: appSettings.githubToken ?? "",
@@ -493,6 +501,20 @@ function App() {
     setActiveSessionId,
     startAgentTurn,
   ]);
+
+  const handleOpenPrReviewDivergence = useCallback(async (input: {
+    pullRequest: GithubPullRequestSummary;
+    detail: GithubPullRequestDetail;
+  }) => {
+    await handleOpenGithubPrDivergence("review", input);
+  }, [handleOpenGithubPrDivergence]);
+
+  const handleOpenPrConflictResolutionDivergence = useCallback(async (input: {
+    pullRequest: GithubPullRequestSummary;
+    detail: GithubPullRequestDetail;
+  }) => {
+    await handleOpenGithubPrDivergence("conflict-resolution", input);
+  }, [handleOpenGithubPrDivergence]);
 
   const workspaceSessions = useMemo(() => {
     const next = new Map<string, WorkspaceSession>();
@@ -904,6 +926,7 @@ function App() {
               startAgentTurn={startAgentTurn}
               deleteAgentSession={deleteAgentSession}
               onOpenReviewDivergence={handleOpenPrReviewDivergence}
+              onOpenConflictResolutionDivergence={handleOpenPrConflictResolutionDivergence}
             />
           )}
           {workTab === "task_center" && (

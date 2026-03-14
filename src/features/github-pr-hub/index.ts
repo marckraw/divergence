@@ -1,5 +1,8 @@
 export { default as GithubPrHub } from "./ui/GithubPrHub.container";
-export { openPrReviewDivergence } from "./service/openPrReviewDivergence.service";
+export {
+  openPrConflictResolutionDivergence,
+  openPrReviewDivergence,
+} from "./service/openPrReviewDivergence.service";
 export type {
   GithubPrProjectTarget,
   GithubPullRequestRemoteSummary,

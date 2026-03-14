@@ -49,6 +49,12 @@ pub struct PrepareGithubPrReviewDivergenceInput {
     pub copy_ignored_skip: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum GithubPrDivergenceMode {
+    Review,
+    ConflictResolution,
+}
+
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -243,6 +249,20 @@ pub async fn create_divergence(
 pub async fn prepare_github_pr_review_divergence(
     input: PrepareGithubPrReviewDivergenceInput,
 ) -> Result<Divergence, String> {
+    prepare_github_pr_divergence(input, GithubPrDivergenceMode::Review).await
+}
+
+#[tauri::command]
+pub async fn prepare_github_pr_conflict_resolution_divergence(
+    input: PrepareGithubPrReviewDivergenceInput,
+) -> Result<Divergence, String> {
+    prepare_github_pr_divergence(input, GithubPrDivergenceMode::ConflictResolution).await
+}
+
+async fn prepare_github_pr_divergence(
+    input: PrepareGithubPrReviewDivergenceInput,
+    mode: GithubPrDivergenceMode,
+) -> Result<Divergence, String> {
     let token = normalize_bearer_token(&input.token)?;
     let owner = input.pull_request_owner.trim();
     let repo = input.pull_request_repo.trim();
@@ -267,14 +287,23 @@ pub async fn prepare_github_pr_review_divergence(
         input.pull_request_number,
     )
     .await?;
-    let review_branch_name = build_pull_request_review_branch_name(
-        input.pull_request_number,
-        &pull_request.head.branch_ref,
-    );
+    let branch_name = match mode {
+        GithubPrDivergenceMode::Review => build_pull_request_review_branch_name(
+            input.pull_request_number,
+            &pull_request.head.branch_ref,
+        ),
+        GithubPrDivergenceMode::ConflictResolution => {
+            build_pull_request_conflict_resolution_branch_name(
+                input.pull_request_number,
+                &pull_request.head.branch_ref,
+                &pull_request.base.branch_ref,
+            )
+        }
+    };
 
     let short_uuid = &Uuid::new_v4().to_string()[..8];
     let safe_project_name = input.project_name.replace(' ', "-").to_lowercase();
-    let safe_branch_name = review_branch_name.replace(['/', ' '], "-");
+    let safe_branch_name = branch_name.replace(['/', ' '], "-");
     let divergence_dir_name = format!("{}-{}-{}", safe_project_name, safe_branch_name, short_uuid);
     let divergence_path = get_repos_dir().join(&divergence_dir_name);
 
@@ -283,16 +312,25 @@ pub async fn prepare_github_pr_review_divergence(
     git::fetch_pull_request_head(
         &divergence_path,
         input.pull_request_number,
-        &review_branch_name,
+        &branch_name,
     )?;
-    git::checkout_branch(&divergence_path, &review_branch_name, false)?;
+    git::checkout_branch(&divergence_path, &branch_name, false)?;
     git::copy_ignored_paths(&source_path, &divergence_path, &input.copy_ignored_skip)?;
+
+    if matches!(mode, GithubPrDivergenceMode::ConflictResolution) {
+        let base_branch = pull_request.base.branch_ref.trim();
+        if base_branch.is_empty() {
+            return Err("pull request base branch is required".to_string());
+        }
+        git::fetch_origin_branch(&divergence_path, base_branch)?;
+        git::merge_origin_branch_for_conflict_resolution(&divergence_path, base_branch)?;
+    }
 
     Ok(Divergence {
         id: 0,
         project_id: input.project_id,
         name: divergence_dir_name,
-        branch: review_branch_name,
+        branch: branch_name,
         path: path_to_string(&divergence_path),
         created_at: chrono::Utc::now().to_rfc3339(),
         has_diverged: false,
@@ -1561,13 +1599,39 @@ async fn fetch_github_pull_request_detail_api_item(
 }
 
 fn build_pull_request_review_branch_name(pull_request_number: i64, head_ref: &str) -> String {
-    let normalized_head_ref = head_ref.trim().trim_matches('/').replace(' ', "-");
+    let normalized_head_ref = normalize_branch_ref_segment(head_ref);
 
     if normalized_head_ref.is_empty() {
         return format!("pr/{}", pull_request_number);
     }
 
     format!("pr/{}/{}", pull_request_number, normalized_head_ref)
+}
+
+fn build_pull_request_conflict_resolution_branch_name(
+    pull_request_number: i64,
+    head_ref: &str,
+    base_ref: &str,
+) -> String {
+    let normalized_head_ref = normalize_branch_ref_segment(head_ref);
+    let normalized_base_ref = normalize_branch_ref_segment(base_ref);
+
+    match (
+        normalized_head_ref.is_empty(),
+        normalized_base_ref.is_empty(),
+    ) {
+        (true, true) => format!("pr/{}/resolve", pull_request_number),
+        (true, false) => format!("pr/{}/resolve/{}", pull_request_number, normalized_base_ref),
+        (false, true) => format!("pr/{}/{}/resolve", pull_request_number, normalized_head_ref),
+        (false, false) => format!(
+            "pr/{}/{}/resolve/{}",
+            pull_request_number, normalized_head_ref, normalized_base_ref
+        ),
+    }
+}
+
+fn normalize_branch_ref_segment(value: &str) -> String {
+    value.trim().trim_matches('/').replace(' ', "-")
 }
 
 fn parse_rfc3339_millis(value: &str, context: &str) -> Result<i64, String> {
@@ -1731,6 +1795,39 @@ fn build_integrations_summary(value: Option<&Value>) -> Option<RalphyIntegration
         None
     } else {
         Some(RalphyIntegrationsSummary { github })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_pull_request_conflict_resolution_branch_name,
+        build_pull_request_review_branch_name,
+    };
+
+    #[test]
+    fn builds_review_branch_name_from_head_ref() {
+        assert_eq!(
+            build_pull_request_review_branch_name(42, "feature/improve-pr-hub"),
+            "pr/42/feature/improve-pr-hub"
+        );
+        assert_eq!(build_pull_request_review_branch_name(42, "   "), "pr/42");
+    }
+
+    #[test]
+    fn builds_conflict_resolution_branch_name_from_head_and_base_refs() {
+        assert_eq!(
+            build_pull_request_conflict_resolution_branch_name(
+                42,
+                "feature/improve-pr-hub",
+                "master",
+            ),
+            "pr/42/feature/improve-pr-hub/resolve/master"
+        );
+        assert_eq!(
+            build_pull_request_conflict_resolution_branch_name(42, "", "release/1.2"),
+            "pr/42/resolve/release/1.2"
+        );
     }
 }
 
