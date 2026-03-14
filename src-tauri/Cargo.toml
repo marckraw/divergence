@@ -1,6 +1,6 @@
 [package]
 name = "divergence"
-version = "0.30.1"
+version = "0.31.0"
 description = "A desktop app for managing multiple projects with embedded terminals"
 authors = ["Divergence"]
 edition = "2021"

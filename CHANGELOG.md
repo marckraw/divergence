@@ -1,5 +1,11 @@
 # divergence
 
+## 0.31.0
+
+### Minor Changes
+
+- 39f0ebc: Add a GitHub PR hub action to open a conflict-resolution divergence with the PR base branch merged into the checkout so conflicts are materialized locally. Also update the seeded review and conflict-resolution agent prompts to remind agents to install dependencies before running tests or app commands in fresh divergence copies.
+
 ## 0.30.1
 
 ### Patch Changes
