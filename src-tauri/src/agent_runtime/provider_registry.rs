@@ -239,7 +239,9 @@ pub(super) fn build_gemini_command(
     })?;
 
     let mut command = Command::new(binary);
-    command.arg("-p").arg(build_history_context_prompt(session, prompt));
+    command
+        .arg("-p")
+        .arg(build_history_context_prompt(session, prompt));
     if gemini_supports_stream_json() {
         command.arg("--output-format").arg("stream-json");
     }
@@ -297,7 +299,11 @@ fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
     let mut default_model = DEFAULT_CURSOR_MODEL.to_string();
     let mut model_options = Vec::new();
 
-    for line in stdout.lines().map(str::trim).filter(|line| !line.is_empty()) {
+    for line in stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
         let Some((slug, raw_label)) = line.split_once(" - ") else {
             continue;
         };
@@ -329,7 +335,10 @@ fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
         return fallback;
     }
 
-    if !model_options.iter().any(|option| option.slug == default_model) {
+    if !model_options
+        .iter()
+        .any(|option| option.slug == default_model)
+    {
         default_model = model_options
             .first()
             .map(|option| option.slug.clone())
@@ -431,7 +440,10 @@ fn check_codex_auth(command: &str) -> (bool, Option<String>) {
                 String::from_utf8_lossy(&output.stderr)
             );
             let trimmed = combined.trim().to_string();
-            (output.status.success(), (!trimmed.is_empty()).then_some(trimmed))
+            (
+                output.status.success(),
+                (!trimmed.is_empty()).then_some(trimmed),
+            )
         }
         Err(error) => (
             false,
@@ -454,7 +466,8 @@ fn build_history_context_prompt(session: &AgentSessionSnapshot, prompt: &str) ->
         .messages
         .iter()
         .filter(|message| {
-            !(matches!(message.role, AgentMessageRole::User) && message.content.trim() == prompt.trim())
+            !(matches!(message.role, AgentMessageRole::User)
+                && message.content.trim() == prompt.trim())
         })
         .map(|message| {
             let role = match message.role {
@@ -484,10 +497,14 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
             if let Some(command) = detected {
                 AgentRuntimeProviderReadiness {
                     status: AgentRuntimeProviderReadinessStatus::Partial,
-                    summary: "Claude CLI detected. Divergence assumes local login or OAuth token setup.".to_string(),
+                    summary:
+                        "Claude CLI detected. Divergence assumes local login or OAuth token setup."
+                            .to_string(),
                     details: vec![
-                        "Use the official Claude CLI login flow for subscription-backed access.".to_string(),
-                        "Automations can still use the stored Claude OAuth token when needed.".to_string(),
+                        "Use the official Claude CLI login flow for subscription-backed access."
+                            .to_string(),
+                        "Automations can still use the stored Claude OAuth token when needed."
+                            .to_string(),
                     ],
                     binary_candidates: vec!["claude".to_string()],
                     detected_command: Some(command),
@@ -498,7 +515,8 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     status: AgentRuntimeProviderReadinessStatus::SetupRequired,
                     summary: "Claude CLI not found.".to_string(),
                     details: vec![
-                        "Install Claude Code CLI and log in locally before using Claude sessions.".to_string(),
+                        "Install Claude Code CLI and log in locally before using Claude sessions."
+                            .to_string(),
                     ],
                     binary_candidates: vec!["claude".to_string()],
                     detected_command: None,

@@ -1,12 +1,12 @@
+use chrono::{DateTime, Utc};
 use std::fs;
+use std::io::ErrorKind;
 use std::io::Write as IoWrite;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
-use std::io::ErrorKind;
 use std::thread;
 use std::time::{Duration, Instant};
-use chrono::{DateTime, Utc};
 
 static DEBUG_LOG: OnceLock<Mutex<Option<fs::File>>> = OnceLock::new();
 const LOGIN_SHELL_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -193,14 +193,11 @@ pub fn kill_tmux_session(session_name: &str, socket_path: Option<&str>) -> Resul
         return Ok(());
     }
 
-    let socket_path = socket_path
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+    let socket_path = socket_path.map(str::trim).filter(|value| !value.is_empty());
 
     debug_log(&format!(
         "[divergence] kill_tmux_session: target={:?}, socket={:?}",
-        session_name,
-        socket_path
+        session_name, socket_path
     ));
 
     let mut cmd = command_with_tmux();
@@ -212,19 +209,14 @@ pub fn kill_tmux_session(session_name: &str, socket_path: Option<&str>) -> Resul
         cmd.args(["-S", socket_path]);
     }
     cmd.args(["kill-session", "-t", session_name]);
-    let output = run_command_with_timeout(
-        &mut cmd,
-        TMUX_COMMAND_TIMEOUT,
-        "tmux kill-session",
-    );
+    let output = run_command_with_timeout(&mut cmd, TMUX_COMMAND_TIMEOUT, "tmux kill-session");
 
     match output {
         Ok(result) => {
             if result.status.success() {
                 debug_log(&format!(
                     "[divergence] kill_tmux_session: success target={:?}, socket={:?}",
-                    session_name,
-                    socket_path
+                    session_name, socket_path
                 ));
                 return Ok(());
             }
@@ -316,8 +308,14 @@ fn epoch_to_iso8601(epoch: &str) -> String {
 pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
     dump_process_env_once();
     debug_log("[divergence] list_tmux_sessions: starting");
-    debug_log(&format!("[divergence] list_tmux_sessions: process TMPDIR={:?}", std::env::var("TMPDIR").ok()));
-    debug_log(&format!("[divergence] list_tmux_sessions: process TMUX_TMPDIR={:?}", std::env::var("TMUX_TMPDIR").ok()));
+    debug_log(&format!(
+        "[divergence] list_tmux_sessions: process TMPDIR={:?}",
+        std::env::var("TMPDIR").ok()
+    ));
+    debug_log(&format!(
+        "[divergence] list_tmux_sessions: process TMUX_TMPDIR={:?}",
+        std::env::var("TMUX_TMPDIR").ok()
+    ));
 
     const SEP: &str = ":::";
     let fmt = format!(
@@ -327,16 +325,16 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
 
     let mut cmd = command_with_tmux();
     cmd.args(["list-sessions", "-F", &fmt]);
-    let output = run_command_with_timeout(
-        &mut cmd,
-        TMUX_COMMAND_TIMEOUT,
-        "tmux list-sessions",
-    );
+    let output = run_command_with_timeout(&mut cmd, TMUX_COMMAND_TIMEOUT, "tmux list-sessions");
 
     let result = match output {
         Ok(r) => r,
         Err(CommandOutputError::Io(err)) => {
-            debug_log(&format!("[divergence] list_tmux_sessions: tmux command FAILED to execute: {} (kind={:?})", err, err.kind()));
+            debug_log(&format!(
+                "[divergence] list_tmux_sessions: tmux command FAILED to execute: {} (kind={:?})",
+                err,
+                err.kind()
+            ));
             if err.kind() == ErrorKind::NotFound {
                 return Ok(vec![]);
             }
@@ -367,8 +365,16 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
 
     // Log hex bytes of first line to diagnose separator issues
     if let Some(first_line) = stdout.lines().next() {
-        let hex: String = first_line.bytes().take(120).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ");
-        debug_log(&format!("[divergence] list_tmux_sessions: first line hex (up to 120 bytes): {}", hex));
+        let hex: String = first_line
+            .bytes()
+            .take(120)
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+        debug_log(&format!(
+            "[divergence] list_tmux_sessions: first line hex (up to 120 bytes): {}",
+            hex
+        ));
     }
 
     if !result.status.success() {
@@ -386,7 +392,11 @@ pub fn list_tmux_sessions() -> Result<Vec<TmuxSessionInfo>, String> {
     for line in stdout.lines() {
         let parts: Vec<&str> = line.split(SEP).collect();
         if parts.len() < 6 {
-            debug_log(&format!("[divergence] list_tmux_sessions: skipping malformed line (parts={}): {:?}", parts.len(), line.chars().take(100).collect::<String>()));
+            debug_log(&format!(
+                "[divergence] list_tmux_sessions: skipping malformed line (parts={}): {:?}",
+                parts.len(),
+                line.chars().take(100).collect::<String>()
+            ));
             continue;
         }
         let name = parts[0];
@@ -421,16 +431,17 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
     );
     let mut cmd = command_with_tmux();
     cmd.args(["list-sessions", "-F", &fmt]);
-    let output = run_command_with_timeout(
-        &mut cmd,
-        TMUX_COMMAND_TIMEOUT,
-        "tmux list-sessions (all)",
-    );
+    let output =
+        run_command_with_timeout(&mut cmd, TMUX_COMMAND_TIMEOUT, "tmux list-sessions (all)");
 
     let result = match output {
         Ok(r) => r,
         Err(CommandOutputError::Io(err)) => {
-            debug_log(&format!("[divergence] list_all_tmux_sessions: tmux command FAILED: {} (kind={:?})", err, err.kind()));
+            debug_log(&format!(
+                "[divergence] list_all_tmux_sessions: tmux command FAILED: {} (kind={:?})",
+                err,
+                err.kind()
+            ));
             if err.kind() == ErrorKind::NotFound {
                 return Ok(vec![]);
             }
@@ -452,7 +463,9 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
     let stderr = String::from_utf8_lossy(&result.stderr);
     debug_log(&format!(
         "[divergence] list_all_tmux_sessions: exit={:?}, stdout_len={}, stderr={:?}",
-        result.status.code(), stdout.len(), stderr.chars().take(200).collect::<String>()
+        result.status.code(),
+        stdout.len(),
+        stderr.chars().take(200).collect::<String>()
     ));
 
     if !result.status.success() {
@@ -470,7 +483,10 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
         if parts.len() < 6 {
             continue;
         }
-        debug_log(&format!("[divergence] list_all_tmux_sessions: found session {:?} socket={:?}", parts[0], parts[1]));
+        debug_log(&format!(
+            "[divergence] list_all_tmux_sessions: found session {:?} socket={:?}",
+            parts[0], parts[1]
+        ));
         sessions.push(RawTmuxSessionInfo {
             name: parts[0].to_string(),
             socket_path: parts[1].to_string(),
@@ -481,7 +497,10 @@ pub fn list_all_tmux_sessions() -> Result<Vec<RawTmuxSessionInfo>, String> {
         });
     }
 
-    debug_log(&format!("[divergence] list_all_tmux_sessions: returning {} sessions", sessions.len()));
+    debug_log(&format!(
+        "[divergence] list_all_tmux_sessions: returning {} sessions",
+        sessions.len()
+    ));
     Ok(sessions)
 }
 
@@ -518,20 +537,61 @@ static ENV_DUMP_DONE: OnceLock<()> = OnceLock::new();
 fn dump_process_env_once() {
     ENV_DUMP_DONE.get_or_init(|| {
         debug_log("=== [divergence] Process Environment Dump (one-time) ===");
-        debug_log(&format!("[divergence] env PATH={:?}", std::env::var("PATH").ok().map(|p| p.chars().take(300).collect::<String>())));
-        debug_log(&format!("[divergence] env SHELL={:?}", std::env::var("SHELL").ok()));
-        debug_log(&format!("[divergence] env HOME={:?}", std::env::var("HOME").ok()));
-        debug_log(&format!("[divergence] env USER={:?}", std::env::var("USER").ok()));
-        debug_log(&format!("[divergence] env TMPDIR={:?}", std::env::var("TMPDIR").ok()));
-        debug_log(&format!("[divergence] env TMUX={:?}", std::env::var("TMUX").ok()));
-        debug_log(&format!("[divergence] env TMUX_TMPDIR={:?}", std::env::var("TMUX_TMPDIR").ok()));
-        debug_log(&format!("[divergence] env DIVERGENCE_TMUX_PATH={:?}", std::env::var("DIVERGENCE_TMUX_PATH").ok()));
-        debug_log(&format!("[divergence] env TERM={:?}", std::env::var("TERM").ok()));
-        debug_log(&format!("[divergence] env __CFBundleIdentifier={:?}", std::env::var("__CFBundleIdentifier").ok()));
-        debug_log(&format!("[divergence] current_dir={:?}", std::env::current_dir().ok()));
-        debug_log(&format!("[divergence] current_exe={:?}", std::env::current_exe().ok()));
+        debug_log(&format!(
+            "[divergence] env PATH={:?}",
+            std::env::var("PATH")
+                .ok()
+                .map(|p| p.chars().take(300).collect::<String>())
+        ));
+        debug_log(&format!(
+            "[divergence] env SHELL={:?}",
+            std::env::var("SHELL").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env HOME={:?}",
+            std::env::var("HOME").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env USER={:?}",
+            std::env::var("USER").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env TMPDIR={:?}",
+            std::env::var("TMPDIR").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env TMUX={:?}",
+            std::env::var("TMUX").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env TMUX_TMPDIR={:?}",
+            std::env::var("TMUX_TMPDIR").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env DIVERGENCE_TMUX_PATH={:?}",
+            std::env::var("DIVERGENCE_TMUX_PATH").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env TERM={:?}",
+            std::env::var("TERM").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] env __CFBundleIdentifier={:?}",
+            std::env::var("__CFBundleIdentifier").ok()
+        ));
+        debug_log(&format!(
+            "[divergence] current_dir={:?}",
+            std::env::current_dir().ok()
+        ));
+        debug_log(&format!(
+            "[divergence] current_exe={:?}",
+            std::env::current_exe().ok()
+        ));
         if let Ok(output) = Command::new("id").arg("-u").output() {
-            debug_log(&format!("[divergence] uid={}", String::from_utf8_lossy(&output.stdout).trim()));
+            debug_log(&format!(
+                "[divergence] uid={}",
+                String::from_utf8_lossy(&output.stdout).trim()
+            ));
         }
         debug_log("=== [divergence] End Process Environment Dump ===");
     });
@@ -546,13 +606,21 @@ struct LoginShellTmuxContext {
 
 fn command_with_tmux() -> Command {
     if let Some(ref path) = get_tmux_path() {
-        debug_log(&format!("[divergence] command_with_tmux: using resolved tmux binary: {:?}", path));
+        debug_log(&format!(
+            "[divergence] command_with_tmux: using resolved tmux binary: {:?}",
+            path
+        ));
         let mut cmd = Command::new(path);
         if let Some(ref login_path) = get_login_shell_path() {
-            debug_log(&format!("[divergence] command_with_tmux: setting PATH from login shell ({} chars)", login_path.len()));
+            debug_log(&format!(
+                "[divergence] command_with_tmux: setting PATH from login shell ({} chars)",
+                login_path.len()
+            ));
             cmd.env("PATH", login_path);
         } else {
-            debug_log("[divergence] command_with_tmux: no login shell PATH available, using process PATH");
+            debug_log(
+                "[divergence] command_with_tmux: no login shell PATH available, using process PATH",
+            );
         }
         apply_tmux_context_env(&mut cmd);
         return cmd;
@@ -586,26 +654,38 @@ fn resolve_tmux_path() -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var("DIVERGENCE_TMUX_PATH") {
         let candidate = PathBuf::from(&explicit);
         if is_executable(&candidate) {
-            debug_log(&format!("[divergence] tmux path resolved via DIVERGENCE_TMUX_PATH={:?}", explicit));
+            debug_log(&format!(
+                "[divergence] tmux path resolved via DIVERGENCE_TMUX_PATH={:?}",
+                explicit
+            ));
             return Some(candidate);
         }
     }
 
     if let Some(found) = get_login_shell_tmux_context().tmux_path {
-        debug_log(&format!("[divergence] tmux path resolved via login shell context: {:?}", found));
+        debug_log(&format!(
+            "[divergence] tmux path resolved via login shell context: {:?}",
+            found
+        ));
         return Some(found);
     }
 
     if let Some(path) = get_login_shell_path() {
         if let Some(found) = find_in_path(&path, "tmux") {
-            debug_log(&format!("[divergence] tmux path resolved via login shell PATH: {:?}", found));
+            debug_log(&format!(
+                "[divergence] tmux path resolved via login shell PATH: {:?}",
+                found
+            ));
             return Some(found);
         }
     }
 
     if let Ok(path) = std::env::var("PATH") {
         if let Some(found) = find_in_path(&path, "tmux") {
-            debug_log(&format!("[divergence] tmux path resolved via process PATH: {:?}", found));
+            debug_log(&format!(
+                "[divergence] tmux path resolved via process PATH: {:?}",
+                found
+            ));
             return Some(found);
         }
     }
@@ -619,7 +699,10 @@ fn resolve_tmux_path() -> Option<PathBuf> {
     ] {
         let candidate = Path::new(candidate);
         if is_executable(candidate) {
-            debug_log(&format!("[divergence] tmux path resolved via hardcoded fallback: {:?}", candidate));
+            debug_log(&format!(
+                "[divergence] tmux path resolved via hardcoded fallback: {:?}",
+                candidate
+            ));
             return Some(candidate.to_path_buf());
         }
     }
@@ -676,10 +759,7 @@ fn run_tmux_command_for_diagnostics(args: &[&str]) -> TmuxCommandDiagnostics {
             status_code: None,
             stdout: String::new(),
             stderr: String::new(),
-            error: Some(format!(
-                "Timed out after {}ms",
-                timeout.as_millis()
-            )),
+            error: Some(format!("Timed out after {}ms", timeout.as_millis())),
         },
     }
 }
@@ -696,7 +776,10 @@ fn resolve_login_shell_path() -> Option<String> {
         let result = match output {
             Ok(result) => result,
             Err(CommandOutputError::Io(_)) => {
-                debug_log(&format!("[divergence] login shell PATH probe failed for {:?}: could not execute", shell));
+                debug_log(&format!(
+                    "[divergence] login shell PATH probe failed for {:?}: could not execute",
+                    shell
+                ));
                 continue;
             }
             Err(CommandOutputError::Timeout(timeout)) => {
@@ -713,14 +796,21 @@ fn resolve_login_shell_path() -> Option<String> {
                 "[divergence] login shell PATH probe failed for {:?}: exit={:?}, stderr={:?}",
                 shell,
                 result.status.code(),
-                String::from_utf8_lossy(&result.stderr).chars().take(200).collect::<String>()
+                String::from_utf8_lossy(&result.stderr)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
             ));
             continue;
         }
 
         let path = String::from_utf8_lossy(&result.stdout).trim().to_string();
         if !path.is_empty() {
-            debug_log(&format!("[divergence] login shell PATH resolved via {:?} ({} chars)", shell, path.len()));
+            debug_log(&format!(
+                "[divergence] login shell PATH resolved via {:?} ({} chars)",
+                shell,
+                path.len()
+            ));
             return Some(path);
         }
     }
@@ -746,7 +836,10 @@ fn apply_tmux_context_env(cmd: &mut Command) {
     // Propagate TMUX_TMPDIR from login shell if not set in process env
     if process_tmux_tmpdir.is_none() {
         if let Some(ref tmux_tmpdir) = ctx.tmux_tmpdir {
-            debug_log(&format!("[divergence] apply_tmux_context_env: setting TMUX_TMPDIR={:?} from login shell", tmux_tmpdir));
+            debug_log(&format!(
+                "[divergence] apply_tmux_context_env: setting TMUX_TMPDIR={:?} from login shell",
+                tmux_tmpdir
+            ));
             cmd.env("TMUX_TMPDIR", tmux_tmpdir);
         }
     } else {
@@ -770,7 +863,9 @@ fn apply_tmux_context_env(cmd: &mut Command) {
             debug_log("[divergence] apply_tmux_context_env: TMPDIR matches between process and login shell — no override needed");
         }
     } else {
-        debug_log("[divergence] apply_tmux_context_env: no login shell TMPDIR available for comparison");
+        debug_log(
+            "[divergence] apply_tmux_context_env: no login shell TMPDIR available for comparison",
+        );
     }
 }
 
@@ -861,12 +956,15 @@ printf '__DIVERGENCE_TMUX_CTX__TMPDIR=%s\n' "${TMPDIR-}"
             shell, context.tmux_path, context.tmux_tmpdir, context.tmpdir
         ));
 
-        if context.tmux_path.is_some() || context.tmux_tmpdir.is_some() || context.tmpdir.is_some() {
+        if context.tmux_path.is_some() || context.tmux_tmpdir.is_some() || context.tmpdir.is_some()
+        {
             return context;
         }
     }
 
-    debug_log("[divergence] login shell tmux context probe: no data found from any shell candidate");
+    debug_log(
+        "[divergence] login shell tmux context probe: no data found from any shell candidate",
+    );
     LoginShellTmuxContext::default()
 }
 
@@ -938,8 +1036,8 @@ fn copy_dir_all(source: &Path, destination: &Path) -> Result<(), String> {
     fs::create_dir_all(destination)
         .map_err(|e| format!("Failed to create directory {:?}: {}", destination, e))?;
 
-    for entry in fs::read_dir(source)
-        .map_err(|e| format!("Failed to read directory {:?}: {}", source, e))?
+    for entry in
+        fs::read_dir(source).map_err(|e| format!("Failed to read directory {:?}: {}", source, e))?
     {
         let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let file_type = entry
@@ -1088,7 +1186,10 @@ pub fn is_branch_merged(repo_path: &Path, branch: &str) -> Result<bool, String> 
 
         if output.status.success() {
             let merged = String::from_utf8_lossy(&output.stdout);
-            let branches: Vec<&str> = merged.lines().map(|l| l.trim().trim_start_matches("* ")).collect();
+            let branches: Vec<&str> = merged
+                .lines()
+                .map(|l| l.trim().trim_start_matches("* "))
+                .collect();
             if branches.contains(&branch) {
                 return Ok(true);
             }
@@ -1146,7 +1247,12 @@ fn find_base_ref(repo_path: &Path) -> Result<Option<String>, String> {
 
 fn get_default_remote_branch(repo_path: &Path) -> Result<Option<String>, String> {
     let output = Command::new("git")
-        .args(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"])
+        .args([
+            "symbolic-ref",
+            "--quiet",
+            "--short",
+            "refs/remotes/origin/HEAD",
+        ])
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to execute git symbolic-ref: {}", e))?;
@@ -1163,7 +1269,11 @@ fn get_default_remote_branch(repo_path: &Path) -> Result<Option<String>, String>
 
 fn fetch_origin(repo_path: &Path) {
     if let Err(error) = fetch_origin_impl(repo_path) {
-        eprintln!("git fetch origin failed for '{}': {}", path_to_string(repo_path), error);
+        eprintln!(
+            "git fetch origin failed for '{}': {}",
+            path_to_string(repo_path),
+            error
+        );
     }
 }
 
@@ -1272,7 +1382,9 @@ pub fn get_remote_url(repo_path: &Path) -> Result<Option<String>, String> {
         .map_err(|e| format!("Failed to get remote URL: {}", e))?;
 
     if output.status.success() {
-        Ok(Some(String::from_utf8_lossy(&output.stdout).trim().to_string()))
+        Ok(Some(
+            String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        ))
     } else {
         Ok(None)
     }
@@ -1450,7 +1562,9 @@ pub fn get_diff(repo_path: &Path, file_path: &Path, mode: DiffMode) -> Result<Gi
     let mut diff_text = run_diff(repo_path, &rel_string, mode)?;
     let mut used_untracked_diff = false;
 
-    if diff_text.is_empty() && matches!(mode, DiffMode::Working) && is_untracked(repo_path, &rel_string)
+    if diff_text.is_empty()
+        && matches!(mode, DiffMode::Working)
+        && is_untracked(repo_path, &rel_string)
     {
         diff_text = run_untracked_diff(repo_path, &rel_string)?;
         used_untracked_diff = true;
@@ -1611,8 +1725,14 @@ fn validate_automation_session_name(session_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn write_automation_script(cwd: &str, session_name: &str, command: &str) -> Result<PathBuf, String> {
-    let script_dir = PathBuf::from(cwd).join(".divergence").join("automation-runs");
+fn write_automation_script(
+    cwd: &str,
+    session_name: &str,
+    command: &str,
+) -> Result<PathBuf, String> {
+    let script_dir = PathBuf::from(cwd)
+        .join(".divergence")
+        .join("automation-runs");
     fs::create_dir_all(&script_dir)
         .map_err(|error| format!("Failed to create automation-runs directory: {}", error))?;
 
@@ -1748,8 +1868,8 @@ pub fn tmux_capture_pane(session_name: &str, lines: u32) -> Result<String, Strin
             "capture-pane",
             "-t",
             session_name,
-            "-p",          // print to stdout
-            "-S",          // start line (negative = scrollback)
+            "-p", // print to stdout
+            "-S", // start line (negative = scrollback)
             &scroll_back,
         ])
         .output();
@@ -1782,13 +1902,7 @@ pub fn tmux_capture_pane(session_name: &str, lines: u32) -> Result<String, Strin
 pub fn tmux_send_keys(session_name: &str, keys: &str) -> Result<(), String> {
     let output = command_with_tmux()
         .env_remove("TMUX")
-        .args([
-            "send-keys",
-            "-t",
-            session_name,
-            keys,
-            "Enter",
-        ])
+        .args(["send-keys", "-t", session_name, keys, "Enter"])
         .output();
 
     let result = match output {
@@ -1821,8 +1935,8 @@ pub fn read_file_tail(path: &str, max_bytes: u64) -> Result<Option<String>, Stri
         return Ok(None);
     }
 
-    let metadata = fs::metadata(file_path)
-        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    let metadata =
+        fs::metadata(file_path).map_err(|e| format!("Failed to read file metadata: {}", e))?;
     let file_size = metadata.len();
 
     if file_size == 0 {
@@ -1830,8 +1944,7 @@ pub fn read_file_tail(path: &str, max_bytes: u64) -> Result<Option<String>, Stri
     }
 
     use std::io::{Read, Seek, SeekFrom};
-    let mut file = fs::File::open(file_path)
-        .map_err(|e| format!("Failed to open file: {}", e))?;
+    let mut file = fs::File::open(file_path).map_err(|e| format!("Failed to open file: {}", e))?;
 
     let read_start = file_size.saturating_sub(max_bytes);
 
@@ -1851,8 +1964,8 @@ pub fn read_file_if_exists(path: &str) -> Result<Option<String>, String> {
         return Ok(None);
     }
 
-    let contents = fs::read_to_string(file_path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let contents =
+        fs::read_to_string(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
 
     Ok(Some(contents))
 }
@@ -1871,12 +1984,7 @@ pub fn list_branch_changes(repo_path: &Path) -> Result<BranchChanges, String> {
     };
 
     let output = Command::new("git")
-        .args([
-            "diff",
-            "--name-status",
-            "-z",
-            &format!("{}...HEAD", base),
-        ])
+        .args(["diff", "--name-status", "-z", &format!("{}...HEAD", base)])
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to execute git diff: {}", e))?;
@@ -1934,10 +2042,7 @@ pub fn list_branch_changes(repo_path: &Path) -> Result<BranchChanges, String> {
         }
     }
 
-    Ok(BranchChanges {
-        base_ref,
-        changes,
-    })
+    Ok(BranchChanges { base_ref, changes })
 }
 
 fn run_branch_diff(repo_path: &Path, base: &str, rel_path: &str) -> Result<String, String> {

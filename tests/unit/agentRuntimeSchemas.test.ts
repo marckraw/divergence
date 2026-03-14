@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseAgentRuntimeCapabilities,
   parseAgentRuntimeSessionSnapshot,
+  parseAgentRuntimeSessionSummary,
 } from "../../src/shared/api/agentRuntime.schemas";
 
 describe("agentRuntime.schemas", () => {
@@ -154,5 +155,40 @@ describe("agentRuntime.schemas", () => {
 
     expect(parsed.providers[0]?.transport).toBe("cli-headless");
     expect(parsed.providers[1]?.transport).toBe("app-server");
+  });
+
+  it("accepts lightweight runtime session summaries", () => {
+    const parsed = parseAgentRuntimeSessionSummary({
+      id: "agent-2",
+      provider: "claude",
+      model: "sonnet",
+      targetType: "project",
+      targetId: 2,
+      projectId: 2,
+      workspaceOwnerId: null,
+      workspaceKey: "project:2",
+      sessionRole: "default",
+      nameMode: "default",
+      name: "Beta",
+      path: "/tmp/beta",
+      status: "idle",
+      runtimeStatus: "idle",
+      isOpen: false,
+      createdAtMs: 10,
+      updatedAtMs: 20,
+      threadId: null,
+      currentTurnStartedAtMs: null,
+      lastRuntimeEventAtMs: 20,
+      runtimePhase: "Completed",
+      pendingRequest: null,
+      errorMessage: null,
+      latestAssistantMessageInteractionMode: "plan",
+      latestAssistantMessageStatus: "done",
+    });
+
+    expect(parsed.workspaceOwnerId).toBeUndefined();
+    expect(parsed.threadId).toBeUndefined();
+    expect(parsed.latestAssistantMessageInteractionMode).toBe("plan");
+    expect(parsed.latestAssistantMessageStatus).toBe("done");
   });
 });

@@ -1,6 +1,8 @@
 import {
   buildEqualSplitPaneSizes,
+  MAX_SPLIT_PANES,
   normalizeSplitPaneSizes,
+  SPLIT_PANE_IDS,
 } from "../../entities";
 import type {
   SplitOrientation,
@@ -8,12 +10,8 @@ import type {
   SplitSessionState,
 } from "../../entities";
 
-const ALL_PANES: SplitPaneId[] = ["pane-1", "pane-2", "pane-3", "pane-4"];
-
-export const MAX_SPLIT_PANES = ALL_PANES.length;
-
 function getFirstMissingPaneId(paneIds: SplitPaneId[]): SplitPaneId | null {
-  for (const paneId of ALL_PANES) {
+  for (const paneId of SPLIT_PANE_IDS) {
     if (!paneIds.includes(paneId)) {
       return paneId;
     }
