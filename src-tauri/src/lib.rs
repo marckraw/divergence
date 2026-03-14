@@ -107,6 +107,7 @@ pub fn run() {
             commands::list_projects,
             commands::create_divergence,
             commands::prepare_github_pr_review_divergence,
+            commands::prepare_github_pr_conflict_resolution_divergence,
             commands::list_divergences,
             commands::list_remote_branches,
             commands::delete_divergence,

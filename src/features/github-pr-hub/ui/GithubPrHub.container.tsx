@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentSessionSnapshot, Project } from "../../../entities";
 import { getErrorMessage, type CreateAgentSessionInput } from "../../../shared";
+import { hasGithubMergeConflicts } from "../lib/githubPrHub.pure";
 import { useGithubPrChat } from "../model/useGithubPrChat";
 import { useGithubPrHub } from "../model/useGithubPrHub";
 import type {
@@ -22,6 +23,10 @@ interface GithubPrHubContainerProps {
     pullRequest: GithubPullRequestSummary;
     detail: GithubPullRequestDetail;
   }) => Promise<void>;
+  onOpenConflictResolutionDivergence: (input: {
+    pullRequest: GithubPullRequestSummary;
+    detail: GithubPullRequestDetail;
+  }) => Promise<void>;
 }
 
 function GithubPrHubContainer({
@@ -32,9 +37,12 @@ function GithubPrHubContainer({
   startAgentTurn,
   deleteAgentSession,
   onOpenReviewDivergence,
+  onOpenConflictResolutionDivergence,
 }: GithubPrHubContainerProps) {
   const [openingReviewDivergence, setOpeningReviewDivergence] = useState(false);
   const [reviewDivergenceError, setReviewDivergenceError] = useState<string | null>(null);
+  const [openingConflictResolutionDivergence, setOpeningConflictResolutionDivergence] = useState(false);
+  const [conflictResolutionError, setConflictResolutionError] = useState<string | null>(null);
   const {
     projectTargets,
     pullRequests,
@@ -107,8 +115,15 @@ function GithubPrHubContainer({
 
   useEffect(() => {
     setReviewDivergenceError(null);
+    setConflictResolutionError(null);
     setOpeningReviewDivergence(false);
+    setOpeningConflictResolutionDivergence(false);
   }, [selectedPullRequest?.id]);
+
+  const detailHasConflicts = hasGithubMergeConflicts(
+    detail?.mergeable ?? null,
+    detail?.mergeableState ?? null,
+  );
 
   const handleOpenReviewDivergence = useCallback(async () => {
     if (!selectedPullRequest || !detail || openingReviewDivergence) {
@@ -128,6 +143,38 @@ function GithubPrHubContainer({
       setOpeningReviewDivergence(false);
     }
   }, [detail, onOpenReviewDivergence, openingReviewDivergence, selectedPullRequest]);
+
+  const handleOpenConflictResolutionDivergence = useCallback(async () => {
+    if (
+      !selectedPullRequest
+      || !detail
+      || !detailHasConflicts
+      || openingConflictResolutionDivergence
+    ) {
+      return;
+    }
+
+    setOpeningConflictResolutionDivergence(true);
+    setConflictResolutionError(null);
+    try {
+      await onOpenConflictResolutionDivergence({
+        pullRequest: selectedPullRequest,
+        detail,
+      });
+    } catch (error) {
+      setConflictResolutionError(
+        getErrorMessage(error, "Failed to prepare conflict resolution divergence."),
+      );
+    } finally {
+      setOpeningConflictResolutionDivergence(false);
+    }
+  }, [
+    detail,
+    detailHasConflicts,
+    onOpenConflictResolutionDivergence,
+    openingConflictResolutionDivergence,
+    selectedPullRequest,
+  ]);
 
   return (
     <GithubPrHubPresentational
@@ -150,6 +197,8 @@ function GithubPrHubContainer({
       merging={merging}
       openingReviewDivergence={openingReviewDivergence}
       reviewDivergenceError={reviewDivergenceError}
+      openingConflictResolutionDivergence={openingConflictResolutionDivergence}
+      conflictResolutionError={conflictResolutionError}
       isChatOpen={isChatOpen}
       chatSidebar={(
         <GithubPrChatSidebar
@@ -177,6 +226,7 @@ function GithubPrHubContainer({
       onMergeMethodChange={handleMergeMethodChange}
       onMerge={mergeSelectedPullRequest}
       onOpenReviewDivergence={handleOpenReviewDivergence}
+      onOpenConflictResolutionDivergence={handleOpenConflictResolutionDivergence}
     />
   );
 }

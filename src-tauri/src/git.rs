@@ -1131,6 +1131,52 @@ pub fn fetch_pull_request_head(
     run_origin_fetch(repo_path, &args, "git fetch origin pull request head")
 }
 
+pub fn fetch_origin_branch(repo_path: &Path, branch: &str) -> Result<(), String> {
+    let normalized_branch = branch.trim();
+    if normalized_branch.is_empty() {
+        return Err("Branch name is required".to_string());
+    }
+
+    let refspec = format!(
+        "refs/heads/{}:refs/remotes/origin/{}",
+        normalized_branch, normalized_branch
+    );
+    let args = vec!["fetch".to_string(), "origin".to_string(), refspec];
+    run_origin_fetch(repo_path, &args, "git fetch origin branch")
+}
+
+pub fn merge_origin_branch_for_conflict_resolution(
+    repo_path: &Path,
+    branch: &str,
+) -> Result<(), String> {
+    let normalized_branch = branch.trim();
+    if normalized_branch.is_empty() {
+        return Err("Branch name is required".to_string());
+    }
+
+    let merge_ref = format!("origin/{}", normalized_branch);
+    let output = Command::new("git")
+        .args(["merge", "--no-ff", "--no-commit", &merge_ref])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git merge: {}", e))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let combined_output = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if is_merge_conflict_output(&combined_output) {
+        return Ok(());
+    }
+
+    Err(format!("Git merge failed: {}", combined_output.trim()))
+}
+
 pub fn list_remote_branches(repo_path: &Path) -> Result<Vec<String>, String> {
     if get_remote_url(repo_path)?.is_none() {
         return Err("Remote origin is not configured for this repository".to_string());
@@ -1345,6 +1391,14 @@ fn ref_exists(repo_path: &Path, reference: &str) -> Result<bool, String> {
     Ok(status.success())
 }
 
+fn is_merge_conflict_output(output: &str) -> bool {
+    let normalized = output.to_ascii_lowercase();
+    normalized.contains("automatic merge failed")
+        || normalized.contains("fix conflicts and then commit the result")
+        || normalized.contains("merge conflict")
+        || normalized.contains("conflict (")
+}
+
 fn branch_ahead_count(repo_path: &Path, base_ref: &str, branch: &str) -> Result<i64, String> {
     let output = Command::new("git")
         .args(["rev-list", "--count", &format!("{}..{}", base_ref, branch)])
@@ -1494,6 +1548,19 @@ fn parse_porcelain_unmerged_entry(part: &str) -> Option<GitChange> {
         unstaged: true,
         untracked: false,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_merge_conflict_output;
+
+    #[test]
+    fn detects_merge_conflict_output() {
+        assert!(is_merge_conflict_output(
+            "Auto-merging src/App.tsx\nCONFLICT (content): Merge conflict in src/App.tsx\nAutomatic merge failed; fix conflicts and then commit the result."
+        ));
+        assert!(!is_merge_conflict_output("Already up to date."));
+    }
 }
 
 fn parse_porcelain_untracked_entry(part: &str) -> GitChange {

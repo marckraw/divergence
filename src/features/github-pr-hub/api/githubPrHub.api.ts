@@ -15,7 +15,7 @@ import {
   parseGithubPullRequestRemoteSummaries,
 } from "./githubPrHub.schemas";
 
-interface PrepareGithubPrReviewDivergenceInput {
+interface PrepareGithubPrDivergenceInput {
   token: string;
   projectId: number;
   projectName: string;
@@ -89,10 +89,19 @@ export async function mergeGithubPullRequest(
 }
 
 export async function prepareGithubPrReviewDivergence(
-  input: PrepareGithubPrReviewDivergenceInput,
+  input: PrepareGithubPrDivergenceInput,
 ): Promise<GithubPrReviewDivergenceResult> {
   return parseGithubPrReviewDivergenceResult(await invoke<unknown>(
     "prepare_github_pr_review_divergence",
+    { input: { ...input } },
+  ));
+}
+
+export async function prepareGithubPrConflictResolutionDivergence(
+  input: PrepareGithubPrDivergenceInput,
+): Promise<GithubPrReviewDivergenceResult> {
+  return parseGithubPrReviewDivergenceResult(await invoke<unknown>(
+    "prepare_github_pr_conflict_resolution_divergence",
     { input: { ...input } },
   ));
 }
