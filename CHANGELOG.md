@@ -1,5 +1,18 @@
 # divergence
 
+## 0.30.0
+
+### Minor Changes
+
+- aef36b2: Add GitHub PR review divergence creation, improve agent session attention and model configuration, and harden agent runtime handling for provider payloads and Gemini CLI edge cases.
+
+### Patch Changes
+
+- 07927a0: Improve agent conversation tool traces by grouping adjacent tool bursts, preserving clearer command summaries, and making grouped steps easier to scan.
+- 25d3562: Add a Codex conversation-context indicator to the agent header and preserve the normalized context snapshot in saved agent sessions.
+- 4f483d6: Load lightweight agent session summaries first and lazily hydrate full saved transcripts when a conversation is opened, reducing agent session startup cost for large histories.
+- 3538523: Stabilize split-terminal pane identities and tmux session targeting, and preserve plan-ready session attention when agent tabs are hydrated from lightweight summaries.
+
 ## 0.29.2
 
 ### Patch Changes
