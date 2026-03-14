@@ -137,7 +137,10 @@ impl AgentRuntimeState {
         session_id: &str,
         parsed: Value,
     ) -> Result<(), String> {
-        let event_type = parsed.get("type").and_then(Value::as_str).unwrap_or_default();
+        let event_type = parsed
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
 
         match event_type {
             "system" => {
@@ -172,11 +175,13 @@ impl AgentRuntimeState {
                                 return Ok(());
                             }
 
-                            if let Some(activity) = session.activities.iter_mut().rev().find(|activity| {
-                                activity.kind == "thought_process"
-                                    && activity.title == "Thinking"
-                                    && matches!(activity.status, AgentActivityStatus::Running)
-                            }) {
+                            if let Some(activity) =
+                                session.activities.iter_mut().rev().find(|activity| {
+                                    activity.kind == "thought_process"
+                                        && activity.title == "Thinking"
+                                        && matches!(activity.status, AgentActivityStatus::Running)
+                                })
+                            {
                                 let next_details = match activity.details.as_deref() {
                                     Some(existing) if !existing.is_empty() => {
                                         format!("{existing}{details}")
@@ -197,11 +202,13 @@ impl AgentRuntimeState {
                             }
                         }
                         "completed" => {
-                            if let Some(activity) = session.activities.iter_mut().rev().find(|activity| {
-                                activity.kind == "thought_process"
-                                    && activity.title == "Thinking"
-                                    && matches!(activity.status, AgentActivityStatus::Running)
-                            }) {
+                            if let Some(activity) =
+                                session.activities.iter_mut().rev().find(|activity| {
+                                    activity.kind == "thought_process"
+                                        && activity.title == "Thinking"
+                                        && matches!(activity.status, AgentActivityStatus::Running)
+                                })
+                            {
                                 activity.status = AgentActivityStatus::Completed;
                                 activity.completed_at_ms = Some(now_ms());
                             }
@@ -222,7 +229,8 @@ impl AgentRuntimeState {
             }
             "assistant" | "assistant_message" => {
                 if let Some(text) = read_provider_text_delta(&parsed) {
-                    let has_timestamp = parsed.get("timestamp_ms").and_then(Value::as_i64).is_some();
+                    let has_timestamp =
+                        parsed.get("timestamp_ms").and_then(Value::as_i64).is_some();
                     let snapshot = self.mutate_session(session_id, |session| {
                         let message = ensure_assistant_message(session, None);
                         if has_timestamp {
@@ -247,8 +255,8 @@ impl AgentRuntimeState {
                 }
             }
             "tool_call_started" => {
-                let activity_id =
-                    read_provider_activity_id(&parsed).unwrap_or_else(|| format!("activity-{}", Uuid::new_v4()));
+                let activity_id = read_provider_activity_id(&parsed)
+                    .unwrap_or_else(|| format!("activity-{}", Uuid::new_v4()));
                 let title =
                     read_provider_activity_title(&parsed).unwrap_or_else(|| "Tool".to_string());
                 let details = parsed
@@ -282,12 +290,16 @@ impl AgentRuntimeState {
             }
             "tool_call_completed" => {
                 if let Some(activity_id) = read_provider_activity_id(&parsed) {
-                    let details = parsed.get("output").or_else(|| parsed.get("result")).map(|value| {
-                        value
-                            .as_str()
-                            .map(truncate_details)
-                            .unwrap_or_else(|| truncate_json_details(value))
-                    });
+                    let details =
+                        parsed
+                            .get("output")
+                            .or_else(|| parsed.get("result"))
+                            .map(|value| {
+                                value
+                                    .as_str()
+                                    .map(truncate_details)
+                                    .unwrap_or_else(|| truncate_json_details(value))
+                            });
                     let snapshot = self.mutate_session(session_id, |session| {
                         complete_activity(
                             session,

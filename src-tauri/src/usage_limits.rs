@@ -238,7 +238,10 @@ fn parse_codex_windows(body: &Value) -> Vec<UsageWindow> {
     }
 
     // Additional rate limits (e.g. GPT-5.3-Codex-Spark)
-    if let Some(additional) = body.get("additional_rate_limits").and_then(|v| v.as_array()) {
+    if let Some(additional) = body
+        .get("additional_rate_limits")
+        .and_then(|v| v.as_array())
+    {
         for entry in additional {
             let name = entry
                 .get("limit_name")

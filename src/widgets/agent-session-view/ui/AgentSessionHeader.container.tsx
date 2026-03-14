@@ -14,6 +14,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  useAppSettings,
 } from "../../../shared";
 import { buildAgentConversationContextSummary } from "../lib/agentConversationContext.pure";
 import {
@@ -21,15 +22,6 @@ import {
   formatRuntimeEventOffset,
 } from "../lib/agentRuntimeTelemetry.pure";
 import type { AgentSessionHeaderProps } from "./AgentSessionView.types";
-
-function getModelLabel(
-  provider: AgentSessionHeaderProps["session"]["provider"],
-  model: string,
-  capabilities: AgentSessionHeaderProps["capabilities"],
-): string {
-  const options = getAgentRuntimeProviderModelOptions(capabilities, provider);
-  return options.find((option) => option.slug === model)?.label ?? model;
-}
 
 function AgentSessionHeaderContainer({
   session,
@@ -40,9 +32,14 @@ function AgentSessionHeaderContainer({
 }: AgentSessionHeaderProps) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [isRuntimeDebugOpen, setIsRuntimeDebugOpen] = useState(false);
-  const modelOptions = getAgentRuntimeProviderModelOptions(capabilities, session.provider);
+  const { settings } = useAppSettings();
+  const modelOptions = getAgentRuntimeProviderModelOptions(
+    capabilities,
+    session.provider,
+    settings.customAgentModels,
+  );
   const providerLabel = getAgentProviderLabel(session.provider);
-  const selectedModelLabel = getModelLabel(session.provider, session.model, capabilities);
+  const selectedModelLabel = modelOptions.find((option) => option.slug === session.model)?.label ?? session.model;
   const conversationContext = useMemo(
     () => buildAgentConversationContextSummary(session),
     [session],

@@ -98,6 +98,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
       sessionList={props.sessionList}
       activeSessionId={props.activeSessionId}
       idleAttentionSessionIds={props.idleAttentionSessionIds}
+      lastViewedRuntimeEventAtMsBySessionId={props.lastViewedRuntimeEventAtMsBySessionId}
       capabilities={props.capabilities}
       timelineItems={timelineItems}
       isUpdatingModel={isUpdatingModel}

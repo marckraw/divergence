@@ -115,6 +115,10 @@ export {
   recordDebugEvent,
   subscribeDebugEvents,
 } from "./service/debugEvents.service";
+export {
+  createDebouncedTask,
+  createFrameTask,
+} from "./service/timing.service";
 export type {
   DebugEvent,
   DebugEventCategory,
@@ -135,8 +139,10 @@ export {
   SETTINGS_STORAGE_KEY,
   SETTINGS_UPDATED_EVENT,
   normalizeAppSettings,
+  normalizeCustomAgentModels,
   normalizeTmuxHistoryLimit,
   type AppSettings,
+  type CustomAgentModels,
 } from "./lib/appSettings.pure";
 export {
   broadcastAppSettings,
@@ -206,6 +212,7 @@ export {
   deleteAgentRuntimeSession,
   getAgentRuntimeCapabilities,
   getAgentRuntimeSession,
+  listAgentRuntimeSessionSummaries,
   listAgentRuntimeSessions,
   onAgentRuntimeSessionUpdated,
   refreshAgentRuntimeCapabilities,
@@ -244,6 +251,7 @@ export type {
   AgentRuntimeSessionSnapshot,
   AgentRuntimeSessionNameMode,
   AgentRuntimeSessionRole,
+  AgentRuntimeSessionSummary,
   AgentRuntimeSessionStatus,
   AgentRuntimeSessionUpdatedEvent,
   AgentRuntimeStatus,

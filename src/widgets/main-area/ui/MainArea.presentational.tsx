@@ -9,7 +9,7 @@ import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ReviewDraftPanel } from "../../../features/diff-review";
 import { PromptQueuePanel } from "../../../features/prompt-queue";
 import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
-import { isTerminalSession } from "../../../entities";
+import { MAX_SPLIT_PANES, isTerminalSession } from "../../../entities";
 import { FAST_EASE_OUT, getContentSwapVariants } from "../../../shared";
 import { Kbd, TabButton, ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
@@ -20,6 +20,7 @@ function MainAreaPresentational({
   projects,
   activeSession,
   idleAttentionSessionIds,
+  lastViewedRuntimeEventAtMsBySessionId,
   onCloseSession,
   onCloseSessionAndKillTmux,
   onSelectSession,
@@ -121,7 +122,7 @@ function MainAreaPresentational({
     ? FAST_EASE_OUT
     : { type: "spring", stiffness: 240, damping: 28, mass: 0.9 };
   const activePaneCount = activeSplit?.paneIds.length ?? 1;
-  const canAddSplitPane = Boolean(activeSession) && activePaneCount < 3;
+  const canAddSplitPane = Boolean(activeSession) && activePaneCount < MAX_SPLIT_PANES;
   const terminalSessionList = sessionList.filter(isTerminalSession);
 
   return (
@@ -160,6 +161,7 @@ function MainAreaPresentational({
               sessionList={sessionList}
               activeSessionId={activeSession?.id ?? null}
               idleAttentionSessionIds={idleAttentionSessionIds}
+              lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
               onSelectSession={onSelectSession}
               onCloseSession={onCloseSession}
             />

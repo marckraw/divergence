@@ -5,12 +5,16 @@ import {
   isEditorThemeId,
   type EditorThemeId,
 } from "./editorThemes.pure";
+import type { AgentRuntimeProvider } from "../api/agentRuntime.types";
 
 export const SETTINGS_STORAGE_KEY = "divergence-settings";
 export const SETTINGS_UPDATED_EVENT = "divergence-settings-updated";
 export const DEFAULT_TMUX_HISTORY_LIMIT = 50000;
 const MIN_TMUX_HISTORY_LIMIT = 1000;
 const MAX_TMUX_HISTORY_LIMIT = 500000;
+const AGENT_RUNTIME_PROVIDERS: AgentRuntimeProvider[] = ["claude", "codex", "cursor", "gemini"];
+
+export type CustomAgentModels = Partial<Record<AgentRuntimeProvider, string[]>>;
 
 export interface AppSettings {
   defaultShell: string;
@@ -28,6 +32,7 @@ export interface AppSettings {
   linearApiToken?: string;
   cloudApiBaseUrl?: string;
   cloudApiToken?: string;
+  customAgentModels: CustomAgentModels;
 }
 
 type AgentCommandTemplate = "claude" | "codex";
@@ -49,6 +54,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   linearApiToken: "",
   cloudApiBaseUrl: "https://cloud.divergence.app",
   cloudApiToken: "",
+  customAgentModels: {},
 };
 
 const LEGACY_CLAUDE_COMMAND_TEMPLATES = [
@@ -98,6 +104,43 @@ export function normalizeTmuxHistoryLimit(
   }
   const rounded = Math.round(parsed);
   return Math.min(Math.max(rounded, MIN_TMUX_HISTORY_LIMIT), MAX_TMUX_HISTORY_LIMIT);
+}
+
+function normalizeCustomAgentModelList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  value.forEach((entry) => {
+    if (typeof entry !== "string") {
+      return;
+    }
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  });
+  return normalized;
+}
+
+export function normalizeCustomAgentModels(value: unknown): CustomAgentModels {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const candidate = value as Partial<Record<AgentRuntimeProvider, unknown>>;
+  const normalized: CustomAgentModels = {};
+  AGENT_RUNTIME_PROVIDERS.forEach((provider) => {
+    const models = normalizeCustomAgentModelList(candidate[provider]);
+    if (models.length > 0) {
+      normalized[provider] = models;
+    }
+  });
+  return normalized;
 }
 
 export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSettings {
@@ -151,6 +194,7 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     ? input.cloudApiToken
     : "";
   const restoreTabsOnRestart = input?.restoreTabsOnRestart === true;
+  const customAgentModels = normalizeCustomAgentModels(input?.customAgentModels);
 
   return {
     ...DEFAULT_APP_SETTINGS,
@@ -167,5 +211,6 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     linearApiToken,
     cloudApiBaseUrl,
     cloudApiToken,
+    customAgentModels,
   };
 }

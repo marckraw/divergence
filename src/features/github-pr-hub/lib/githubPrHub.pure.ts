@@ -89,6 +89,19 @@ export function getGithubFileStatusToneClass(status: string): string {
   return "bg-surface text-subtext";
 }
 
+export function getDiffTreeRowToneClass(additions: number, deletions: number): string {
+  if (additions > 0 && deletions > 0) {
+    return "text-yellow";
+  }
+  if (additions > 0) {
+    return "text-green";
+  }
+  if (deletions > 0) {
+    return "text-red";
+  }
+  return "text-subtext";
+}
+
 function isDiffHeaderLine(line: string): boolean {
   return line.startsWith("diff ")
     || line.startsWith("index ")

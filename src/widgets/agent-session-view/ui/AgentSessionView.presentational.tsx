@@ -10,6 +10,7 @@ function AgentSessionViewPresentational({
   sessionList,
   activeSessionId,
   idleAttentionSessionIds,
+  lastViewedRuntimeEventAtMsBySessionId,
   capabilities,
   timelineItems,
   isUpdatingModel,
@@ -39,6 +40,7 @@ function AgentSessionViewPresentational({
               sessionList={sessionList}
               activeSessionId={activeSessionId}
               idleAttentionSessionIds={idleAttentionSessionIds}
+              lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
               onSelectSession={onSelectSession}
               onCloseSession={onCloseSession}
             />

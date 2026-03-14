@@ -20,16 +20,13 @@ pub async fn advertise_mdns(port: u16) {
         }
     };
 
-    let properties = [
-        ("version", "1"),
-        ("hostname", hostname.as_str()),
-    ];
+    let properties = [("version", "1"), ("hostname", hostname.as_str())];
 
     let service_info = match ServiceInfo::new(
         SERVICE_TYPE,
         SERVICE_NAME,
         &format!("{}.", hostname),
-        "",       // Let the library resolve the host IP addresses.
+        "", // Let the library resolve the host IP addresses.
         port,
         &properties[..],
     ) {
@@ -45,9 +42,7 @@ pub async fn advertise_mdns(port: u16) {
         return;
     }
 
-    eprintln!(
-        "[ws_mdns] Advertising {SERVICE_TYPE} on port {port} (hostname: {hostname})"
-    );
+    eprintln!("[ws_mdns] Advertising {SERVICE_TYPE} on port {port} (hostname: {hostname})");
 
     // Keep the task alive so the daemon continues to respond to queries.
     // The daemon is shut down when this task is cancelled / the app exits.
@@ -58,7 +53,5 @@ pub async fn advertise_mdns(port: u16) {
 
 /// Returns a short machine hostname suitable for mDNS TXT records.
 fn hostname() -> String {
-    gethostname::gethostname()
-        .to_string_lossy()
-        .into_owned()
+    gethostname::gethostname().to_string_lossy().into_owned()
 }

@@ -1,7 +1,7 @@
 use crate::agent_runtime::{
     AgentAttachment, AgentRuntimeCapabilities, AgentRuntimeState, AgentSessionSnapshot,
-    CreateAgentSessionInput, RespondAgentRequestInput, StageAgentAttachmentInput,
-    StartAgentTurnInput, UpdateAgentSessionInput,
+    AgentSessionSummary, CreateAgentSessionInput, RespondAgentRequestInput,
+    StageAgentAttachmentInput, StartAgentTurnInput, UpdateAgentSessionInput,
 };
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
@@ -36,6 +36,19 @@ pub struct Divergence {
     pub has_diverged: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrepareGithubPrReviewDivergenceInput {
+    pub token: String,
+    pub project_id: i64,
+    pub project_name: String,
+    pub project_path: String,
+    pub pull_request_owner: String,
+    pub pull_request_repo: String,
+    pub pull_request_number: i64,
+    pub copy_ignored_skip: Vec<String>,
+}
+
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -59,6 +72,13 @@ pub async fn list_agent_sessions(
     agent_runtime: State<'_, AgentRuntimeState>,
 ) -> Result<Vec<AgentSessionSnapshot>, String> {
     agent_runtime.list_sessions()
+}
+
+#[tauri::command]
+pub async fn list_agent_session_summaries(
+    agent_runtime: State<'_, AgentRuntimeState>,
+) -> Result<Vec<AgentSessionSummary>, String> {
+    agent_runtime.list_session_summaries()
 }
 
 #[tauri::command]
@@ -220,6 +240,66 @@ pub async fn create_divergence(
 }
 
 #[tauri::command]
+pub async fn prepare_github_pr_review_divergence(
+    input: PrepareGithubPrReviewDivergenceInput,
+) -> Result<Divergence, String> {
+    let token = normalize_bearer_token(&input.token)?;
+    let owner = input.pull_request_owner.trim();
+    let repo = input.pull_request_repo.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return Err("pull request owner and repo are required".to_string());
+    }
+    if input.pull_request_number <= 0 {
+        return Err("pull request number must be greater than 0".to_string());
+    }
+
+    let source_path = PathBuf::from(&input.project_path);
+    if !git::is_git_repo(&source_path) {
+        return Err("Project is not a git repository".to_string());
+    }
+
+    let client = reqwest::Client::new();
+    let pull_request = fetch_github_pull_request_detail_api_item(
+        &client,
+        &token,
+        owner,
+        repo,
+        input.pull_request_number,
+    )
+    .await?;
+    let review_branch_name = build_pull_request_review_branch_name(
+        input.pull_request_number,
+        &pull_request.head.branch_ref,
+    );
+
+    let short_uuid = &Uuid::new_v4().to_string()[..8];
+    let safe_project_name = input.project_name.replace(' ', "-").to_lowercase();
+    let safe_branch_name = review_branch_name.replace(['/', ' '], "-");
+    let divergence_dir_name = format!("{}-{}-{}", safe_project_name, safe_branch_name, short_uuid);
+    let divergence_path = get_repos_dir().join(&divergence_dir_name);
+
+    git::clone_repo(&source_path, &divergence_path)?;
+    git::set_origin_to_source_remote(&source_path, &divergence_path)?;
+    git::fetch_pull_request_head(
+        &divergence_path,
+        input.pull_request_number,
+        &review_branch_name,
+    )?;
+    git::checkout_branch(&divergence_path, &review_branch_name, false)?;
+    git::copy_ignored_paths(&source_path, &divergence_path, &input.copy_ignored_skip)?;
+
+    Ok(Divergence {
+        id: 0,
+        project_id: input.project_id,
+        name: divergence_dir_name,
+        branch: review_branch_name,
+        path: path_to_string(&divergence_path),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        has_diverged: false,
+    })
+}
+
+#[tauri::command]
 pub async fn list_divergences(_project_id: i64) -> Result<Vec<Divergence>, String> {
     // Database query handled by frontend
     Ok(vec![])
@@ -250,14 +330,20 @@ pub async fn delete_divergence(path: String) -> Result<(), String> {
             .map_err(|e| format!("Failed to delete divergence directory: {}", e))?
             .map_err(|e| format!("Failed to delete divergence directory: {}", e))?;
         let elapsed = started_at.elapsed();
-        println!("Deleted divergence at '{}' in {} ms", path, elapsed.as_millis());
+        println!(
+            "Deleted divergence at '{}' in {} ms",
+            path,
+            elapsed.as_millis()
+        );
     }
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_ralphy_config_summary(project_path: String) -> Result<RalphyConfigResponse, String> {
+pub async fn get_ralphy_config_summary(
+    project_path: String,
+) -> Result<RalphyConfigResponse, String> {
     let config_path = PathBuf::from(&project_path)
         .join(".ralphy")
         .join("config.json");
@@ -435,37 +521,8 @@ pub async fn fetch_github_pull_request_detail(
     }
 
     let client = reqwest::Client::new();
-    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}", owner, repo, number);
-    let response = client
-        .get(url)
-        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
-        .header(reqwest::header::USER_AGENT, "divergence-app")
-        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .send()
-        .await
-        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let response_body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| String::new())
-            .chars()
-            .take(400)
-            .collect::<String>();
-        return Err(format!(
-            "GitHub API request failed with status {}: {}",
-            status.as_u16(),
-            response_body
-        ));
-    }
-
-    let item = response
-        .json::<GithubPullRequestDetailApiItem>()
-        .await
-        .map_err(|error| format!("Failed to parse GitHub response: {}", error))?;
+    let item =
+        fetch_github_pull_request_detail_api_item(&client, &token, owner, repo, number).await?;
 
     let created_at_ms = parse_rfc3339_millis(&item.created_at, "GitHub timestamp")?;
     let updated_at_ms = parse_rfc3339_millis(&item.updated_at, "GitHub timestamp")?;
@@ -521,7 +578,10 @@ pub async fn fetch_github_pull_request_files(
     let per_page = per_page.unwrap_or(100).clamp(1, 100);
 
     let client = reqwest::Client::new();
-    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}/files", owner, repo, number);
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/pulls/{}/files",
+        owner, repo, number
+    );
     let response = client
         .get(url)
         .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
@@ -624,11 +684,17 @@ pub async fn merge_github_pull_request(
         .map(str::trim)
         .filter(|message| !message.is_empty());
     if let Some(message) = commit_message {
-        payload.insert("commit_message".to_string(), Value::String(message.to_string()));
+        payload.insert(
+            "commit_message".to_string(),
+            Value::String(message.to_string()),
+        );
     }
 
     let client = reqwest::Client::new();
-    let url = format!("https://api.github.com/repos/{}/{}/pulls/{}/merge", owner, repo, number);
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/pulls/{}/merge",
+        owner, repo, number
+    );
     let response = client
         .put(url)
         .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
@@ -666,7 +732,11 @@ pub async fn merge_github_pull_request(
         sha: result.sha,
         message: result.message,
         method,
-        merged_at_ms: if result.merged { Some(chrono::Utc::now().timestamp_millis()) } else { None },
+        merged_at_ms: if result.merged {
+            Some(chrono::Utc::now().timestamp_millis())
+        } else {
+            None
+        },
     })
 }
 
@@ -1009,10 +1079,7 @@ pub async fn fetch_linear_project_issues(
             .map_err(|error| format!("Failed to query Linear: {}", error))?;
 
         let status = response.status();
-        let response_body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| String::new());
+        let response_body = response.text().await.unwrap_or_else(|_| String::new());
 
         if !status.is_success() {
             let linear_message = extract_linear_error_message(&response_body)
@@ -1042,34 +1109,35 @@ pub async fn fetch_linear_project_issues(
             .data
             .ok_or_else(|| "Linear response did not include data.".to_string())?;
         let project = data.project.ok_or_else(|| {
-            format!("Linear project '{}' was not found or is not accessible.", project_id)
+            format!(
+                "Linear project '{}' was not found or is not accessible.",
+                project_id
+            )
         })?;
         let LinearIssueConnection { nodes, page_info } = project.issues;
 
         for issue in nodes {
-            let assignee_name = issue
-                .assignee
-                .and_then(|assignee| {
-                    let display_name = assignee.display_name.and_then(|value| {
-                        let trimmed = value.trim();
-                        if trimmed.is_empty() {
-                            None
-                        } else {
-                            Some(trimmed.to_string())
-                        }
-                    });
-                    if display_name.is_some() {
-                        return display_name;
+            let assignee_name = issue.assignee.and_then(|assignee| {
+                let display_name = assignee.display_name.and_then(|value| {
+                    let trimmed = value.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
                     }
-                    assignee.name.and_then(|value| {
-                        let trimmed = value.trim();
-                        if trimmed.is_empty() {
-                            None
-                        } else {
-                            Some(trimmed.to_string())
-                        }
-                    })
                 });
+                if display_name.is_some() {
+                    return display_name;
+                }
+                assignee.name.and_then(|value| {
+                    let trimmed = value.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                })
+            });
 
             let updated_at_ms = issue
                 .updated_at
@@ -1082,7 +1150,10 @@ pub async fn fetch_linear_project_issues(
                 title: issue.title,
                 description: issue.description,
                 state_name: issue.state.as_ref().and_then(|state| state.name.clone()),
-                state_type: issue.state.as_ref().and_then(|state| state.issue_type.clone()),
+                state_type: issue
+                    .state
+                    .as_ref()
+                    .and_then(|state| state.issue_type.clone()),
                 assignee_name,
                 url: issue.url,
                 updated_at_ms,
@@ -1213,10 +1284,7 @@ pub async fn fetch_linear_workflow_states(
         .map_err(|error| format!("Failed to query Linear: {}", error))?;
 
     let status = response.status();
-    let response_body = response
-        .text()
-        .await
-        .unwrap_or_else(|_| String::new());
+    let response_body = response.text().await.unwrap_or_else(|_| String::new());
 
     if !status.is_success() {
         let linear_message = extract_linear_error_message(&response_body)
@@ -1246,7 +1314,10 @@ pub async fn fetch_linear_workflow_states(
         .data
         .ok_or_else(|| "Linear response did not include data.".to_string())?;
     let team = data.team.ok_or_else(|| {
-        format!("Linear team '{}' was not found or is not accessible.", team_id)
+        format!(
+            "Linear team '{}' was not found or is not accessible.",
+            team_id
+        )
     })?;
 
     let mut states: Vec<LinearWorkflowState> = team
@@ -1262,7 +1333,11 @@ pub async fn fetch_linear_workflow_states(
         })
         .collect();
 
-    states.sort_by(|left, right| left.position.partial_cmp(&right.position).unwrap_or(std::cmp::Ordering::Equal));
+    states.sort_by(|left, right| {
+        left.position
+            .partial_cmp(&right.position)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     Ok(states)
 }
@@ -1367,10 +1442,7 @@ pub async fn update_linear_issue_state(
         .map_err(|error| format!("Failed to query Linear: {}", error))?;
 
     let status = response.status();
-    let response_body = response
-        .text()
-        .await
-        .unwrap_or_else(|_| String::new());
+    let response_body = response.text().await.unwrap_or_else(|_| String::new());
 
     if !status.is_success() {
         let linear_message = extract_linear_error_message(&response_body)
@@ -1405,11 +1477,15 @@ pub async fn update_linear_issue_state(
 
     Ok(LinearIssueStateUpdate {
         success: update.success,
-        state_name: update.issue.as_ref().and_then(|issue| {
-            issue.state.as_ref().and_then(|state| state.name.clone())
-        }),
+        state_name: update
+            .issue
+            .as_ref()
+            .and_then(|issue| issue.state.as_ref().and_then(|state| state.name.clone())),
         state_type: update.issue.as_ref().and_then(|issue| {
-            issue.state.as_ref().and_then(|state| state.state_type.clone())
+            issue
+                .state
+                .as_ref()
+                .and_then(|state| state.state_type.clone())
         }),
     })
 }
@@ -1433,11 +1509,65 @@ fn extract_linear_error_message(response_body: &str) -> Option<String> {
         }
     }
 
-    parsed.get("message")
+    parsed
+        .get("message")
         .and_then(|value| value.as_str())
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .map(|value| value.to_string())
+}
+
+async fn fetch_github_pull_request_detail_api_item(
+    client: &reqwest::Client,
+    token: &str,
+    owner: &str,
+    repo: &str,
+    number: i64,
+) -> Result<GithubPullRequestDetailApiItem, String> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/pulls/{}",
+        owner, repo, number
+    );
+    let response = client
+        .get(url)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {}", token))
+        .header(reqwest::header::USER_AGENT, "divergence-app")
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .map_err(|error| format!("Failed to query GitHub: {}", error))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let response_body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| String::new())
+            .chars()
+            .take(400)
+            .collect::<String>();
+        return Err(format!(
+            "GitHub API request failed with status {}: {}",
+            status.as_u16(),
+            response_body
+        ));
+    }
+
+    response
+        .json::<GithubPullRequestDetailApiItem>()
+        .await
+        .map_err(|error| format!("Failed to parse GitHub response: {}", error))
+}
+
+fn build_pull_request_review_branch_name(pull_request_number: i64, head_ref: &str) -> String {
+    let normalized_head_ref = head_ref.trim().trim_matches('/').replace(' ', "-");
+
+    if normalized_head_ref.is_empty() {
+        return format!("pr/{}", pull_request_number);
+    }
+
+    format!("pr/{}/{}", pull_request_number, normalized_head_ref)
 }
 
 fn parse_rfc3339_millis(value: &str, context: &str) -> Result<i64, String> {
@@ -1528,10 +1658,22 @@ fn number_at(value: &Value, path: &[&str]) -> Option<i64> {
 fn build_labels_summary(value: Option<&Value>) -> Option<RalphyLabelsSummary> {
     let labels = value?;
     let summary = RalphyLabelsSummary {
-        candidate: labels.get("candidate").and_then(|v| v.as_str()).map(|v| v.to_string()),
-        ready: labels.get("ready").and_then(|v| v.as_str()).map(|v| v.to_string()),
-        enriched: labels.get("enriched").and_then(|v| v.as_str()).map(|v| v.to_string()),
-        pr_feedback: labels.get("prFeedback").and_then(|v| v.as_str()).map(|v| v.to_string()),
+        candidate: labels
+            .get("candidate")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        ready: labels
+            .get("ready")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        enriched: labels
+            .get("enriched")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
+        pr_feedback: labels
+            .get("prFeedback")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
     };
 
     if summary.candidate.is_none()
@@ -1550,7 +1692,10 @@ fn build_claude_summary(value: Option<&Value>) -> Option<RalphyClaudeSummary> {
     let summary = RalphyClaudeSummary {
         max_iterations: claude.get("maxIterations").and_then(|v| v.as_i64()),
         timeout: claude.get("timeout").and_then(|v| v.as_i64()),
-        model: claude.get("model").and_then(|v| v.as_str()).map(|v| v.to_string()),
+        model: claude
+            .get("model")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string()),
     };
 
     if summary.max_iterations.is_none() && summary.timeout.is_none() && summary.model.is_none() {
@@ -1565,8 +1710,14 @@ fn build_integrations_summary(value: Option<&Value>) -> Option<RalphyIntegration
     let github_value = integrations.get("github");
     let github = github_value.and_then(|github| {
         let summary = RalphyGithubIntegrationSummary {
-            owner: github.get("owner").and_then(|v| v.as_str()).map(|v| v.to_string()),
-            repo: github.get("repo").and_then(|v| v.as_str()).map(|v| v.to_string()),
+            owner: github
+                .get("owner")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string()),
+            repo: github
+                .get("repo")
+                .and_then(|v| v.as_str())
+                .map(|v| v.to_string()),
         };
 
         if summary.owner.is_none() && summary.repo.is_none() {
@@ -1625,9 +1776,17 @@ pub struct RalphyConfigSummary {
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum RalphyConfigResponse {
-    Missing { path: String },
-    Invalid { path: String, error: String },
-    Ok { path: String, summary: Box<RalphyConfigSummary> },
+    Missing {
+        path: String,
+    },
+    Invalid {
+        path: String,
+        error: String,
+    },
+    Ok {
+        path: String,
+        summary: Box<RalphyConfigSummary>,
+    },
 }
 
 #[tauri::command]
@@ -1926,10 +2085,7 @@ pub async fn list_branch_changes(path: String) -> Result<BranchChangesResponse, 
 }
 
 #[tauri::command]
-pub async fn get_branch_diff(
-    path: String,
-    file_path: String,
-) -> Result<GitDiffResponse, String> {
+pub async fn get_branch_diff(path: String, file_path: String) -> Result<GitDiffResponse, String> {
     let repo_path = PathBuf::from(&path);
     if !git::is_git_repo(&repo_path) {
         return Err("Path is not a git repository".to_string());
@@ -1961,9 +2117,7 @@ pub async fn spawn_tmux_automation_session(
 }
 
 #[tauri::command]
-pub async fn query_tmux_pane_status(
-    session_name: String,
-) -> Result<TmuxPaneStatusEntry, String> {
+pub async fn query_tmux_pane_status(session_name: String) -> Result<TmuxPaneStatusEntry, String> {
     let status = git::query_tmux_pane_status(&session_name)?;
     Ok(TmuxPaneStatusEntry {
         alive: status.alive,
@@ -1972,17 +2126,12 @@ pub async fn query_tmux_pane_status(
 }
 
 #[tauri::command]
-pub async fn read_file_tail(
-    path: String,
-    max_bytes: u64,
-) -> Result<Option<String>, String> {
+pub async fn read_file_tail(path: String, max_bytes: u64) -> Result<Option<String>, String> {
     git::read_file_tail(&path, max_bytes)
 }
 
 #[tauri::command]
-pub async fn read_file_if_exists(
-    path: String,
-) -> Result<Option<String>, String> {
+pub async fn read_file_if_exists(path: String) -> Result<Option<String>, String> {
     git::read_file_if_exists(&path)
 }
 
@@ -2093,7 +2242,10 @@ pub async fn write_review_brief_file(
 ) -> Result<WriteReviewBriefResponse, String> {
     let workspace = PathBuf::from(&workspace_path);
     if !workspace.is_dir() {
-        return Err(format!("Workspace path is not a directory: {}", workspace_path));
+        return Err(format!(
+            "Workspace path is not a directory: {}",
+            workspace_path
+        ));
     }
 
     let review_dir = workspace.join(".divergence");
@@ -2147,7 +2299,9 @@ fn generate_workspace_claude_md(name: &str, projects: &[WorkspaceProjectInput]) 
     md.push_str("\n## Cross-Project Notes\n\n");
     md.push_str("- All projects are symlinked in this directory for unified access.\n");
     md.push_str("- Changes made via symlinks affect the original project files.\n");
-    md.push_str("- Use relative paths from this workspace root to reference files across projects.\n");
+    md.push_str(
+        "- Use relative paths from this workspace root to reference files across projects.\n",
+    );
     md
 }
 
@@ -2224,8 +2378,11 @@ pub async fn create_workspace_folder(
         "additionalDirectories": additional_dirs,
     });
     let settings_path = claude_dir.join("settings.json");
-    fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap_or_default())
-        .map_err(|e| format!("Failed to write .claude/settings.json: {}", e))?;
+    fs::write(
+        &settings_path,
+        serde_json::to_string_pretty(&settings).unwrap_or_default(),
+    )
+    .map_err(|e| format!("Failed to write .claude/settings.json: {}", e))?;
 
     Ok(WorkspaceFolderResult {
         folder_path: path_to_string(&folder_path),
@@ -2249,7 +2406,11 @@ pub async fn update_workspace_folder(
     if let Ok(entries) = fs::read_dir(&folder) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+            if path
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false)
+            {
                 let _ = fs::remove_file(&path);
             }
         }
@@ -2291,8 +2452,11 @@ pub async fn update_workspace_folder(
         "additionalDirectories": additional_dirs,
     });
     let settings_path = claude_dir.join("settings.json");
-    fs::write(&settings_path, serde_json::to_string_pretty(&settings).unwrap_or_default())
-        .map_err(|e| format!("Failed to write .claude/settings.json: {}", e))?;
+    fs::write(
+        &settings_path,
+        serde_json::to_string_pretty(&settings).unwrap_or_default(),
+    )
+    .map_err(|e| format!("Failed to write .claude/settings.json: {}", e))?;
 
     Ok(WorkspaceFolderResult {
         folder_path: path_to_string(&folder),

@@ -14,6 +14,7 @@ import {
   buildSplitTmuxSessionName,
   buildTmuxSessionName,
 } from "../../../shared/lib/tmux.pure";
+import { SECONDARY_SPLIT_PANE_IDS } from "../../../shared/lib/splitPaneIds.pure";
 
 export function buildTmuxOwnershipMap(
   projects: Project[],
@@ -30,9 +31,9 @@ export function buildTmuxOwnershipMap(
       projectId: project.id,
     });
     map.set(baseName, ownership);
-    map.set(buildSplitTmuxSessionName(baseName, "pane-2"), ownership);
-    map.set(buildSplitTmuxSessionName(baseName, "pane-3"), ownership);
-    map.set(buildSplitTmuxSessionName(baseName, "pane-4"), ownership);
+    for (const paneId of SECONDARY_SPLIT_PANE_IDS) {
+      map.set(buildSplitTmuxSessionName(baseName, paneId), ownership);
+    }
     map.set(buildLegacyTmuxSessionName(`project-${project.id}`), ownership);
 
     const divergences = divergencesByProject.get(project.id) ?? [];
@@ -51,9 +52,9 @@ export function buildTmuxOwnershipMap(
         branch: divergence.branch,
       });
       map.set(divergenceBase, divergenceOwnership);
-      map.set(buildSplitTmuxSessionName(divergenceBase, "pane-2"), divergenceOwnership);
-      map.set(buildSplitTmuxSessionName(divergenceBase, "pane-3"), divergenceOwnership);
-      map.set(buildSplitTmuxSessionName(divergenceBase, "pane-4"), divergenceOwnership);
+      for (const paneId of SECONDARY_SPLIT_PANE_IDS) {
+        map.set(buildSplitTmuxSessionName(divergenceBase, paneId), divergenceOwnership);
+      }
       map.set(buildLegacyTmuxSessionName(`divergence-${divergence.id}`), divergenceOwnership);
     }
   }

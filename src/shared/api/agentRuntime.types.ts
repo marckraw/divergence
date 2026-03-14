@@ -179,6 +179,34 @@ export interface AgentRuntimeSessionSnapshot {
   errorMessage?: string | null;
 }
 
+export interface AgentRuntimeSessionSummary {
+  id: string;
+  provider: AgentRuntimeProvider;
+  model: string;
+  targetType: AgentRuntimeTargetType;
+  targetId: number;
+  projectId: number;
+  workspaceOwnerId?: number;
+  workspaceKey: string;
+  sessionRole: AgentRuntimeSessionRole;
+  nameMode: AgentRuntimeSessionNameMode;
+  name: string;
+  path: string;
+  status: AgentRuntimeSessionStatus;
+  runtimeStatus: AgentRuntimeStatus;
+  isOpen: boolean;
+  createdAtMs: number;
+  updatedAtMs: number;
+  threadId?: string;
+  currentTurnStartedAtMs?: number | null;
+  lastRuntimeEventAtMs?: number | null;
+  runtimePhase?: string | null;
+  pendingRequest: AgentRuntimeRequest | null;
+  errorMessage?: string | null;
+  latestAssistantMessageInteractionMode?: AgentRuntimeInteractionMode;
+  latestAssistantMessageStatus?: AgentRuntimeMessageStatus;
+}
+
 export interface CreateAgentSessionInput {
   provider: AgentRuntimeProvider;
   targetType: AgentRuntimeTargetType;

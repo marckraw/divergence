@@ -239,18 +239,25 @@ pub(super) fn build_gemini_command(
     })?;
 
     let mut command = Command::new(binary);
-    command.arg("-p").arg(build_history_context_prompt(session, prompt));
+    command
+        .arg("-p")
+        .arg(build_history_context_prompt(session, prompt));
     if gemini_supports_stream_json() {
         command.arg("--output-format").arg("stream-json");
     }
-    command.arg("-m").arg(session.model.trim()).arg("-y");
-    if matches!(interaction_mode, AgentInteractionMode::Plan) {
-        command.arg("--approval-mode").arg("plan");
-    }
+    command.arg("-m").arg(session.model.trim());
+    command.args(gemini_approval_args(interaction_mode));
     for attachment_dir in attachment_dirs {
         command.arg("--include-directories").arg(attachment_dir);
     }
     Ok(command)
+}
+
+fn gemini_approval_args(interaction_mode: AgentInteractionMode) -> &'static [&'static str] {
+    match interaction_mode {
+        AgentInteractionMode::Default => &["-y"],
+        AgentInteractionMode::Plan => &["--approval-mode", "plan"],
+    }
 }
 
 fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
@@ -292,7 +299,11 @@ fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
     let mut default_model = DEFAULT_CURSOR_MODEL.to_string();
     let mut model_options = Vec::new();
 
-    for line in stdout.lines().map(str::trim).filter(|line| !line.is_empty()) {
+    for line in stdout
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
         let Some((slug, raw_label)) = line.split_once(" - ") else {
             continue;
         };
@@ -324,7 +335,10 @@ fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
         return fallback;
     }
 
-    if !model_options.iter().any(|option| option.slug == default_model) {
+    if !model_options
+        .iter()
+        .any(|option| option.slug == default_model)
+    {
         default_model = model_options
             .first()
             .map(|option| option.slug.clone())
@@ -391,6 +405,24 @@ fn strip_ansi_sequences(input: &str) -> String {
     output
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{gemini_approval_args, AgentInteractionMode};
+
+    #[test]
+    fn gemini_default_mode_uses_yolo_flag() {
+        assert_eq!(gemini_approval_args(AgentInteractionMode::Default), ["-y"]);
+    }
+
+    #[test]
+    fn gemini_plan_mode_uses_plan_approval_without_yolo() {
+        assert_eq!(
+            gemini_approval_args(AgentInteractionMode::Plan),
+            ["--approval-mode", "plan"]
+        );
+    }
+}
+
 fn detect_cursor_binary() -> Option<String> {
     detect_binary(&["cursor-agent", "agent"])
 }
@@ -408,7 +440,10 @@ fn check_codex_auth(command: &str) -> (bool, Option<String>) {
                 String::from_utf8_lossy(&output.stderr)
             );
             let trimmed = combined.trim().to_string();
-            (output.status.success(), (!trimmed.is_empty()).then_some(trimmed))
+            (
+                output.status.success(),
+                (!trimmed.is_empty()).then_some(trimmed),
+            )
         }
         Err(error) => (
             false,
@@ -431,7 +466,8 @@ fn build_history_context_prompt(session: &AgentSessionSnapshot, prompt: &str) ->
         .messages
         .iter()
         .filter(|message| {
-            !(matches!(message.role, AgentMessageRole::User) && message.content.trim() == prompt.trim())
+            !(matches!(message.role, AgentMessageRole::User)
+                && message.content.trim() == prompt.trim())
         })
         .map(|message| {
             let role = match message.role {
@@ -461,10 +497,14 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
             if let Some(command) = detected {
                 AgentRuntimeProviderReadiness {
                     status: AgentRuntimeProviderReadinessStatus::Partial,
-                    summary: "Claude CLI detected. Divergence assumes local login or OAuth token setup.".to_string(),
+                    summary:
+                        "Claude CLI detected. Divergence assumes local login or OAuth token setup."
+                            .to_string(),
                     details: vec![
-                        "Use the official Claude CLI login flow for subscription-backed access.".to_string(),
-                        "Automations can still use the stored Claude OAuth token when needed.".to_string(),
+                        "Use the official Claude CLI login flow for subscription-backed access."
+                            .to_string(),
+                        "Automations can still use the stored Claude OAuth token when needed."
+                            .to_string(),
                     ],
                     binary_candidates: vec!["claude".to_string()],
                     detected_command: Some(command),
@@ -475,7 +515,8 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     status: AgentRuntimeProviderReadinessStatus::SetupRequired,
                     summary: "Claude CLI not found.".to_string(),
                     details: vec![
-                        "Install Claude Code CLI and log in locally before using Claude sessions.".to_string(),
+                        "Install Claude Code CLI and log in locally before using Claude sessions."
+                            .to_string(),
                     ],
                     binary_candidates: vec!["claude".to_string()],
                     detected_command: None,

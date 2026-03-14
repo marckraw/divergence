@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import type { AgentSessionSnapshot } from "../../../entities";
 import type {
   AgentRuntimeAttachment,
@@ -67,7 +67,19 @@ interface UseAgentRuntimeResult {
 }
 
 export function useAgentRuntimeSession(sessionId: string | null): AgentSessionSnapshot | null {
-  return useAgentRuntimeSessionState(sessionId);
+  const session = useAgentRuntimeSessionState(sessionId);
+
+  useEffect(() => {
+    if (!sessionId || session?.hydrationState === "full") {
+      return;
+    }
+
+    void getAgentRuntimeSessionState(sessionId).catch((error) => {
+      console.warn(`Failed to hydrate agent session ${sessionId}:`, error);
+    });
+  }, [session?.hydrationState, sessionId]);
+
+  return session;
 }
 
 export function useAgentRuntime({

@@ -4,11 +4,11 @@ mod cursor;
 mod gemini;
 mod provider_registry;
 
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use self::codex::send_codex_message;
 use self::provider_registry::{
     default_model_for_provider, normalize_agent_model, provider_descriptors,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -373,6 +373,36 @@ pub struct AgentSessionSnapshot {
     pub error_message: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSessionSummary {
+    pub id: String,
+    pub provider: AgentProvider,
+    pub model: String,
+    pub target_type: AgentTargetType,
+    pub target_id: i64,
+    pub project_id: i64,
+    pub workspace_owner_id: Option<i64>,
+    pub workspace_key: String,
+    pub session_role: AgentSessionRole,
+    pub name_mode: AgentSessionNameMode,
+    pub name: String,
+    pub path: String,
+    pub status: AgentSessionStatus,
+    pub runtime_status: AgentRuntimeStatus,
+    pub is_open: bool,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    pub thread_id: Option<String>,
+    pub current_turn_started_at_ms: Option<i64>,
+    pub last_runtime_event_at_ms: Option<i64>,
+    pub runtime_phase: Option<String>,
+    pub pending_request: Option<AgentRequest>,
+    pub error_message: Option<String>,
+    pub latest_assistant_message_interaction_mode: Option<AgentInteractionMode>,
+    pub latest_assistant_message_status: Option<AgentMessageStatus>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAgentSessionInput {
@@ -443,6 +473,43 @@ pub struct UpdateAgentSessionInput {
 pub struct AgentRuntimeSessionUpdatedEvent {
     pub session_id: String,
     pub snapshot: AgentSessionSnapshot,
+}
+
+fn summarize_session(session: &AgentSessionSnapshot) -> AgentSessionSummary {
+    let latest_assistant_message = session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, AgentMessageRole::Assistant));
+
+    AgentSessionSummary {
+        id: session.id.clone(),
+        provider: session.provider.clone(),
+        model: session.model.clone(),
+        target_type: session.target_type,
+        target_id: session.target_id,
+        project_id: session.project_id,
+        workspace_owner_id: session.workspace_owner_id,
+        workspace_key: session.workspace_key.clone(),
+        session_role: session.session_role,
+        name_mode: session.name_mode,
+        name: session.name.clone(),
+        path: session.path.clone(),
+        status: session.status,
+        runtime_status: session.runtime_status,
+        is_open: session.is_open,
+        created_at_ms: session.created_at_ms,
+        updated_at_ms: session.updated_at_ms,
+        thread_id: session.thread_id.clone(),
+        current_turn_started_at_ms: session.current_turn_started_at_ms,
+        last_runtime_event_at_ms: session.last_runtime_event_at_ms,
+        runtime_phase: session.runtime_phase.clone(),
+        pending_request: session.pending_request.clone(),
+        error_message: session.error_message.clone(),
+        latest_assistant_message_interaction_mode: latest_assistant_message
+            .and_then(|message| message.interaction_mode),
+        latest_assistant_message_status: latest_assistant_message.map(|message| message.status),
+    }
 }
 
 #[derive(Clone)]
@@ -539,6 +606,18 @@ impl AgentRuntimeState {
             .lock()
             .map_err(|error| format!("Agent runtime lock poisoned: {error}"))?;
         let mut items: Vec<AgentSessionSnapshot> = sessions.values().cloned().collect();
+        items.sort_by(|left, right| right.updated_at_ms.cmp(&left.updated_at_ms));
+        Ok(items)
+    }
+
+    pub fn list_session_summaries(&self) -> Result<Vec<AgentSessionSummary>, String> {
+        let sessions = self
+            .inner
+            .sessions
+            .lock()
+            .map_err(|error| format!("Agent runtime lock poisoned: {error}"))?;
+        let mut items: Vec<AgentSessionSummary> =
+            sessions.values().map(summarize_session).collect();
         items.sort_by(|left, right| right.updated_at_ms.cmp(&left.updated_at_ms));
         Ok(items)
     }
@@ -672,7 +751,9 @@ impl AgentRuntimeState {
             return Err("Prompt is required.".to_string());
         }
 
-        let interaction_mode = input.interaction_mode.unwrap_or(AgentInteractionMode::Default);
+        let interaction_mode = input
+            .interaction_mode
+            .unwrap_or(AgentInteractionMode::Default);
         let attachments = input.attachments.unwrap_or_default();
         let turn = AgentTurnInvocation {
             prompt: prompt.clone(),
@@ -731,13 +812,7 @@ impl AgentRuntimeState {
         let runtime = self.clone();
         tauri::async_runtime::spawn(async move {
             runtime.clear_session_stopping(&session_id);
-            let run_result = runtime
-                .run_turn_process(
-                    &app,
-                    &session_id,
-                    &turn,
-                )
-                .await;
+            let run_result = runtime.run_turn_process(&app, &session_id, &turn).await;
 
             if let Err(error) = run_result {
                 if !runtime.is_session_stopping(&session_id) {
@@ -815,8 +890,10 @@ impl AgentRuntimeState {
         }
 
         let snapshot = self.mutate_session(&input.session_id, |session| {
-            if matches!(session.runtime_status, AgentRuntimeStatus::Running | AgentRuntimeStatus::Waiting)
-                && has_model_update
+            if matches!(
+                session.runtime_status,
+                AgentRuntimeStatus::Running | AgentRuntimeStatus::Waiting
+            ) && has_model_update
             {
                 return Err("Cannot change the model while an agent turn is running.".to_string());
             }
@@ -864,7 +941,9 @@ impl AgentRuntimeState {
                 decisions,
             } => {
                 if session_id != input.session_id {
-                    return Err("Pending approval request does not belong to this session.".to_string());
+                    return Err(
+                        "Pending approval request does not belong to this session.".to_string()
+                    );
                 }
                 let Some(decision_id) = input.decision.as_deref() else {
                     return Err("decision is required for approval requests.".to_string());
@@ -874,12 +953,15 @@ impl AgentRuntimeState {
                     .cloned()
                     .ok_or_else(|| format!("Unknown approval decision: {decision_id}"))?;
                 let writer = self.codex_writer_for_session(&session_id)?;
-                send_codex_message(&writer, json!({
-                    "id": json_rpc_id,
-                    "result": {
-                        "decision": decision,
-                    },
-                }))?;
+                send_codex_message(
+                    &writer,
+                    json!({
+                        "id": json_rpc_id,
+                        "result": {
+                            "decision": decision,
+                        },
+                    }),
+                )?;
                 self.resolve_pending_request(app, &session_id)
             }
             PendingRequestTransport::CodexUserInput {
@@ -888,7 +970,9 @@ impl AgentRuntimeState {
                 question_count,
             } => {
                 if session_id != input.session_id {
-                    return Err("Pending input request does not belong to this session.".to_string());
+                    return Err(
+                        "Pending input request does not belong to this session.".to_string()
+                    );
                 }
                 let answers = input.answers.unwrap_or_default();
                 if answers.len() != question_count {
@@ -898,12 +982,15 @@ impl AgentRuntimeState {
                     ));
                 }
                 let writer = self.codex_writer_for_session(&session_id)?;
-                send_codex_message(&writer, json!({
-                    "id": json_rpc_id,
-                    "result": {
-                        "answers": answers,
-                    },
-                }))?;
+                send_codex_message(
+                    &writer,
+                    json!({
+                        "id": json_rpc_id,
+                        "result": {
+                            "answers": answers,
+                        },
+                    }),
+                )?;
                 self.resolve_pending_request(app, &session_id)
             }
         }?;
@@ -929,35 +1016,20 @@ impl AgentRuntimeState {
 
         match session.provider {
             AgentProvider::Claude => {
-                self.run_claude_turn_process(
-                    app,
-                    &session,
-                    session_id,
-                    turn,
-                )
-                .await
+                self.run_claude_turn_process(app, &session, session_id, turn)
+                    .await
             }
             AgentProvider::Codex => {
-                self.run_codex_turn_process(
-                    app,
-                    &session,
-                    session_id,
-                    turn,
-                )
-                .await
+                self.run_codex_turn_process(app, &session, session_id, turn)
+                    .await
             }
             AgentProvider::Cursor => {
                 self.run_cursor_turn_process(app, &session, session_id, turn)
                     .await
             }
             AgentProvider::Gemini => {
-                self.run_gemini_turn_process(
-                    app,
-                    &session,
-                    session_id,
-                    turn,
-                )
-                .await
+                self.run_gemini_turn_process(app, &session, session_id, turn)
+                    .await
             }
         }
     }
@@ -975,12 +1047,7 @@ impl AgentRuntimeState {
             session.runtime_status = AgentRuntimeStatus::Error;
             session.updated_at_ms = now_ms();
             session.runtime_phase = Some("Errored".to_string());
-            push_runtime_event(
-                session,
-                "Errored",
-                error_message,
-                None,
-            );
+            push_runtime_event(session, "Errored", error_message, None);
             session.pending_request = None;
             session.error_message = Some(error_message.to_string());
             Ok(())
@@ -1108,10 +1175,14 @@ impl AgentRuntimeState {
     fn clear_pending_transport_for_session(&self, session_id: &str) {
         if let Ok(mut pending_requests) = self.inner.pending_requests.lock() {
             pending_requests.retain(|_, transport| match transport {
-                PendingRequestTransport::CodexApproval { session_id: pending_session_id, .. }
-                | PendingRequestTransport::CodexUserInput { session_id: pending_session_id, .. } => {
-                    pending_session_id != session_id
+                PendingRequestTransport::CodexApproval {
+                    session_id: pending_session_id,
+                    ..
                 }
+                | PendingRequestTransport::CodexUserInput {
+                    session_id: pending_session_id,
+                    ..
+                } => pending_session_id != session_id,
             });
         }
     }
@@ -1156,7 +1227,11 @@ impl AgentRuntimeState {
             .unwrap_or(false)
     }
 
-    fn mutate_session<F>(&self, session_id: &str, mutator: F) -> Result<AgentSessionSnapshot, String>
+    fn mutate_session<F>(
+        &self,
+        session_id: &str,
+        mutator: F,
+    ) -> Result<AgentSessionSnapshot, String>
     where
         F: FnOnce(&mut AgentSessionSnapshot) -> Result<(), String>,
     {
@@ -1229,14 +1304,18 @@ fn default_persistence_path() -> PathBuf {
     let base = dirs::data_local_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("divergence").join("agent-runtime").join("sessions.json")
+    base.join("divergence")
+        .join("agent-runtime")
+        .join("sessions.json")
 }
 
 fn default_attachment_base_dir() -> PathBuf {
     let base = dirs::data_local_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("divergence").join("agent-runtime").join("attachments")
+    base.join("divergence")
+        .join("agent-runtime")
+        .join("attachments")
 }
 
 fn session_attachment_dir(session_id: &str) -> PathBuf {
@@ -1322,12 +1401,17 @@ fn build_attachment_filename(attachment_id: &str, name: &str) -> String {
     }
 }
 
-fn resolve_staged_attachment_path(session_id: &str, attachment_id: &str) -> Result<PathBuf, String> {
+fn resolve_staged_attachment_path(
+    session_id: &str,
+    attachment_id: &str,
+) -> Result<PathBuf, String> {
     let attachment_dir = session_attachment_dir(session_id);
-    let entries = fs::read_dir(&attachment_dir)
-        .map_err(|error| format!("Failed to read staged attachments for session {session_id}: {error}"))?;
+    let entries = fs::read_dir(&attachment_dir).map_err(|error| {
+        format!("Failed to read staged attachments for session {session_id}: {error}")
+    })?;
     for entry in entries {
-        let entry = entry.map_err(|error| format!("Failed to inspect staged attachment: {error}"))?;
+        let entry =
+            entry.map_err(|error| format!("Failed to inspect staged attachment: {error}"))?;
         let path = entry.path();
         let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
             continue;
@@ -1364,17 +1448,19 @@ fn load_persisted_sessions(path: &Path) -> HashMap<String, AgentSessionSnapshot>
 
     items
         .into_iter()
-        .filter_map(|item| match serde_json::from_value::<AgentSessionSnapshot>(item) {
-            Ok(session) => Some(normalize_persisted_session(session)),
-            Err(error) => {
-                eprintln!(
-                    "[agent_runtime] Skipping unreadable persisted session in {}: {}",
-                    path.display(),
-                    error
-                );
-                None
-            }
-        })
+        .filter_map(
+            |item| match serde_json::from_value::<AgentSessionSnapshot>(item) {
+                Ok(session) => Some(normalize_persisted_session(session)),
+                Err(error) => {
+                    eprintln!(
+                        "[agent_runtime] Skipping unreadable persisted session in {}: {}",
+                        path.display(),
+                        error
+                    );
+                    None
+                }
+            },
+        )
         .map(|item| (item.id.clone(), item))
         .collect()
 }
@@ -1383,8 +1469,10 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
     if session.model.trim().is_empty() {
         session.model = default_model_for_provider(&session.provider).to_string();
     }
-    if matches!(session.session_role, AgentSessionRole::ReviewAgent | AgentSessionRole::Manual)
-        && !matches!(session.name_mode, AgentSessionNameMode::Manual)
+    if matches!(
+        session.session_role,
+        AgentSessionRole::ReviewAgent | AgentSessionRole::Manual
+    ) && !matches!(session.name_mode, AgentSessionNameMode::Manual)
     {
         session.name_mode = AgentSessionNameMode::Manual;
     }
@@ -1410,7 +1498,8 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
         session.pending_request = None;
         session.runtime_phase = Some("Interrupted".to_string());
         if session.error_message.is_none() {
-            session.error_message = Some("Agent runtime was interrupted when Divergence closed.".to_string());
+            session.error_message =
+                Some("Agent runtime was interrupted when Divergence closed.".to_string());
         }
         if session.current_turn_started_at_ms.is_some() {
             let at_ms = session
@@ -1470,9 +1559,24 @@ fn read_provider_thread_id(value: &Value) -> Option<String> {
         .get("session_id")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .or_else(|| value.get("chat_id").and_then(Value::as_str).map(str::to_string))
-        .or_else(|| value.get("chatId").and_then(Value::as_str).map(str::to_string))
-        .or_else(|| value.get("conversation_id").and_then(Value::as_str).map(str::to_string))
+        .or_else(|| {
+            value
+                .get("chat_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            value
+                .get("chatId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            value
+                .get("conversation_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 
 fn read_provider_content_text(value: &Value) -> Option<String> {
@@ -1516,12 +1620,94 @@ fn read_provider_text_delta(value: &Value) -> Option<String> {
         })
 }
 
+#[derive(Debug)]
+enum ProviderOutputChunk {
+    Text(String),
+    Json(Value),
+}
+
+fn split_provider_output_chunks(input: &str) -> Vec<ProviderOutputChunk> {
+    let mut chunks = Vec::new();
+    let mut current_text_start = 0usize;
+    let mut json_start: Option<usize> = None;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for (index, character) in input.char_indices() {
+        if json_start.is_some() {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                    continue;
+                }
+                match character {
+                    '\\' => escaped = true,
+                    '"' => in_string = false,
+                    _ => {}
+                }
+                continue;
+            }
+
+            match character {
+                '"' => in_string = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        let start = json_start.expect("json start should be set when parsing");
+                        if current_text_start < start {
+                            let text = input[current_text_start..start].trim();
+                            if !text.is_empty() {
+                                chunks.push(ProviderOutputChunk::Text(text.to_string()));
+                            }
+                        }
+
+                        let end = index + character.len_utf8();
+                        let candidate = &input[start..end];
+                        if let Ok(value) = serde_json::from_str::<Value>(candidate) {
+                            chunks.push(ProviderOutputChunk::Json(value));
+                            current_text_start = end;
+                        }
+                        json_start = None;
+                        in_string = false;
+                        escaped = false;
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+
+        if character == '{' {
+            json_start = Some(index);
+            depth = 1;
+            in_string = false;
+            escaped = false;
+        }
+    }
+
+    if json_start.is_some() || current_text_start < input.len() {
+        let text = input[current_text_start..].trim();
+        if !text.is_empty() {
+            chunks.push(ProviderOutputChunk::Text(text.to_string()));
+        }
+    }
+
+    chunks
+}
+
 fn read_provider_activity_id(value: &Value) -> Option<String> {
     value
         .get("tool_call_id")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .or_else(|| value.get("toolCallId").and_then(Value::as_str).map(str::to_string))
+        .or_else(|| {
+            value
+                .get("toolCallId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
         .or_else(|| value.get("id").and_then(Value::as_str).map(str::to_string))
 }
 
@@ -1530,13 +1716,21 @@ fn read_provider_activity_title(value: &Value) -> Option<String> {
         .get("tool_name")
         .and_then(Value::as_str)
         .map(str::to_string)
-        .or_else(|| value.get("toolName").and_then(Value::as_str).map(str::to_string))
-        .or_else(|| value.get("name").and_then(Value::as_str).map(str::to_string))
+        .or_else(|| {
+            value
+                .get("toolName")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            value
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 
-fn last_assistant_message_mut(
-    session: &mut AgentSessionSnapshot,
-) -> Option<&mut AgentMessage> {
+fn last_assistant_message_mut(session: &mut AgentSessionSnapshot) -> Option<&mut AgentMessage> {
     let index = last_assistant_message_index(session)?;
     session.messages.get_mut(index)
 }
@@ -1546,13 +1740,9 @@ fn assistant_message_mut<'a>(
     item_id: Option<&str>,
 ) -> Option<&'a mut AgentMessage> {
     if let Some(item_id) = item_id {
-        if let Some(index) = session
-            .messages
-            .iter()
-            .position(|message| {
-                matches!(message.role, AgentMessageRole::Assistant) && message.id == item_id
-            })
-        {
+        if let Some(index) = session.messages.iter().position(|message| {
+            matches!(message.role, AgentMessageRole::Assistant) && message.id == item_id
+        }) {
             return session.messages.get_mut(index);
         }
     }
@@ -1565,13 +1755,9 @@ fn ensure_assistant_message<'a>(
     item_id: Option<&str>,
 ) -> &'a mut AgentMessage {
     if let Some(item_id) = item_id {
-        if let Some(index) = session
-            .messages
-            .iter()
-            .position(|message| {
-                matches!(message.role, AgentMessageRole::Assistant) && message.id == item_id
-            })
-        {
+        if let Some(index) = session.messages.iter().position(|message| {
+            matches!(message.role, AgentMessageRole::Assistant) && message.id == item_id
+        }) {
             return session
                 .messages
                 .get_mut(index)
@@ -1654,7 +1840,11 @@ fn append_assistant_text(session: &mut AgentSessionSnapshot, item_id: Option<&st
     message.content.push_str(text);
 }
 
-fn append_assistant_paragraph(session: &mut AgentSessionSnapshot, item_id: Option<&str>, text: &str) {
+fn append_assistant_paragraph(
+    session: &mut AgentSessionSnapshot,
+    item_id: Option<&str>,
+    text: &str,
+) {
     let message = ensure_assistant_message(session, item_id);
     if !matches!(message.status, AgentMessageStatus::Streaming) {
         message.status = AgentMessageStatus::Streaming;
@@ -1667,13 +1857,9 @@ fn append_assistant_paragraph(session: &mut AgentSessionSnapshot, item_id: Optio
 
 fn assistant_message_text<'a>(session: &'a AgentSessionSnapshot, item_id: Option<&str>) -> &'a str {
     if let Some(item_id) = item_id {
-        if let Some(message) = session
-            .messages
-            .iter()
-            .find(|message| {
-                matches!(message.role, AgentMessageRole::Assistant) && message.id == item_id
-            })
-        {
+        if let Some(message) = session.messages.iter().find(|message| {
+            matches!(message.role, AgentMessageRole::Assistant) && message.id == item_id
+        }) {
             return message.content.as_str();
         }
     }
@@ -1721,9 +1907,14 @@ fn complete_activity(
     status: AgentActivityStatus,
 ) {
     let completed_at_ms = now_ms();
-    if let Some(activity) = session.activities.iter_mut().find(|item| item.id == activity_id) {
-        let had_metadata =
-            activity.summary.is_some() || activity.subject.is_some() || activity.group_key.is_some();
+    if let Some(activity) = session
+        .activities
+        .iter_mut()
+        .find(|item| item.id == activity_id)
+    {
+        let had_metadata = activity.summary.is_some()
+            || activity.subject.is_some()
+            || activity.group_key.is_some();
         activity.status = status;
         activity.completed_at_ms = Some(completed_at_ms);
         if let Some(details) = details {
@@ -1794,7 +1985,8 @@ fn derive_activity_metadata(
     let is_command_like = normalized_kind == "command_execution"
         || matches!(normalized_title.as_str(), "bash" | "shell" | "command");
     let subject = if is_command_like {
-        compact_command(trimmed_title).or_else(|| details.and_then(extract_activity_command_subject))
+        compact_command(trimmed_title)
+            .or_else(|| details.and_then(extract_activity_command_subject))
     } else {
         details.and_then(extract_activity_subject)
     };
@@ -1849,10 +2041,7 @@ fn derive_activity_metadata(
             Some("search".to_string()),
         )
     } else if normalized_title == "thinking" || normalized_kind == "thought_process" {
-        (
-            Some("Thinking".to_string()),
-            Some("thinking".to_string()),
-        )
+        (Some("Thinking".to_string()), Some("thinking".to_string()))
     } else {
         (
             Some(compact_label(trimmed_title)),
@@ -1944,12 +2133,12 @@ fn compact_subject(subject: &str) -> Option<String> {
     }
 
     let display = if trimmed.contains('/') || trimmed.contains('\\') {
-        let basename = trimmed
-            .rsplit(['/', '\\'])
-            .next()
-            .unwrap_or(trimmed)
-            .trim();
-        if basename.is_empty() { trimmed } else { basename }
+        let basename = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed).trim();
+        if basename.is_empty() {
+            trimmed
+        } else {
+            basename
+        }
     } else {
         trimmed
     };
@@ -1996,7 +2185,10 @@ fn strip_shell_wrapper(command: &str) -> &str {
             return rest
                 .strip_prefix('"')
                 .and_then(|value| value.strip_suffix('"'))
-                .or_else(|| rest.strip_prefix('\'').and_then(|value| value.strip_suffix('\'')))
+                .or_else(|| {
+                    rest.strip_prefix('\'')
+                        .and_then(|value| value.strip_suffix('\''))
+                })
                 .unwrap_or(rest)
                 .trim();
         }
@@ -2022,12 +2214,12 @@ fn truncate_json_details(input: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_activity, derive_activity_metadata, complete_activity, strip_shell_wrapper,
-        AgentActivityStatus, AgentAttachment, AgentConversationContext, AgentMessage,
-        AgentProvider, AgentRequest, AgentRuntimeDebugEvent, AgentRuntimeStatus,
-        AgentSessionNameMode, AgentSessionSnapshot, AgentSessionStatus, AgentSessionRole,
-        AgentTargetType,
+        complete_activity, create_activity, derive_activity_metadata, split_provider_output_chunks,
+        strip_shell_wrapper, AgentActivityStatus, AgentMessage, AgentProvider, AgentRequest,
+        AgentRuntimeDebugEvent, AgentRuntimeStatus, AgentSessionNameMode, AgentSessionRole,
+        AgentSessionSnapshot, AgentSessionStatus, AgentTargetType, ProviderOutputChunk,
     };
+    use serde_json::Value;
 
     #[test]
     fn strip_shell_wrapper_removes_common_shell_prefixes() {
@@ -2105,6 +2297,40 @@ mod tests {
         let activity = &session.activities[0];
         assert_eq!(activity.summary.as_deref(), Some("Ran ls apps"));
         assert_eq!(activity.group_key.as_deref(), Some("command"));
-        assert_eq!(activity.details.as_deref(), Some("/tmp/project/apps\n/tmp/project/apps/api"));
+        assert_eq!(
+            activity.details.as_deref(),
+            Some("/tmp/project/apps\n/tmp/project/apps/api")
+        );
+    }
+
+    #[test]
+    fn split_provider_output_chunks_extracts_inline_json_objects() {
+        let chunks = split_provider_output_chunks(
+            r#"MCP issues detected. Run /mcp list for status.{"type":"init","session_id":"session-123"}Hello! How can I help you today?"#,
+        );
+
+        assert_eq!(chunks.len(), 3);
+        match &chunks[0] {
+            ProviderOutputChunk::Text(text) => {
+                assert_eq!(text, "MCP issues detected. Run /mcp list for status.");
+            }
+            ProviderOutputChunk::Json(_) => panic!("expected provider notice text chunk"),
+        }
+        match &chunks[1] {
+            ProviderOutputChunk::Json(value) => {
+                assert_eq!(value.get("type").and_then(Value::as_str), Some("init"));
+                assert_eq!(
+                    value.get("session_id").and_then(Value::as_str),
+                    Some("session-123")
+                );
+            }
+            ProviderOutputChunk::Text(_) => panic!("expected structured JSON chunk"),
+        }
+        match &chunks[2] {
+            ProviderOutputChunk::Text(text) => {
+                assert_eq!(text, "Hello! How can I help you today?");
+            }
+            ProviderOutputChunk::Json(_) => panic!("expected trailing assistant text chunk"),
+        }
     }
 }

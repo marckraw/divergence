@@ -105,9 +105,12 @@ export interface AgentSession {
 }
 
 export interface AgentSessionSnapshot extends AgentSession {
+  hydrationState?: "summary" | "full";
   currentTurnStartedAtMs?: number | null;
   lastRuntimeEventAtMs?: number | null;
   runtimePhase?: string | null;
+  latestAssistantMessageInteractionMode?: AgentRuntimeInteractionMode | null;
+  latestAssistantMessageStatus?: AgentMessageStatus | null;
   conversationContext?: AgentRuntimeConversationContext | null;
   runtimeEvents: AgentRuntimeDebugEvent[];
   messages: AgentMessage[];

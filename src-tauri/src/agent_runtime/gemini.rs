@@ -100,7 +100,10 @@ impl AgentRuntimeState {
             let message = if stderr_output.trim().is_empty() {
                 format!("Gemini CLI exited with code {exit_code}.")
             } else {
-                format!("Gemini CLI exited with code {exit_code}: {}", stderr_output.trim())
+                format!(
+                    "Gemini CLI exited with code {exit_code}: {}",
+                    stderr_output.trim()
+                )
             };
             return Err(message);
         }
@@ -138,73 +141,32 @@ impl AgentRuntimeState {
             return Ok(());
         }
 
-        if trimmed.starts_with('{') {
-            if let Ok(value) = serde_json::from_str::<Value>(trimmed) {
-                let event_type = value.get("type").and_then(Value::as_str).unwrap_or_default();
-                match event_type {
-                    "init" => {
-                        if let Some(thread_id) = read_provider_thread_id(&value) {
-                            let snapshot = self.mutate_session(session_id, |session| {
-                                session.thread_id = Some(thread_id);
-                                push_runtime_event(
-                                    session,
-                                    "Preparing turn",
-                                    "Gemini session is ready.",
-                                    None,
-                                );
-                                session.updated_at_ms = now_ms();
-                                Ok(())
-                            })?;
-                            self.emit_snapshot_update(app, &snapshot);
-                        }
-                        return Ok(());
+        let output_chunks = split_provider_output_chunks(trimmed);
+        if output_chunks
+            .iter()
+            .any(|chunk| matches!(chunk, ProviderOutputChunk::Json(_)))
+        {
+            for chunk in output_chunks {
+                match chunk {
+                    ProviderOutputChunk::Json(value) => {
+                        self.handle_gemini_output_value(app, session_id, value)?;
                     }
-                    "message" => {
-                        let role = value.get("role").and_then(Value::as_str).unwrap_or_default();
-                        if role == "assistant" {
-                            if let Some(text) = read_provider_text_delta(&value) {
-                                let is_delta =
-                                    value.get("delta").and_then(Value::as_bool).unwrap_or(false);
-                                let snapshot = self.mutate_session(session_id, |session| {
-                                    if is_delta {
-                                        append_assistant_text(session, None, &text);
-                                    } else {
-                                        append_assistant_paragraph(session, None, &text);
-                                    }
-                                    push_runtime_event(
-                                        session,
-                                        "Streaming response",
-                                        "Received Gemini response text.",
-                                        None,
-                                    );
-                                    session.updated_at_ms = now_ms();
-                                    Ok(())
-                                })?;
-                                self.emit_snapshot_update(app, &snapshot);
-                            }
-                        }
-                        return Ok(());
-                    }
-                    "result" => return Ok(()),
-                    _ => {
-                        if let Some(text) = read_provider_text_delta(&value) {
-                            let snapshot = self.mutate_session(session_id, |session| {
-                                append_assistant_text(session, None, &text);
-                                push_runtime_event(
-                                    session,
-                                    "Streaming response",
-                                    "Received Gemini response text.",
-                                    None,
-                                );
-                                session.updated_at_ms = now_ms();
-                                Ok(())
-                            })?;
-                            self.emit_snapshot_update(app, &snapshot);
-                        }
-                        return Ok(());
+                    ProviderOutputChunk::Text(text) => {
+                        let snapshot = self.mutate_session(session_id, |session| {
+                            push_runtime_event(
+                                session,
+                                "Provider notice",
+                                "Gemini emitted a provider notice.",
+                                Some(truncate_details(&text)),
+                            );
+                            session.updated_at_ms = now_ms();
+                            Ok(())
+                        })?;
+                        self.emit_snapshot_update(app, &snapshot);
                     }
                 }
             }
+            return Ok(());
         }
 
         let snapshot = self.mutate_session(session_id, |session| {
@@ -228,6 +190,82 @@ impl AgentRuntimeState {
             Ok(())
         })?;
         self.emit_snapshot_update(app, &snapshot);
+        Ok(())
+    }
+
+    fn handle_gemini_output_value(
+        &self,
+        app: &AppHandle,
+        session_id: &str,
+        value: Value,
+    ) -> Result<(), String> {
+        let event_type = value
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        match event_type {
+            "init" => {
+                if let Some(thread_id) = read_provider_thread_id(&value) {
+                    let snapshot = self.mutate_session(session_id, |session| {
+                        session.thread_id = Some(thread_id);
+                        push_runtime_event(
+                            session,
+                            "Preparing turn",
+                            "Gemini session is ready.",
+                            None,
+                        );
+                        session.updated_at_ms = now_ms();
+                        Ok(())
+                    })?;
+                    self.emit_snapshot_update(app, &snapshot);
+                }
+            }
+            "message" => {
+                let role = value
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
+                if role == "assistant" {
+                    if let Some(text) = read_provider_text_delta(&value) {
+                        let is_delta = value.get("delta").and_then(Value::as_bool).unwrap_or(false);
+                        let snapshot = self.mutate_session(session_id, |session| {
+                            if is_delta {
+                                append_assistant_text(session, None, &text);
+                            } else {
+                                append_assistant_paragraph(session, None, &text);
+                            }
+                            push_runtime_event(
+                                session,
+                                "Streaming response",
+                                "Received Gemini response text.",
+                                None,
+                            );
+                            session.updated_at_ms = now_ms();
+                            Ok(())
+                        })?;
+                        self.emit_snapshot_update(app, &snapshot);
+                    }
+                }
+            }
+            "result" => {}
+            _ => {
+                if let Some(text) = read_provider_text_delta(&value) {
+                    let snapshot = self.mutate_session(session_id, |session| {
+                        append_assistant_text(session, None, &text);
+                        push_runtime_event(
+                            session,
+                            "Streaming response",
+                            "Received Gemini response text.",
+                            None,
+                        );
+                        session.updated_at_ms = now_ms();
+                        Ok(())
+                    })?;
+                    self.emit_snapshot_update(app, &snapshot);
+                }
+            }
+        }
+
         Ok(())
     }
 }

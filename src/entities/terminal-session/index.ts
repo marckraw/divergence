@@ -27,3 +27,8 @@ export {
   normalizeSplitPaneSizes,
   resizeSplitPaneSizes,
 } from "./lib/splitPaneSizes.pure";
+export {
+  MAX_SPLIT_PANES,
+  SECONDARY_SPLIT_PANE_IDS,
+  SPLIT_PANE_IDS,
+} from "../../shared/lib/splitPaneIds.pure";

@@ -3,6 +3,7 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeAppSettings,
+  normalizeCustomAgentModels,
   normalizeTmuxHistoryLimit,
 } from "./appSettings.pure";
 
@@ -20,6 +21,16 @@ describe("normalizeTmuxHistoryLimit", () => {
 });
 
 describe("normalizeAppSettings", () => {
+  it("normalizes custom agent models directly", () => {
+    expect(normalizeCustomAgentModels({
+      codex: ["gpt-5.1", "gpt-5.1", "o3"],
+      claude: ["  sonnet-4.5  ", 3, ""],
+    })).toEqual({
+      codex: ["gpt-5.1", "o3"],
+      claude: ["sonnet-4.5"],
+    });
+  });
+
   it("applies defaults", () => {
     expect(normalizeAppSettings()).toEqual(DEFAULT_APP_SETTINGS);
   });
@@ -178,5 +189,32 @@ describe("normalizeAppSettings", () => {
       restoreTabsOnRestart: "yes" as never,
     });
     expect(normalized.restoreTabsOnRestart).toBe(false);
+  });
+
+  it("normalizes custom agent models per provider", () => {
+    const normalized = normalizeAppSettings({
+      customAgentModels: {
+        codex: ["gpt-5.1", "gpt-5.1", "o3"],
+        claude: ["  sonnet-4.5  ", "", "opus-4.1"],
+      },
+    });
+
+    expect(normalized.customAgentModels).toEqual({
+      codex: ["gpt-5.1", "o3"],
+      claude: ["sonnet-4.5", "opus-4.1"],
+    });
+  });
+
+  it("drops invalid custom agent models payloads", () => {
+    const normalized = normalizeAppSettings({
+      customAgentModels: {
+        codex: "gpt-5" as never,
+        cursor: [null, "gpt-5"] as never,
+      },
+    });
+
+    expect(normalized.customAgentModels).toEqual({
+      cursor: ["gpt-5"],
+    });
   });
 });
