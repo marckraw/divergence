@@ -107,6 +107,9 @@ impl AgentRuntimeState {
                     &turn_completed_tx,
                     &line,
                 )?;
+                runtime
+                    .wait_for_pending_request_resolution(&session_id_owned)
+                    .await?;
             }
             Ok::<(), String>(())
         });
@@ -904,6 +907,10 @@ impl AgentRuntimeState {
                     .iter()
                     .map(map_codex_user_input_question)
                     .collect::<Vec<_>>();
+                let question_ids = mapped_questions
+                    .iter()
+                    .map(|question| question.id.clone())
+                    .collect::<Vec<_>>();
                 let title = mapped_questions
                     .first()
                     .map(|question| question.header.clone())
@@ -928,7 +935,7 @@ impl AgentRuntimeState {
                     PendingRequestTransport::CodexUserInput {
                         session_id: session_id.to_string(),
                         json_rpc_id,
-                        question_count: questions.len(),
+                        question_ids,
                     },
                 )?;
             }
@@ -1244,6 +1251,28 @@ mod tests {
         }))
         .is_none());
     }
+
+    #[test]
+    fn builds_user_input_response_keyed_by_question_id() {
+        let response = build_codex_user_input_response(
+            &["approval".to_string(), "details".to_string()],
+            &["Approve Once".to_string(), "Need this for bug filing".to_string()],
+        );
+
+        assert_eq!(
+            response,
+            json!({
+                "answers": {
+                    "approval": {
+                        "answers": ["Approve Once"],
+                    },
+                    "details": {
+                        "answers": ["Need this for bug filing"],
+                    },
+                },
+            })
+        );
+    }
 }
 
 fn default_codex_approval_decisions() -> HashMap<String, Value> {
@@ -1367,6 +1396,25 @@ fn map_codex_user_input_question(question: &Value) -> AgentRequestQuestion {
                     .collect()
             }),
     }
+}
+
+pub(super) fn build_codex_user_input_response(question_ids: &[String], answers: &[String]) -> Value {
+    let mapped_answers = question_ids
+        .iter()
+        .zip(answers.iter())
+        .map(|(question_id, answer)| {
+            (
+                question_id.clone(),
+                json!({
+                    "answers": [answer],
+                }),
+            )
+        })
+        .collect::<serde_json::Map<String, Value>>();
+
+    json!({
+        "answers": mapped_answers,
+    })
 }
 
 fn classify_codex_app_server_stderr(stderr_output: &str) -> Option<String> {
