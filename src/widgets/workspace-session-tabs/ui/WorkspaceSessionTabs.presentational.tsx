@@ -1,6 +1,9 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { WorkspaceSession } from "../../../entities";
-import { isAgentSession } from "../../../entities";
+import {
+  getWorkspaceSessionAttentionState,
+  isAgentSession,
+} from "../../../entities";
 import {
   FAST_EASE_OUT,
   getAgentProviderBadgeClass,
@@ -9,14 +12,15 @@ import {
   IconButton,
   SOFT_SPRING,
 } from "../../../shared";
-import { getWorkspaceSessionAttentionState } from "../lib/workspaceSessionAttention.pure";
 
 interface WorkspaceSessionTabsProps {
   sessionList: WorkspaceSession[];
   activeSessionId: string | null;
   idleAttentionSessionIds: Set<string>;
   lastViewedRuntimeEventAtMsBySessionId?: Map<string, number>;
+  dismissedAttentionKeyBySessionId?: Map<string, string>;
   onSelectSession: (sessionId: string) => void;
+  onDismissSessionAttention?: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
 }
 
@@ -39,7 +43,9 @@ function WorkspaceSessionTabsPresentational({
   activeSessionId,
   idleAttentionSessionIds,
   lastViewedRuntimeEventAtMsBySessionId,
+  dismissedAttentionKeyBySessionId,
   onSelectSession,
+  onDismissSessionAttention,
   onCloseSession,
 }: WorkspaceSessionTabsProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -53,12 +59,14 @@ function WorkspaceSessionTabsPresentational({
     <>
       {sessionList.map((session, index) => {
         const isActive = session.id === activeSessionId;
-        const needsAttention = idleAttentionSessionIds.has(session.id) && !isActive;
         const isAgent = isAgentSession(session);
         const attentionState = getWorkspaceSessionAttentionState(session, {
           isActive,
+          hasIdleAttention: idleAttentionSessionIds.has(session.id),
           lastViewedRuntimeEventAtMs: lastViewedRuntimeEventAtMsBySessionId?.get(session.id) ?? null,
+          dismissedAttentionKey: dismissedAttentionKeyBySessionId?.get(session.id) ?? null,
         });
+        const needsAttention = attentionState?.kind === "completed";
 
         return (
           <motion.div
@@ -151,10 +159,38 @@ function WorkspaceSessionTabsPresentational({
               >
                 {attentionState.label}
               </span>
-            ) : needsAttention ? (
-              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-yellow/20 text-yellow border border-yellow/40">
-                ready
-              </span>
+            ) : null}
+
+            {attentionState && onDismissSessionAttention ? (
+              <IconButton
+                className="w-4 h-4 text-subtext hover:text-text rounded"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDismissSessionAttention(session.id);
+                }}
+                variant="ghost"
+                size="xs"
+                label={
+                  attentionState.kind === "approval-required" || attentionState.kind === "awaiting-input"
+                    ? `Snooze reminder for ${session.name}`
+                    : `Acknowledge reminder for ${session.name}`
+                }
+                icon={(
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 12h14"
+                    />
+                  </svg>
+                )}
+              />
             ) : null}
 
             {isAgent ? (

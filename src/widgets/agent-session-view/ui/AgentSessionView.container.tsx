@@ -99,12 +99,14 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
       activeSessionId={props.activeSessionId}
       idleAttentionSessionIds={props.idleAttentionSessionIds}
       lastViewedRuntimeEventAtMsBySessionId={props.lastViewedRuntimeEventAtMsBySessionId}
+      dismissedAttentionKeyBySessionId={props.dismissedAttentionKeyBySessionId}
       capabilities={props.capabilities}
       timelineItems={timelineItems}
       isUpdatingModel={isUpdatingModel}
       requestAnswers={requestAnswers}
       isResolvingRequest={isResolvingRequest}
       onSelectSession={props.onSelectSession}
+      onDismissSessionAttention={props.onDismissSessionAttention}
       onCloseSession={props.onCloseSession}
       onModelChange={handleModelChange}
       onSubmitRequest={handleSubmitRequest}

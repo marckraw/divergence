@@ -24,8 +24,10 @@ export interface AgentSessionViewProps {
   activeSessionId: string | null;
   idleAttentionSessionIds: Set<string>;
   lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
+  dismissedAttentionKeyBySessionId: Map<string, string>;
   capabilities: AgentRuntimeCapabilities | null;
   onSelectSession: (sessionId: string) => void;
+  onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onUpdateModel: (sessionId: string, model: string) => Promise<void>;
   onSendPrompt: (
@@ -87,12 +89,14 @@ export interface AgentSessionViewPresentationalProps {
   activeSessionId: string | null;
   idleAttentionSessionIds: Set<string>;
   lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
+  dismissedAttentionKeyBySessionId: Map<string, string>;
   capabilities: AgentRuntimeCapabilities | null;
   timelineItems: AgentTimelineItem[];
   isUpdatingModel: boolean;
   requestAnswers: string[];
   isResolvingRequest: boolean;
   onSelectSession: (sessionId: string) => void;
+  onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onModelChange: (model: string) => Promise<void>;
   onSubmitRequest: () => Promise<void>;

@@ -49,7 +49,11 @@ import type {
   WorkspaceDivergence,
   WorkspaceSession,
 } from "../entities";
-import { isAgentSession, suggestAgentSessionTitle } from "../entities";
+import {
+  getWorkspaceSessionAttentionKey,
+  isAgentSession,
+  suggestAgentSessionTitle,
+} from "../entities";
 import { useSplitPaneManagement } from "./model/useSplitPaneManagement";
 import { useGithubInboxPolling } from "./model/useGithubInboxPolling";
 import { useSidebarLayout } from "./model/useSidebarLayout";
@@ -796,6 +800,9 @@ function App() {
   const [lastViewedRuntimeEventAtMsBySessionId, setLastViewedRuntimeEventAtMsBySessionId] = useState<Map<string, number>>(
     () => new Map(),
   );
+  const [dismissedAttentionKeyBySessionId, setDismissedAttentionKeyBySessionId] = useState<Map<string, string>>(
+    () => new Map(),
+  );
   const agentProviders = useMemo(() => {
     const available = getAvailableAgentProviders(agentRuntimeCapabilities);
     return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
@@ -818,24 +825,69 @@ function App() {
   }, [workspaceSessions]);
 
   useEffect(() => {
-    if (!activeAgentSession) {
+    setDismissedAttentionKeyBySessionId((previous) => {
+      let changed = false;
+      const next = new Map<string, string>();
+      previous.forEach((key, sessionId) => {
+        if (sidebarSessions.has(sessionId)) {
+          next.set(sessionId, key);
+          return;
+        }
+        changed = true;
+      });
+      return changed ? next : previous;
+    });
+  }, [sidebarSessions]);
+
+  const handleDismissSessionAttention = (sessionId: string) => {
+    const session = sidebarSessions.get(sessionId);
+    if (!session) {
       return;
     }
 
-    const lastRuntimeEventAtMs = activeAgentSession.lastRuntimeEventAtMs ?? activeAgentSession.updatedAtMs;
-    if (!lastRuntimeEventAtMs) {
+    const attentionOptions = {
+      hasIdleAttention: idleAttentionSessionIds.has(sessionId),
+      lastViewedRuntimeEventAtMs: lastViewedRuntimeEventAtMsBySessionId.get(sessionId) ?? null,
+    };
+    const attentionKey = getWorkspaceSessionAttentionKey(session, attentionOptions);
+    if (!attentionKey) {
       return;
     }
 
-    setLastViewedRuntimeEventAtMsBySessionId((previous) => {
-      if (previous.get(activeAgentSession.id) === lastRuntimeEventAtMs) {
+    if (isAgentSession(session)) {
+      const lastRuntimeEventAtMs = session.lastRuntimeEventAtMs ?? session.updatedAtMs;
+      if (lastRuntimeEventAtMs) {
+        setLastViewedRuntimeEventAtMsBySessionId((previous) => {
+          if (previous.get(sessionId) === lastRuntimeEventAtMs) {
+            return previous;
+          }
+          const next = new Map(previous);
+          next.set(sessionId, lastRuntimeEventAtMs);
+          return next;
+        });
+      }
+    }
+
+    setDismissedAttentionKeyBySessionId((previous) => {
+      if (previous.get(sessionId) === attentionKey) {
         return previous;
       }
       const next = new Map(previous);
-      next.set(activeAgentSession.id, lastRuntimeEventAtMs);
+      next.set(sessionId, attentionKey);
       return next;
     });
-  }, [activeAgentSession]);
+
+    if (!isAgentSession(session)) {
+      setIdleAttentionSessionIds((previous) => {
+        if (!previous.has(sessionId)) {
+          return previous;
+        }
+        const next = new Set(previous);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  };
 
   return (
     <div className="flex h-full w-full">
@@ -856,6 +908,9 @@ function App() {
           divergencesByProject={divergencesByProject}
           sessions={sidebarSessions}
           activeSessionId={activeSessionId}
+          idleAttentionSessionIds={idleAttentionSessionIds}
+          lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+          dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           createDivergenceFor={createDivergenceFor}
           onCreateDivergenceForChange={setCreateDivergenceFor}
           onSelectProject={handleSelectProject}
@@ -863,6 +918,7 @@ function App() {
           onSelectSession={(sessionId) => {
             void handleSelectWorkspaceSession(sessionId);
           }}
+          onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
           onDeleteAgentSession={handleDeleteAgentConversation}
           onRenameAgentSession={handleRenameAgentConversation}
@@ -972,10 +1028,12 @@ function App() {
           activeSessionId={activeSessionId}
           idleAttentionSessionIds={idleAttentionSessionIds}
           lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+          dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           capabilities={agentRuntimeCapabilities}
           onSelectSession={(sessionId) => {
             void handleSelectWorkspaceSession(sessionId);
           }}
+          onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
           onUpdateModel={(sessionId, model) => updateAgentSession({ sessionId, model })}
           onSendPrompt={startAgentTurn}
@@ -990,7 +1048,9 @@ function App() {
           sessions={workspaceSessions}
           idleAttentionSessionIds={idleAttentionSessionIds}
           lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+          dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           activeSession={activeSession}
+          onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
           onSelectSession={(sessionId) => {
