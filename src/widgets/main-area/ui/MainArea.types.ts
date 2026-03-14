@@ -29,7 +29,9 @@ export interface MainAreaProps {
   sessions: Map<string, WorkspaceSession>;
   idleAttentionSessionIds: Set<string>;
   lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
+  dismissedAttentionKeyBySessionId: Map<string, string>;
   activeSession: TerminalSession | null;
+  onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   onSelectSession: (sessionId: string) => void;

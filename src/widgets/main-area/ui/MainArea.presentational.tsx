@@ -21,6 +21,8 @@ function MainAreaPresentational({
   activeSession,
   idleAttentionSessionIds,
   lastViewedRuntimeEventAtMsBySessionId,
+  dismissedAttentionKeyBySessionId,
+  onDismissSessionAttention,
   onCloseSession,
   onCloseSessionAndKillTmux,
   onSelectSession,
@@ -162,7 +164,9 @@ function MainAreaPresentational({
               activeSessionId={activeSession?.id ?? null}
               idleAttentionSessionIds={idleAttentionSessionIds}
               lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+              dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
               onSelectSession={onSelectSession}
+              onDismissSessionAttention={onDismissSessionAttention}
               onCloseSession={onCloseSession}
             />
           </div>

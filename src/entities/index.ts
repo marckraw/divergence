@@ -38,13 +38,21 @@ export {
 } from "./agent-session";
 export type {
   WorkspaceSession,
+  WorkspaceSessionAttentionOptions,
+  WorkspaceSessionAttentionKind,
+  WorkspaceSessionAttentionState,
   WorkspaceSessionKind,
   WorkspaceSessionStatus,
 } from "./workspace-session";
 export {
+  compareWorkspaceSessionAttentionPriority,
+  getWorkspaceSessionAttentionKey,
+  getWorkspaceSessionAttentionPriority,
   getWorkspaceSessionKind,
+  getWorkspaceSessionAttentionState,
   getWorkspaceSessionTargetId,
   getWorkspaceSessionTargetType,
+  isWorkspaceSessionNeedsAttention,
   isAgentSession,
   isTerminalSession,
 } from "./workspace-session";

@@ -12,11 +12,15 @@ export interface SidebarProps {
   divergencesByProject: Map<number, Divergence[]>;
   sessions: Map<string, WorkspaceSession>;
   activeSessionId: string | null;
+  idleAttentionSessionIds: Set<string>;
+  lastViewedRuntimeEventAtMsBySessionId?: Map<string, number>;
+  dismissedAttentionKeyBySessionId?: Map<string, string>;
   createDivergenceFor: Project | null;
   onCreateDivergenceForChange: (project: Project | null) => void;
   onSelectProject: (project: Project) => void;
   onSelectDivergence: (divergence: Divergence) => void;
   onSelectSession: (sessionId: string) => void;
+  onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onDeleteAgentSession: (sessionId: string) => void;
   onRenameAgentSession: (sessionId: string) => void;

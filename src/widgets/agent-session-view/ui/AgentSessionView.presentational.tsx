@@ -11,12 +11,14 @@ function AgentSessionViewPresentational({
   activeSessionId,
   idleAttentionSessionIds,
   lastViewedRuntimeEventAtMsBySessionId,
+  dismissedAttentionKeyBySessionId,
   capabilities,
   timelineItems,
   isUpdatingModel,
   requestAnswers,
   isResolvingRequest,
   onSelectSession,
+  onDismissSessionAttention,
   onCloseSession,
   onModelChange,
   onSubmitRequest,
@@ -41,7 +43,9 @@ function AgentSessionViewPresentational({
               activeSessionId={activeSessionId}
               idleAttentionSessionIds={idleAttentionSessionIds}
               lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+              dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
               onSelectSession={onSelectSession}
+              onDismissSessionAttention={onDismissSessionAttention}
               onCloseSession={onCloseSession}
             />
           </div>

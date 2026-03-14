@@ -538,7 +538,7 @@ enum PendingRequestTransport {
     CodexUserInput {
         session_id: String,
         json_rpc_id: Value,
-        question_count: usize,
+        question_ids: Vec<String>,
     },
 }
 
@@ -967,7 +967,7 @@ impl AgentRuntimeState {
             PendingRequestTransport::CodexUserInput {
                 session_id,
                 json_rpc_id,
-                question_count,
+                question_ids,
             } => {
                 if session_id != input.session_id {
                     return Err(
@@ -975,9 +975,10 @@ impl AgentRuntimeState {
                     );
                 }
                 let answers = input.answers.unwrap_or_default();
-                if answers.len() != question_count {
+                if answers.len() != question_ids.len() {
                     return Err(format!(
-                        "Expected {question_count} answer(s), received {}.",
+                        "Expected {} answer(s), received {}.",
+                        question_ids.len(),
                         answers.len()
                     ));
                 }
@@ -986,9 +987,7 @@ impl AgentRuntimeState {
                     &writer,
                     json!({
                         "id": json_rpc_id,
-                        "result": {
-                            "answers": answers,
-                        },
+                        "result": codex::build_codex_user_input_response(&question_ids, &answers),
                     }),
                 )?;
                 self.resolve_pending_request(app, &session_id)
@@ -1170,6 +1169,28 @@ impl AgentRuntimeState {
             .lock()
             .ok()
             .and_then(|mut pending_requests| pending_requests.remove(request_id))
+    }
+
+    fn session_has_pending_request(&self, session_id: &str) -> Result<bool, String> {
+        let sessions = self
+            .inner
+            .sessions
+            .lock()
+            .map_err(|error| format!("Agent runtime lock poisoned: {error}"))?;
+        Ok(sessions
+            .get(session_id)
+            .and_then(|session| session.pending_request.as_ref())
+            .is_some())
+    }
+
+    async fn wait_for_pending_request_resolution(&self, session_id: &str) -> Result<(), String> {
+        while self.session_has_pending_request(session_id)? {
+            if self.is_session_stopping(session_id) {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        Ok(())
     }
 
     fn clear_pending_transport_for_session(&self, session_id: &str) {
@@ -2215,12 +2236,13 @@ fn truncate_json_details(input: &Value) -> String {
 mod tests {
     use super::{
         complete_activity, create_activity, derive_activity_metadata, split_provider_output_chunks,
-        strip_shell_wrapper, AgentActivityStatus, AgentAttachment, AgentConversationContext,
-        AgentMessage, AgentProvider, AgentRequest,
+        strip_shell_wrapper, AgentActivityStatus, AgentMessage, AgentProvider, AgentRequest,
+        AgentRequestKind, AgentRequestStatus, AgentRuntimeState,
         AgentRuntimeDebugEvent, AgentRuntimeStatus, AgentSessionNameMode, AgentSessionRole,
         AgentSessionSnapshot, AgentSessionStatus, AgentTargetType, ProviderOutputChunk,
     };
     use serde_json::Value;
+    use tokio::time::Duration;
 
     #[test]
     fn strip_shell_wrapper_removes_common_shell_prefixes() {
@@ -2334,34 +2356,107 @@ mod tests {
             ProviderOutputChunk::Json(_) => panic!("expected trailing assistant text chunk"),
         }
     }
-    #[test]
-    fn split_provider_output_chunks_extracts_inline_json_objects() {
-        let chunks = split_provider_output_chunks(
-            r#"MCP issues detected. Run /mcp list for status.{"type":"init","session_id":"session-123"}Hello! How can I help you today?"#,
-        );
+    fn make_test_session(session_id: &str, pending_request: Option<AgentRequest>) -> AgentSessionSnapshot {
+        AgentSessionSnapshot {
+            id: session_id.to_string(),
+            provider: AgentProvider::Codex,
+            model: "gpt-5.4".to_string(),
+            target_type: AgentTargetType::Project,
+            target_id: 1,
+            project_id: 1,
+            workspace_owner_id: None,
+            workspace_key: "project:1".to_string(),
+            session_role: AgentSessionRole::Default,
+            name_mode: AgentSessionNameMode::Default,
+            name: "Session".to_string(),
+            path: "/tmp/project".to_string(),
+            status: AgentSessionStatus::Busy,
+            runtime_status: AgentRuntimeStatus::Waiting,
+            is_open: true,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+            thread_id: None,
+            current_turn_started_at_ms: None,
+            last_runtime_event_at_ms: None,
+            runtime_phase: None,
+            conversation_context: None,
+            runtime_events: Vec::<AgentRuntimeDebugEvent>::new(),
+            messages: Vec::<AgentMessage>::new(),
+            activities: Vec::new(),
+            pending_request,
+            error_message: None,
+        }
+    }
 
-        assert_eq!(chunks.len(), 3);
-        match &chunks[0] {
-            ProviderOutputChunk::Text(text) => {
-                assert_eq!(text, "MCP issues detected. Run /mcp list for status.");
-            }
-            ProviderOutputChunk::Json(_) => panic!("expected provider notice text chunk"),
-        }
-        match &chunks[1] {
-            ProviderOutputChunk::Json(value) => {
-                assert_eq!(value.get("type").and_then(Value::as_str), Some("init"));
-                assert_eq!(
-                    value.get("session_id").and_then(Value::as_str),
-                    Some("session-123")
-                );
-            }
-            ProviderOutputChunk::Text(_) => panic!("expected structured JSON chunk"),
-        }
-        match &chunks[2] {
-            ProviderOutputChunk::Text(text) => {
-                assert_eq!(text, "Hello! How can I help you today?");
-            }
-            ProviderOutputChunk::Json(_) => panic!("expected trailing assistant text chunk"),
-        }
+    #[tokio::test]
+    async fn wait_for_pending_request_resolution_returns_immediately_without_pending_request() {
+        let runtime = AgentRuntimeState::default();
+        let session_id = "session-1";
+        runtime
+            .inner
+            .sessions
+            .lock()
+            .expect("sessions lock")
+            .insert(session_id.to_string(), make_test_session(session_id, None));
+
+        runtime
+            .wait_for_pending_request_resolution(session_id)
+            .await
+            .expect("wait should succeed");
+        assert!(
+            !runtime
+                .session_has_pending_request(session_id)
+                .expect("pending request state")
+        );
+    }
+
+    #[tokio::test]
+    async fn wait_for_pending_request_resolution_blocks_until_request_clears() {
+        let runtime = AgentRuntimeState::default();
+        let session_id = "session-2";
+        runtime
+            .inner
+            .sessions
+            .lock()
+            .expect("sessions lock")
+            .insert(
+                session_id.to_string(),
+                make_test_session(
+                    session_id,
+                    Some(AgentRequest {
+                        id: "request-1".to_string(),
+                        kind: AgentRequestKind::Approval,
+                        title: "Approve tool".to_string(),
+                        description: None,
+                        options: None,
+                        questions: None,
+                        status: AgentRequestStatus::Open,
+                        opened_at_ms: 1,
+                        resolved_at_ms: None,
+                    }),
+                ),
+            );
+
+        let runtime_for_clear = runtime.clone();
+        let session_id_for_clear = session_id.to_string();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            runtime_for_clear
+                .mutate_session(&session_id_for_clear, |session| {
+                    session.pending_request = None;
+                    Ok(())
+                })
+                .expect("clear pending request");
+        });
+
+        runtime
+            .wait_for_pending_request_resolution(session_id)
+            .await
+            .expect("wait should succeed");
+        assert!(
+            !runtime
+                .session_has_pending_request(session_id)
+                .expect("pending request state")
+        );
     }
 }

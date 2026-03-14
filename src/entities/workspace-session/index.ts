@@ -10,3 +10,15 @@ export {
   isAgentSession,
   isTerminalSession,
 } from "./lib/workspaceSession.pure";
+export type {
+  WorkspaceSessionAttentionOptions,
+  WorkspaceSessionAttentionKind,
+  WorkspaceSessionAttentionState,
+} from "./lib/workspaceSessionAttention.pure";
+export {
+  compareWorkspaceSessionAttentionPriority,
+  getWorkspaceSessionAttentionKey,
+  getWorkspaceSessionAttentionPriority,
+  getWorkspaceSessionAttentionState,
+  isWorkspaceSessionNeedsAttention,
+} from "./lib/workspaceSessionAttention.pure";
