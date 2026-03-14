@@ -17,9 +17,13 @@ export interface WorkspaceSessionAttentionState {
 }
 
 function getLatestAssistantMessage(session: AgentSessionSnapshot) {
-  return [...session.messages]
-    .reverse()
-    .find((message) => message.role === "assistant");
+  for (let index = session.messages.length - 1; index >= 0; index -= 1) {
+    const message = session.messages[index];
+    if (message?.role === "assistant") {
+      return message;
+    }
+  }
+  return null;
 }
 
 function isPlanReady(session: AgentSessionSnapshot): boolean {
@@ -32,7 +36,11 @@ function isPlanReady(session: AgentSessionSnapshot): boolean {
   }
 
   const latestAssistantMessage = getLatestAssistantMessage(session);
-  return latestAssistantMessage?.interactionMode === "plan" && latestAssistantMessage.status === "done";
+  const latestAssistantInteractionMode = latestAssistantMessage?.interactionMode
+    ?? session.latestAssistantMessageInteractionMode;
+  const latestAssistantStatus = latestAssistantMessage?.status
+    ?? session.latestAssistantMessageStatus;
+  return latestAssistantInteractionMode === "plan" && latestAssistantStatus === "done";
 }
 
 export function getWorkspaceSessionAttentionState(

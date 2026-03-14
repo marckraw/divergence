@@ -1,3 +1,5 @@
+import type { SplitPaneId } from "../../../shared/lib/splitPaneIds.pure";
+
 export interface TerminalSession {
   id: string;
   type: "project" | "divergence" | "workspace" | "workspace_divergence";
@@ -17,7 +19,7 @@ export interface TerminalSession {
 }
 
 export type SplitOrientation = "vertical" | "horizontal";
-export type SplitPaneId = "pane-1" | "pane-2" | "pane-3" | "pane-4";
+export type { SplitPaneId } from "../../../shared/lib/splitPaneIds.pure";
 
 export interface SplitSessionState {
   orientation: SplitOrientation;

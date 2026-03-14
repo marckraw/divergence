@@ -1,5 +1,6 @@
 import type { TerminalSession } from "../../../entities";
 import {
+  SECONDARY_SPLIT_PANE_IDS,
   buildSplitTmuxSessionName,
   type TmuxSessionWithOwnership,
 } from "../../../entities/terminal-session";
@@ -82,12 +83,12 @@ export function findSessionIdsByTmuxSessionName(
 
   for (const session of sessions) {
     const baseName = session.tmuxSessionName;
-    if (
-      tmuxSessionName === baseName
-      || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-2")
-      || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-3")
-      || tmuxSessionName === buildSplitTmuxSessionName(baseName, "pane-4")
-    ) {
+    const matchesBaseSession = tmuxSessionName === baseName;
+    const matchesSplitSession = SECONDARY_SPLIT_PANE_IDS.some(
+      (paneId) => tmuxSessionName === buildSplitTmuxSessionName(baseName, paneId)
+    );
+
+    if (matchesBaseSession || matchesSplitSession) {
       matches.push(session.id);
     }
   }

@@ -38,7 +38,7 @@ describe("tmux ownership utils", () => {
       projectName: project.name,
       projectId: project.id,
     });
-    const projectPaneFourName = buildSplitTmuxSessionName(projectSessionName, "pane-4");
+    const projectPaneSixName = buildSplitTmuxSessionName(projectSessionName, "pane-6");
 
     const sessions: TmuxSessionEntry[] = [
       {
@@ -50,7 +50,7 @@ describe("tmux ownership utils", () => {
         activity: "now",
       },
       {
-        name: projectPaneFourName,
+        name: projectPaneSixName,
         socket_path: "/tmp/tmux-501/default",
         created: "now",
         attached: true,

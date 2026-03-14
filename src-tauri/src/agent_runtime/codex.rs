@@ -464,16 +464,10 @@ impl AgentRuntimeState {
             }
             "item/started" => {
                 let item = params.get("item").cloned().unwrap_or(Value::Null);
-                let item_type = item
-                    .get("type")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
+                let item_type = item.get("type").and_then(Value::as_str).unwrap_or_default();
 
                 if item_type == "agentMessage" {
-                    let activity_id = item
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .map(str::to_string);
+                    let activity_id = item.get("id").and_then(Value::as_str).map(str::to_string);
                     let snapshot = self.mutate_session(session_id, |session| {
                         ensure_assistant_message(session, activity_id.as_deref());
                         push_runtime_event(
@@ -497,13 +491,14 @@ impl AgentRuntimeState {
                         .and_then(Value::as_str)
                         .unwrap_or("Command")
                         .to_string();
-                    let cwd = item
-                        .get("cwd")
-                        .and_then(Value::as_str)
-                        .map(str::to_string);
+                    let cwd = item.get("cwd").and_then(Value::as_str).map(str::to_string);
                     let snapshot = self.mutate_session(session_id, |session| {
                         let cwd_details = cwd.clone();
-                        if !session.activities.iter().any(|activity| activity.id == activity_id) {
+                        if !session
+                            .activities
+                            .iter()
+                            .any(|activity| activity.id == activity_id)
+                        {
                             session.activities.push(create_activity(
                                 activity_id.clone(),
                                 "command_execution".to_string(),
@@ -539,7 +534,11 @@ impl AgentRuntimeState {
                     let snapshot = self.mutate_session(session_id, |session| {
                         let activity_title = title.clone();
                         let activity_details = details.clone();
-                        if !session.activities.iter().any(|activity| activity.id == activity_id) {
+                        if !session
+                            .activities
+                            .iter()
+                            .any(|activity| activity.id == activity_id)
+                        {
                             session.activities.push(create_activity(
                                 activity_id.clone(),
                                 "mcp_tool".to_string(),
@@ -564,20 +563,16 @@ impl AgentRuntimeState {
             }
             "item/completed" => {
                 let item = params.get("item").cloned().unwrap_or(Value::Null);
-                let item_type = item
-                    .get("type")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
+                let item_type = item.get("type").and_then(Value::as_str).unwrap_or_default();
 
                 if item_type == "agentMessage" {
-                    let item_id = item
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .map(str::to_string);
+                    let item_id = item.get("id").and_then(Value::as_str).map(str::to_string);
                     let text = item.get("text").and_then(Value::as_str).unwrap_or_default();
                     let snapshot = self.mutate_session(session_id, |session| {
                         if !text.is_empty()
-                            && assistant_message_text(session, item_id.as_deref()).trim().is_empty()
+                            && assistant_message_text(session, item_id.as_deref())
+                                .trim()
+                                .is_empty()
                         {
                             append_assistant_paragraph(session, item_id.as_deref(), text);
                         }
@@ -611,7 +606,12 @@ impl AgentRuntimeState {
                         AgentActivityStatus::Error
                     };
                     let snapshot = self.mutate_session(session_id, |session| {
-                        complete_activity(session, &activity_id, aggregated_output, activity_status);
+                        complete_activity(
+                            session,
+                            &activity_id,
+                            aggregated_output,
+                            activity_status,
+                        );
                         push_runtime_event(
                             session,
                             if matches!(activity_status, AgentActivityStatus::Error) {
@@ -714,7 +714,11 @@ impl AgentRuntimeState {
                 let conversation_context = turn
                     .get("usage")
                     .and_then(normalize_codex_conversation_context)
-                    .or_else(|| params.get("usage").and_then(normalize_codex_conversation_context));
+                    .or_else(|| {
+                        params
+                            .get("usage")
+                            .and_then(normalize_codex_conversation_context)
+                    });
                 let snapshot = self.mutate_session(session_id, |session| {
                     if let Some(next_context) = conversation_context.clone() {
                         session.conversation_context = Some(next_context);
@@ -841,12 +845,7 @@ impl AgentRuntimeState {
                         kind: AgentRequestKind::Approval,
                         title: command,
                         description: build_codex_approval_description(reason, cwd),
-                        options: Some(
-                            decisions
-                                .iter()
-                                .map(|(option, _)| option.clone())
-                                .collect(),
-                        ),
+                        options: Some(decisions.iter().map(|(option, _)| option.clone()).collect()),
                         questions: None,
                         status: AgentRequestStatus::Open,
                         opened_at_ms: now_ms(),
@@ -1002,7 +1001,12 @@ fn read_codex_thread_id_from_response(response: &Value) -> Option<String> {
         .and_then(|thread| thread.get("id"))
         .and_then(Value::as_str)
         .map(str::to_string)
-        .or_else(|| response.get("threadId").and_then(Value::as_str).map(str::to_string))
+        .or_else(|| {
+            response
+                .get("threadId")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
 }
 
 fn codex_unavailable_conversation_context(detail: &str) -> AgentConversationContext {
@@ -1117,8 +1121,8 @@ fn normalize_codex_conversation_context(value: &Value) -> Option<AgentConversati
     })
     .or_else(|| fraction_remaining.map(|remaining| clamp_fraction(1.0 - remaining)));
 
-    let fraction_remaining = fraction_remaining
-        .or_else(|| fraction_used.map(|used| clamp_fraction(1.0 - used)))?;
+    let fraction_remaining =
+        fraction_remaining.or_else(|| fraction_used.map(|used| clamp_fraction(1.0 - used)))?;
     let fraction_used = fraction_used.unwrap_or_else(|| clamp_fraction(1.0 - fraction_remaining));
 
     Some(AgentConversationContext {
@@ -1256,10 +1260,7 @@ fn default_codex_approval_options() -> Vec<AgentRequestOption> {
         .collect()
 }
 
-fn map_codex_approval_decision(
-    decision: &Value,
-    index: usize,
-) -> (String, String, Option<String>) {
+fn map_codex_approval_decision(decision: &Value, index: usize) -> (String, String, Option<String>) {
     if let Some(value) = decision.as_str() {
         match value {
             "accept" => (
@@ -1338,30 +1339,33 @@ fn map_codex_user_input_question(question: &Value) -> AgentRequestQuestion {
             .get("isSecret")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        options: question.get("options").and_then(Value::as_array).map(|options| {
-            options
-                .iter()
-                .enumerate()
-                .map(|(index, option)| AgentRequestOption {
-                    id: format!(
-                        "{}-option-{index}",
-                        question
-                            .get("id")
+        options: question
+            .get("options")
+            .and_then(Value::as_array)
+            .map(|options| {
+                options
+                    .iter()
+                    .enumerate()
+                    .map(|(index, option)| AgentRequestOption {
+                        id: format!(
+                            "{}-option-{index}",
+                            question
+                                .get("id")
+                                .and_then(Value::as_str)
+                                .unwrap_or("question")
+                        ),
+                        label: option
+                            .get("label")
                             .and_then(Value::as_str)
-                            .unwrap_or("question")
-                    ),
-                    label: option
-                        .get("label")
-                        .and_then(Value::as_str)
-                        .unwrap_or("Option")
-                        .to_string(),
-                    description: option
-                        .get("description")
-                        .and_then(Value::as_str)
-                        .map(str::to_string),
-                })
-                .collect()
-        }),
+                            .unwrap_or("Option")
+                            .to_string(),
+                        description: option
+                            .get("description")
+                            .and_then(Value::as_str)
+                            .map(str::to_string),
+                    })
+                    .collect()
+            }),
     }
 }
 

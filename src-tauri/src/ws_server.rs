@@ -142,7 +142,10 @@ fn with_db<F, T>(state: &ServerState, f: F) -> Result<T, String>
 where
     F: FnOnce(&Connection) -> Result<T, String>,
 {
-    let conn = state.db.lock().map_err(|e| format!("DB lock poisoned: {e}"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|e| format!("DB lock poisoned: {e}"))?;
     f(&conn)
 }
 
@@ -358,14 +361,18 @@ async fn process_message(
                 "projects.list" => Some(handle_projects_list(id, state)),
                 "divergences.list" => Some(handle_divergences_list(id, req.params, state)),
                 "workspaces.list" => Some(handle_workspaces_list(id, state)),
-                "workspaceDivergences.list" => Some(handle_workspace_divergences_list(id, req.params, state)),
+                "workspaceDivergences.list" => {
+                    Some(handle_workspace_divergences_list(id, req.params, state))
+                }
                 "automations.list" => Some(handle_automations_list(id, req.params, state)),
                 "terminal.capture" => Some(handle_terminal_capture(id, req.params).await),
                 "tmux.sendKeys" => Some(handle_tmux_send_keys(id, req.params, state).await),
                 "promptQueue.list" => Some(handle_prompt_queue_list(id, req.params, state)),
                 "promptQueue.add" => Some(handle_prompt_queue_add(id, req.params, state)),
                 "promptQueue.delete" => Some(handle_prompt_queue_delete(id, req.params, state)),
-                "notify.automationFinished" => Some(handle_notify_automation_finished(id, req.params, state)),
+                "notify.automationFinished" => {
+                    Some(handle_notify_automation_finished(id, req.params, state))
+                }
                 _ => Some(RpcResponse::method_not_found(id)),
             }
         }
@@ -468,10 +475,9 @@ async fn handle_auth(
                             }),
                         )
                     }
-                    Err(e) => RpcResponse::internal_error(
-                        id,
-                        format!("Failed to create session: {e}"),
-                    ),
+                    Err(e) => {
+                        RpcResponse::internal_error(id, format!("Failed to create session: {e}"))
+                    }
                 }
             }
             Ok(false) => RpcResponse::error(id, -32001, "Invalid pairing code"),
@@ -572,7 +578,11 @@ fn handle_projects_list(id: serde_json::Value, state: &Arc<ServerState>) -> RpcR
     }
 }
 
-fn handle_divergences_list(id: serde_json::Value, params: Option<serde_json::Value>, state: &Arc<ServerState>) -> RpcResponse {
+fn handle_divergences_list(
+    id: serde_json::Value,
+    params: Option<serde_json::Value>,
+    state: &Arc<ServerState>,
+) -> RpcResponse {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Params {
@@ -609,7 +619,9 @@ fn handle_divergences_list(id: serde_json::Value, params: Option<serde_json::Val
     });
 
     match result {
-        Ok(divergences) => RpcResponse::success(id, serde_json::json!({ "divergences": divergences })),
+        Ok(divergences) => {
+            RpcResponse::success(id, serde_json::json!({ "divergences": divergences }))
+        }
         Err(e) => RpcResponse::internal_error(id, e),
     }
 }
@@ -642,7 +654,11 @@ fn handle_workspaces_list(id: serde_json::Value, state: &Arc<ServerState>) -> Rp
     }
 }
 
-fn handle_workspace_divergences_list(id: serde_json::Value, params: Option<serde_json::Value>, state: &Arc<ServerState>) -> RpcResponse {
+fn handle_workspace_divergences_list(
+    id: serde_json::Value,
+    params: Option<serde_json::Value>,
+    state: &Arc<ServerState>,
+) -> RpcResponse {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Params {
@@ -678,12 +694,18 @@ fn handle_workspace_divergences_list(id: serde_json::Value, params: Option<serde
     });
 
     match result {
-        Ok(divergences) => RpcResponse::success(id, serde_json::json!({ "divergences": divergences })),
+        Ok(divergences) => {
+            RpcResponse::success(id, serde_json::json!({ "divergences": divergences }))
+        }
         Err(e) => RpcResponse::internal_error(id, e),
     }
 }
 
-fn handle_automations_list(id: serde_json::Value, params: Option<serde_json::Value>, state: &Arc<ServerState>) -> RpcResponse {
+fn handle_automations_list(
+    id: serde_json::Value,
+    params: Option<serde_json::Value>,
+    state: &Arc<ServerState>,
+) -> RpcResponse {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct Params {
@@ -707,7 +729,8 @@ fn handle_automations_list(id: serde_json::Value, params: Option<serde_json::Val
         };
 
         let mut stmt = conn.prepare(&sql).map_err(|e| format!("DB error: {e}"))?;
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|b| b.as_ref()).collect();
         let rows = stmt
             .query_map(param_refs.as_slice(), |row| {
                 Ok(serde_json::json!({
@@ -733,7 +756,9 @@ fn handle_automations_list(id: serde_json::Value, params: Option<serde_json::Val
     });
 
     match result {
-        Ok(automations) => RpcResponse::success(id, serde_json::json!({ "automations": automations })),
+        Ok(automations) => {
+            RpcResponse::success(id, serde_json::json!({ "automations": automations }))
+        }
         Err(e) => RpcResponse::internal_error(id, e),
     }
 }
@@ -844,15 +869,18 @@ fn handle_prompt_queue_list(
             )
             .map_err(|e| format!("DB error: {e}"))?;
         let rows = stmt
-            .query_map(rusqlite::params![params.scope_type, params.scope_id], |row| {
-                Ok(serde_json::json!({
-                    "id": row.get::<_, i64>(0)?,
-                    "scopeType": row.get::<_, String>(1)?,
-                    "scopeId": row.get::<_, i64>(2)?,
-                    "prompt": row.get::<_, String>(3)?,
-                    "createdAtMs": row.get::<_, i64>(4)?,
-                }))
-            })
+            .query_map(
+                rusqlite::params![params.scope_type, params.scope_id],
+                |row| {
+                    Ok(serde_json::json!({
+                        "id": row.get::<_, i64>(0)?,
+                        "scopeType": row.get::<_, String>(1)?,
+                        "scopeId": row.get::<_, i64>(2)?,
+                        "prompt": row.get::<_, String>(3)?,
+                        "createdAtMs": row.get::<_, i64>(4)?,
+                    }))
+                },
+            )
             .map_err(|e| format!("DB error: {e}"))?;
         let items: Vec<serde_json::Value> = rows.filter_map(|r| r.ok()).collect();
         Ok(items)
@@ -982,7 +1010,12 @@ fn broadcast_state_changed(state: &ServerState, entity: &str, id: Option<i64>) {
     }
 }
 
-fn broadcast_automation_finished(state: &ServerState, automation_id: i64, run_id: i64, status: &str) {
+fn broadcast_automation_finished(
+    state: &ServerState,
+    automation_id: i64,
+    run_id: i64,
+    status: &str,
+) {
     let notification = RpcNotification::automation_finished(automation_id, run_id, status);
     if let Ok(payload) = serde_json::to_string(&notification) {
         let _ = state.broadcast_tx.send(payload);

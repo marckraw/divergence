@@ -22,9 +22,12 @@ function makeAgentSession(partial: Partial<AgentSessionSnapshot> = {}): AgentSes
     createdAtMs: partial.createdAtMs ?? 1_000,
     updatedAtMs: partial.updatedAtMs ?? 2_000,
     lastActivity: partial.lastActivity ?? new Date(2_000),
+    hydrationState: partial.hydrationState ?? "full",
     currentTurnStartedAtMs: partial.currentTurnStartedAtMs ?? null,
     lastRuntimeEventAtMs: partial.lastRuntimeEventAtMs ?? 2_000,
     runtimePhase: partial.runtimePhase ?? null,
+    latestAssistantMessageInteractionMode: partial.latestAssistantMessageInteractionMode ?? null,
+    latestAssistantMessageStatus: partial.latestAssistantMessageStatus ?? null,
     conversationContext: partial.conversationContext ?? null,
     runtimeEvents: partial.runtimeEvents ?? [],
     messages: partial.messages ?? [],
@@ -69,6 +72,16 @@ describe("workspaceSessionAttention.pure", () => {
     expect(getWorkspaceSessionAttentionState(session)?.kind).toBe("plan-ready");
   });
 
+  it("marks plan-ready sessions from summary metadata without full messages", () => {
+    const session = makeAgentSession({
+      hydrationState: "summary",
+      latestAssistantMessageInteractionMode: "plan",
+      latestAssistantMessageStatus: "done",
+      messages: [],
+    });
+
+    expect(getWorkspaceSessionAttentionState(session)?.kind).toBe("plan-ready");
+  });
   it("marks completed when there is a newer unseen runtime event", () => {
     const session = makeAgentSession({
       lastRuntimeEventAtMs: 5_000,

@@ -353,11 +353,7 @@ impl AgentRuntimeState {
                     } else {
                         AgentRuntimeStatus::Idle
                     };
-                    session.error_message = if is_error {
-                        Some(result.clone())
-                    } else {
-                        None
-                    };
+                    session.error_message = if is_error { Some(result.clone()) } else { None };
                     push_runtime_event(
                         session,
                         if is_error { "Errored" } else { "Completed" },

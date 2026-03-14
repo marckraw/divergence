@@ -51,8 +51,11 @@ export {
 export {
   areSplitPaneSizesEqual,
   buildEqualSplitPaneSizes,
+  MAX_SPLIT_PANES,
   normalizeSplitPaneSizes,
   resizeSplitPaneSizes,
+  SECONDARY_SPLIT_PANE_IDS,
+  SPLIT_PANE_IDS,
 } from "./terminal-session";
 export type {
   BackgroundTask,

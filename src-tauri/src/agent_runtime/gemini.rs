@@ -100,7 +100,10 @@ impl AgentRuntimeState {
             let message = if stderr_output.trim().is_empty() {
                 format!("Gemini CLI exited with code {exit_code}.")
             } else {
-                format!("Gemini CLI exited with code {exit_code}: {}", stderr_output.trim())
+                format!(
+                    "Gemini CLI exited with code {exit_code}: {}",
+                    stderr_output.trim()
+                )
             };
             return Err(message);
         }
@@ -196,7 +199,10 @@ impl AgentRuntimeState {
         session_id: &str,
         value: Value,
     ) -> Result<(), String> {
-        let event_type = value.get("type").and_then(Value::as_str).unwrap_or_default();
+        let event_type = value
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         match event_type {
             "init" => {
                 if let Some(thread_id) = read_provider_thread_id(&value) {
@@ -215,11 +221,13 @@ impl AgentRuntimeState {
                 }
             }
             "message" => {
-                let role = value.get("role").and_then(Value::as_str).unwrap_or_default();
+                let role = value
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default();
                 if role == "assistant" {
                     if let Some(text) = read_provider_text_delta(&value) {
-                        let is_delta =
-                            value.get("delta").and_then(Value::as_bool).unwrap_or(false);
+                        let is_delta = value.get("delta").and_then(Value::as_bool).unwrap_or(false);
                         let snapshot = self.mutate_session(session_id, |session| {
                             if is_delta {
                                 append_assistant_text(session, None, &text);

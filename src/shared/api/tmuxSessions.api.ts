@@ -9,6 +9,7 @@ import {
   buildSplitTmuxSessionName,
   buildTmuxSessionName,
 } from "../lib/tmux.pure";
+import { SECONDARY_SPLIT_PANE_IDS } from "../lib/splitPaneIds.pure";
 
 interface TmuxDivergenceRef {
   id: number;
@@ -121,12 +122,11 @@ export async function killProjectTmuxSessions(projectId: number, projectName: st
     projectId,
   });
   await invoke("kill_tmux_session", { sessionName: projectSessionName });
-  await invoke("kill_tmux_session", {
-    sessionName: buildSplitTmuxSessionName(projectSessionName, "pane-2"),
-  });
-  await invoke("kill_tmux_session", {
-    sessionName: buildSplitTmuxSessionName(projectSessionName, "pane-3"),
-  });
+  for (const paneId of SECONDARY_SPLIT_PANE_IDS) {
+    await invoke("kill_tmux_session", {
+      sessionName: buildSplitTmuxSessionName(projectSessionName, paneId),
+    });
+  }
   await invoke("kill_tmux_session", {
     sessionName: buildLegacyTmuxSessionName(`project-${projectId}`),
   });
@@ -144,12 +144,11 @@ export async function killDivergenceTmuxSessions(
     branch: divergence.branch,
   });
   await invoke("kill_tmux_session", { sessionName: divergenceSessionName });
-  await invoke("kill_tmux_session", {
-    sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-2"),
-  });
-  await invoke("kill_tmux_session", {
-    sessionName: buildSplitTmuxSessionName(divergenceSessionName, "pane-3"),
-  });
+  for (const paneId of SECONDARY_SPLIT_PANE_IDS) {
+    await invoke("kill_tmux_session", {
+      sessionName: buildSplitTmuxSessionName(divergenceSessionName, paneId),
+    });
+  }
   await invoke("kill_tmux_session", {
     sessionName: buildLegacyTmuxSessionName(`divergence-${divergence.id}`),
   });
