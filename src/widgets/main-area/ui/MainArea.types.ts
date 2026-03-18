@@ -84,6 +84,7 @@ export interface MainAreaPresentationalProps extends MainAreaProps {
   openFilePath: string | null;
   openFileContent: string;
   openDiff: MainAreaOpenDiff | null;
+  openDiffMode: ChangesMode | null;
   diffLoading: boolean;
   diffError: string | null;
   drawerTab: DrawerTab;

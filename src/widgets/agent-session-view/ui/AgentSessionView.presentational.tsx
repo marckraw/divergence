@@ -1,5 +1,7 @@
+import { AnimatePresence } from "framer-motion";
 import WorkspaceSessionTabsPresentational from "../../workspace-session-tabs";
-import { Button, Textarea } from "../../../shared";
+import { ChangesTree } from "../../../features/changes-tree";
+import { Button, ModalShell, Textarea, ToolbarButton } from "../../../shared";
 import AgentSessionComposerContainer from "./AgentSessionComposer.container";
 import AgentSessionHeaderContainer from "./AgentSessionHeader.container";
 import AgentSessionTimelineContainer from "./AgentSessionTimeline.container";
@@ -17,6 +19,9 @@ function AgentSessionViewPresentational({
   isUpdatingSessionSettings,
   requestAnswers,
   isResolvingRequest,
+  changesSidebarVisible,
+  activeChangedFilePath,
+  changeDrawer,
   onSelectSession,
   onDismissSessionAttention,
   onCloseSession,
@@ -25,6 +30,9 @@ function AgentSessionViewPresentational({
   onSubmitRequest,
   onResolveApproval,
   onRequestAnswerChange,
+  onToggleChangesSidebar,
+  onCloseChangesSidebar,
+  onOpenChangedFile,
   onSendPrompt,
   onStageAttachment,
   onDiscardAttachment,
@@ -51,10 +59,25 @@ function AgentSessionViewPresentational({
             />
           </div>
         </div>
+        <ToolbarButton
+          className="xl:hidden"
+          iconOnly
+          onClick={onToggleChangesSidebar}
+          title={changesSidebarVisible ? "Hide changes" : "Show changes"}
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h10M4 18h16M16 9l4 3-4 3"
+            />
+          </svg>
+        </ToolbarButton>
       </div>
 
-      <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex relative">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           <AgentSessionHeaderContainer
             session={session}
             capabilities={capabilities}
@@ -148,7 +171,38 @@ function AgentSessionViewPresentational({
             onDiscardAttachment={onDiscardAttachment}
           />
         </div>
+
+        <aside className="hidden xl:flex xl:min-h-0 xl:min-w-[20rem] xl:w-80 xl:border-l xl:border-surface">
+          <ChangesTree
+            rootPath={session.path}
+            activeFilePath={activeChangedFilePath}
+            pollWhileActive={session.runtimeStatus === "running"}
+            onOpenChange={(entry, mode) => { void onOpenChangedFile(entry, mode); }}
+          />
+        </aside>
+
+        <AnimatePresence>
+          {changesSidebarVisible && (
+            <ModalShell
+              onRequestClose={onCloseChangesSidebar}
+              overlayClassName="xl:hidden z-40 items-stretch justify-end bg-black/40 backdrop-blur-[2px]"
+              panelClassName="h-full w-full max-w-[20rem] rounded-none border-l border-surface shadow-2xl"
+              size="xl"
+            >
+              <div className="h-full min-h-0">
+                <ChangesTree
+                  rootPath={session.path}
+                  activeFilePath={activeChangedFilePath}
+                  pollWhileActive={session.runtimeStatus === "running"}
+                  onOpenChange={(entry, mode) => { void onOpenChangedFile(entry, mode); }}
+                />
+              </div>
+            </ModalShell>
+          )}
+        </AnimatePresence>
       </div>
+
+      {changeDrawer}
     </main>
   );
 }

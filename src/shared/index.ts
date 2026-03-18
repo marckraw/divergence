@@ -76,6 +76,13 @@ export type {
 
 export { cn } from "./lib/cn.pure";
 export {
+  buildChangesTree,
+  collectChangesTreeFolderPaths,
+  type ChangesTreeFileNode,
+  type ChangesTreeFolderNode,
+  type ChangesTreeNode,
+} from "./lib/changesTree.pure";
+export {
   AGENT_PROVIDER_ORDER,
   DEFAULT_AGENT_PROVIDER,
   getAvailableAgentProviders,
@@ -108,8 +115,34 @@ export {
   getSlideInRightVariants,
   getSlideUpVariants,
 } from "./lib/motion.pure";
+export {
+  getBaseName,
+  getFileBadgeInfo,
+  type BadgeInfo,
+} from "./lib/fileInfo.pure";
+export {
+  type ChangesMode,
+  getRelativePathFromRoot,
+  type GitChangeEntry,
+  type GitChangeStatus,
+  normalizeGitChangePath,
+  sortGitChangesByPath,
+} from "./lib/gitChanges.pure";
 export { getLanguageKind, type LanguageKind } from "./lib/languageDetection.pure";
+export { getLanguageExtension, themeExtensionsById } from "./lib/editorTheme.pure";
 export { getImportPathMatchFromPrefix, type ImportPathMatch } from "./lib/importPathMatch.pure";
+export {
+  IMPORT_COMPLETION_EXTENSIONS,
+  buildImportLabel,
+  formatFileSize,
+  getDiffLineClass,
+  getDirname,
+  isImportCompletionEnabled,
+  joinPath,
+  normalizePath,
+  resolvePath,
+  trimTrailingSlash,
+} from "./lib/quickEdit.pure";
 export { getErrorMessage } from "./lib/errors.pure";
 export { renderTemplateCommand } from "./lib/templateRendering.pure";
 export { notifyCommandFinished } from "./service/notifications.service";
@@ -170,6 +203,8 @@ export {
 
 export { useAppSettings } from "./hooks/useAppSettings";
 export { useDebugEvents } from "./hooks/useDebugEvents";
+export { useFileEditor, type FileEditorOpenDiff } from "./hooks/useFileEditor";
+export { useImportPathCompletion } from "./hooks/useImportPathCompletion";
 export { useUpdater, type UpdateStatus } from "./hooks/useUpdater";
 export {
   useRalphyConfig,
@@ -180,6 +215,14 @@ export {
   type RalphyIntegrationsSummary,
   type RalphyLabelsSummary,
 } from "./hooks/useRalphyConfig";
+export {
+  getBranchDiff,
+  getWorkingDiff,
+  listBranchChanges,
+  listGitChanges,
+  type BranchChangesResponse,
+  type GitDiffResponse,
+} from "./api/git.api";
 export {
   getProjectGithubRepository,
   isGithubRepoConfigValid,
