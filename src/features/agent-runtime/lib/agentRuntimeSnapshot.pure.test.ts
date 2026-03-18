@@ -10,6 +10,7 @@ describe("mapAgentRuntimeSnapshot", () => {
       id: "agent-1",
       provider: "claude",
       model: "sonnet",
+      effort: "medium",
       targetType: "project",
       targetId: 1,
       projectId: 1,
@@ -56,6 +57,7 @@ describe("mapAgentRuntimeSnapshot", () => {
 
     expect(snapshot.kind).toBe("agent");
     expect(snapshot.model).toBe("sonnet");
+    expect(snapshot.effort).toBe("medium");
     expect(snapshot.isOpen).toBe(true);
     expect(snapshot.threadId).toBe("thread-1");
     expect(snapshot.currentTurnStartedAtMs).toBe(12);
@@ -75,6 +77,7 @@ describe("mapAgentRuntimeSessionSummary", () => {
       id: "agent-2",
       provider: "gemini",
       model: "gemini-2.5-pro",
+      effort: undefined,
       targetType: "project",
       targetId: 2,
       projectId: 2,
@@ -101,6 +104,7 @@ describe("mapAgentRuntimeSessionSummary", () => {
     expect(summary.hydrationState).toBe("summary");
     expect(summary.messages).toEqual([]);
     expect(summary.activities).toEqual([]);
+    expect(summary.effort).toBeUndefined();
     expect(summary.latestAssistantMessageInteractionMode).toBe("plan");
     expect(summary.latestAssistantMessageStatus).toBe("done");
   });

@@ -21,4 +21,5 @@ export {
   createEmptyAgentSessionSnapshot,
   getAgentSessionTimestamp,
 } from "./lib/agentSession.pure";
+export { buildAgentSessionSettingsPatch } from "./lib/agentSessionSettings.pure";
 export { suggestAgentSessionTitle } from "./lib/agentSessionTitle.pure";

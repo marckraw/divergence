@@ -16,7 +16,7 @@ function AgentSessionViewPresentational({
   dismissedAttentionKeyBySessionId,
   capabilities,
   timelineItems,
-  isUpdatingModel,
+  isUpdatingSessionSettings,
   requestAnswers,
   isResolvingRequest,
   changesSidebarVisible,
@@ -26,6 +26,7 @@ function AgentSessionViewPresentational({
   onDismissSessionAttention,
   onCloseSession,
   onModelChange,
+  onEffortChange,
   onSubmitRequest,
   onResolveApproval,
   onRequestAnswerChange,
@@ -80,8 +81,9 @@ function AgentSessionViewPresentational({
           <AgentSessionHeaderContainer
             session={session}
             capabilities={capabilities}
-            isUpdatingModel={isUpdatingModel}
+            isUpdatingSessionSettings={isUpdatingSessionSettings}
             onModelChange={onModelChange}
+            onEffortChange={onEffortChange}
             onStopSession={onStopSession}
           />
 

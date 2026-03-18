@@ -1,5 +1,9 @@
 use super::*;
 
+const LOW_MEDIUM_HIGH_EFFORTS: &[&str] = &["low", "medium", "high"];
+const LOW_TO_XHIGH_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
+const NONE_TO_XHIGH_EFFORTS: &[&str] = &["none", "low", "medium", "high", "xhigh"];
+
 pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
     let (cursor_default_model, cursor_model_options) = cursor_model_catalog();
     let gemini_stream_json_supported = gemini_supports_stream_json();
@@ -160,6 +164,37 @@ pub(super) fn normalize_agent_model(provider: &AgentProvider, raw_model: Option<
     trimmed_model.to_string()
 }
 
+pub(super) fn default_effort_for_provider_model(
+    provider: &AgentProvider,
+    model: &str,
+) -> Option<&'static str> {
+    (!supported_efforts_for_provider_model(provider, model).is_empty()).then_some("medium")
+}
+
+pub(super) fn normalize_agent_effort(
+    provider: &AgentProvider,
+    model: &str,
+    raw_effort: Option<&str>,
+) -> Option<String> {
+    let supported_efforts = supported_efforts_for_provider_model(provider, model);
+    if supported_efforts.is_empty() {
+        return None;
+    }
+
+    let normalized_effort = raw_effort
+        .map(str::trim)
+        .filter(|effort| !effort.is_empty())
+        .map(str::to_ascii_lowercase);
+
+    if let Some(effort) = normalized_effort {
+        if supported_efforts.iter().any(|candidate| *candidate == effort) {
+            return Some(effort);
+        }
+    }
+
+    default_effort_for_provider_model(provider, model).map(str::to_string)
+}
+
 pub(super) fn build_claude_command(
     session: &AgentSessionSnapshot,
     interaction_mode: AgentInteractionMode,
@@ -179,6 +214,9 @@ pub(super) fn build_claude_command(
     }
     if !session.model.trim().is_empty() {
         command.arg("--model").arg(session.model.trim());
+    }
+    if let Some(effort) = session.effort.as_deref().filter(|value| !value.trim().is_empty()) {
+        command.arg("--effort").arg(effort);
     }
     if let Some(thread_id) = session.thread_id.as_deref() {
         command.arg("--resume").arg(thread_id);
@@ -258,6 +296,37 @@ fn gemini_approval_args(interaction_mode: AgentInteractionMode) -> &'static [&'s
         AgentInteractionMode::Default => &["-y"],
         AgentInteractionMode::Plan => &["--approval-mode", "plan"],
     }
+}
+
+fn supported_efforts_for_provider_model(provider: &AgentProvider, model: &str) -> &'static [&'static str] {
+    match provider {
+        AgentProvider::Claude => {
+            if is_claude_opus_model(model) {
+                &["low", "medium", "high", "max"]
+            } else {
+                LOW_MEDIUM_HIGH_EFFORTS
+            }
+        }
+        AgentProvider::Codex => match normalize_model_alias(model).as_str() {
+            "gpt-5.4" | "gpt-5.2" => NONE_TO_XHIGH_EFFORTS,
+            "gpt-5.3-codex" | "gpt-5.3-codex-spark" | "gpt-5.2-codex" => {
+                LOW_TO_XHIGH_EFFORTS
+            }
+            _ => LOW_MEDIUM_HIGH_EFFORTS,
+        },
+        AgentProvider::Cursor | AgentProvider::Gemini => &[],
+    }
+}
+
+fn is_claude_opus_model(model: &str) -> bool {
+    matches!(
+        normalize_model_alias(model).as_str(),
+        "opus" | "claude-opus-4-6"
+    )
+}
+
+fn normalize_model_alias(model: &str) -> String {
+    model.trim().to_ascii_lowercase()
 }
 
 fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
@@ -407,7 +476,46 @@ fn strip_ansi_sequences(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{gemini_approval_args, AgentInteractionMode};
+    use super::{
+        build_claude_command, default_effort_for_provider_model, gemini_approval_args,
+        normalize_agent_effort, AgentInteractionMode, AgentProvider, AgentRuntimeStatus,
+        AgentSessionNameMode, AgentSessionRole, AgentSessionSnapshot, AgentSessionStatus,
+        AgentTargetType,
+    };
+    use std::path::PathBuf;
+
+    fn build_test_session(model: &str, effort: Option<&str>) -> AgentSessionSnapshot {
+        AgentSessionSnapshot {
+            id: "session-1".to_string(),
+            provider: AgentProvider::Claude,
+            model: model.to_string(),
+            effort: effort.map(str::to_string),
+            target_type: AgentTargetType::Project,
+            target_id: 1,
+            project_id: 1,
+            workspace_owner_id: None,
+            workspace_key: "project:1".to_string(),
+            session_role: AgentSessionRole::Default,
+            name_mode: AgentSessionNameMode::Default,
+            name: "Session".to_string(),
+            path: "/tmp/project".to_string(),
+            status: AgentSessionStatus::Idle,
+            runtime_status: AgentRuntimeStatus::Idle,
+            is_open: true,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+            thread_id: None,
+            current_turn_started_at_ms: None,
+            last_runtime_event_at_ms: None,
+            runtime_phase: None,
+            conversation_context: None,
+            runtime_events: Vec::new(),
+            messages: Vec::new(),
+            activities: Vec::new(),
+            pending_request: None,
+            error_message: None,
+        }
+    }
 
     #[test]
     fn gemini_default_mode_uses_yolo_flag() {
@@ -420,6 +528,45 @@ mod tests {
             gemini_approval_args(AgentInteractionMode::Plan),
             ["--approval-mode", "plan"]
         );
+    }
+
+    #[test]
+    fn normalizes_effort_by_provider_and_model() {
+        assert_eq!(
+            default_effort_for_provider_model(&AgentProvider::Codex, "gpt-5.4"),
+            Some("medium")
+        );
+        assert_eq!(
+            normalize_agent_effort(&AgentProvider::Codex, "gpt-5.3-codex", Some("none"))
+                .as_deref(),
+            Some("medium")
+        );
+        assert_eq!(
+            normalize_agent_effort(&AgentProvider::Claude, "opus", Some("max")).as_deref(),
+            Some("max")
+        );
+        assert_eq!(
+            normalize_agent_effort(&AgentProvider::Gemini, "gemini-2.5-pro", Some("medium")),
+            None
+        );
+    }
+
+    #[test]
+    fn claude_command_includes_effort_when_session_has_one() {
+        let command = build_claude_command(
+            &build_test_session("opus", Some("max")),
+            AgentInteractionMode::Default,
+            "",
+            &[PathBuf::from("/tmp/attachments")],
+        );
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect();
+
+        assert!(args.windows(2).any(|pair| pair == ["--model", "opus"]));
+        assert!(args.windows(2).any(|pair| pair == ["--effort", "max"]));
     }
 }
 

@@ -217,6 +217,15 @@ impl AgentRuntimeState {
             }));
         }
 
+        let reasoning_effort = session
+            .effort
+            .clone()
+            .or_else(|| {
+                default_effort_for_provider_model(&session.provider, &session.model)
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "medium".to_string());
+
         let mut turn_start_params = json!({
             "threadId": thread_id,
             "model": session.model,
@@ -228,7 +237,7 @@ impl AgentRuntimeState {
                 "mode": "plan",
                 "settings": {
                     "model": session.model,
-                    "reasoning_effort": "medium",
+                    "reasoning_effort": reasoning_effort,
                     "developer_instructions": CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
                 }
             });
@@ -237,7 +246,7 @@ impl AgentRuntimeState {
                 "mode": "default",
                 "settings": {
                     "model": session.model,
-                    "reasoning_effort": "medium",
+                    "reasoning_effort": reasoning_effort,
                     "developer_instructions": CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
                 }
             });

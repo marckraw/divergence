@@ -4,6 +4,7 @@ import type {
   AgentRuntimeAttachment,
   AgentRuntimeAttachmentKind,
   AgentRuntimeCapabilities,
+  AgentRuntimeEffort,
   AgentRuntimeInteractionMode,
   ChangesMode,
   GitChangeEntry,
@@ -32,7 +33,10 @@ export interface AgentSessionViewProps {
   onSelectSession: (sessionId: string) => void;
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
-  onUpdateModel: (sessionId: string, model: string) => Promise<void>;
+  onUpdateSessionSettings: (sessionId: string, input: {
+    model?: string;
+    effort?: AgentRuntimeEffort;
+  }) => Promise<void>;
   onSendPrompt: (
     sessionId: string,
     prompt: string,
@@ -59,8 +63,9 @@ export interface AgentSessionViewProps {
 export interface AgentSessionHeaderProps {
   session: AgentSessionSnapshot;
   capabilities: AgentRuntimeCapabilities | null;
-  isUpdatingModel: boolean;
+  isUpdatingSessionSettings: boolean;
   onModelChange: (model: string) => Promise<void>;
+  onEffortChange: (effort: AgentRuntimeEffort) => Promise<void>;
   onStopSession: (sessionId: string) => Promise<void>;
 }
 
@@ -95,7 +100,7 @@ export interface AgentSessionViewPresentationalProps {
   dismissedAttentionKeyBySessionId: Map<string, string>;
   capabilities: AgentRuntimeCapabilities | null;
   timelineItems: AgentTimelineItem[];
-  isUpdatingModel: boolean;
+  isUpdatingSessionSettings: boolean;
   requestAnswers: string[];
   isResolvingRequest: boolean;
   changesSidebarVisible: boolean;
@@ -105,6 +110,7 @@ export interface AgentSessionViewPresentationalProps {
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onModelChange: (model: string) => Promise<void>;
+  onEffortChange: (effort: AgentRuntimeEffort) => Promise<void>;
   onSubmitRequest: () => Promise<void>;
   onResolveApproval: (decisionId: string) => Promise<void>;
   onRequestAnswerChange: (index: number, value: string) => void;
