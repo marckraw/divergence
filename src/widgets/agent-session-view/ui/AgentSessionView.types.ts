@@ -1,9 +1,12 @@
+import type { ReactNode } from "react";
 import type { AgentSessionSnapshot, WorkspaceSession } from "../../../entities";
 import type {
   AgentRuntimeAttachment,
   AgentRuntimeAttachmentKind,
   AgentRuntimeCapabilities,
   AgentRuntimeInteractionMode,
+  ChangesMode,
+  GitChangeEntry,
 } from "../../../shared";
 import type { AgentTimelineItem } from "../lib/agentTimeline.pure";
 
@@ -95,6 +98,9 @@ export interface AgentSessionViewPresentationalProps {
   isUpdatingModel: boolean;
   requestAnswers: string[];
   isResolvingRequest: boolean;
+  changesSidebarVisible: boolean;
+  activeChangedFilePath: string | null;
+  changeDrawer: ReactNode;
   onSelectSession: (sessionId: string) => void;
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
@@ -102,6 +108,9 @@ export interface AgentSessionViewPresentationalProps {
   onSubmitRequest: () => Promise<void>;
   onResolveApproval: (decisionId: string) => Promise<void>;
   onRequestAnswerChange: (index: number, value: string) => void;
+  onToggleChangesSidebar: () => void;
+  onCloseChangesSidebar: () => void;
+  onOpenChangedFile: (entry: GitChangeEntry, mode: ChangesMode) => Promise<void>;
   onSendPrompt: AgentSessionViewProps["onSendPrompt"];
   onStageAttachment: AgentSessionViewProps["onStageAttachment"];
   onDiscardAttachment: AgentSessionViewProps["onDiscardAttachment"];

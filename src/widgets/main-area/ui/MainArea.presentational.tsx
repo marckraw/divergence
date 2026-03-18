@@ -49,6 +49,7 @@ function MainAreaPresentational({
   openFilePath,
   openFileContent,
   openDiff,
+  openDiffMode,
   diffLoading,
   diffError,
   drawerTab,
@@ -498,7 +499,7 @@ function MainAreaPresentational({
         diff={openDiff}
         diffLoading={diffLoading}
         diffError={diffError}
-        diffMode={changesMode}
+        diffMode={openDiffMode ?? changesMode}
         reviewComments={openFileReviewComments}
         onAddDiffComment={onAddDiffComment}
         defaultTab={drawerTab}

@@ -17,6 +17,7 @@ import {
 } from "../../../entities";
 import type {
   ChangesMode,
+  GitChangeEntry,
   SplitPaneId,
   SplitSessionState,
   TerminalSession,
@@ -106,6 +107,7 @@ function MainAreaContainer({
     openFilePath,
     openFileContent,
     openDiff,
+    openDiffMode,
     diffLoading,
     diffError,
     drawerTab,
@@ -125,7 +127,7 @@ function MainAreaContainer({
     handleSaveFile,
     handleChangeContent,
     resetFileEditor,
-  } = useFileEditor({ activeRootPath, changesMode });
+  } = useFileEditor({ activeRootPath });
 
   const openFileReviewComments = useMemo(() => {
     if (!openFilePath) {
@@ -220,6 +222,10 @@ function MainAreaContainer({
       setReviewRunning(false);
     }
   }, [activeDraft, activeRootPath, activeSession, clearActiveDraft, onRunReviewAgentRequest]);
+
+  const handleOpenPanelChange = useCallback(async (entry: GitChangeEntry) => {
+    await handleOpenChange(entry, changesMode);
+  }, [changesMode, handleOpenChange]);
 
   const handleStatusChange = useCallback(
     (sessionId: string) => (status: TerminalSession["status"]) => {
@@ -426,6 +432,7 @@ function MainAreaContainer({
       openFilePath={openFilePath}
       openFileContent={openFileContent}
       openDiff={openDiff}
+      openDiffMode={openDiffMode}
       diffLoading={diffLoading}
       diffError={diffError}
       drawerTab={drawerTab}
@@ -446,7 +453,7 @@ function MainAreaContainer({
       reviewError={reviewRunError}
       onOpenFile={handleOpenFile}
       onRemoveFile={handleRemoveFile}
-      onOpenChange={handleOpenChange}
+      onOpenChange={handleOpenPanelChange}
       onCloseDrawer={handleCloseDrawer}
       onSaveFile={handleSaveFile}
       onChangeFileContent={handleChangeContent}
