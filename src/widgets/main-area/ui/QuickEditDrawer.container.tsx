@@ -9,6 +9,7 @@ import {
   SOFT_SPRING,
   Button,
   LoadingSpinner,
+  Markdown,
   getContentSwapVariants,
   getSlideUpVariants,
 } from "../../../shared";
@@ -37,7 +38,7 @@ interface QuickEditDrawerProps {
   diffError?: string | null;
   diffMode?: ChangesMode;
   reviewComments?: DiffReviewComment[];
-  defaultTab?: "diff" | "edit";
+  defaultTab?: "diff" | "edit" | "view";
   allowEdit?: boolean;
   isDirty: boolean;
   isSaving: boolean;
@@ -500,14 +501,17 @@ function QuickEditDrawer({
 }: QuickEditDrawerProps) {
   const shouldReduceMotion = useReducedMotion();
   const tabIdPrefix = useId();
-  const [activeTab, setActiveTab] = useState<"diff" | "edit">(defaultTab);
+  const [activeTab, setActiveTab] = useState<"diff" | "edit" | "view">(defaultTab);
   const canEdit = allowEdit && !isReadOnly;
   const hasDiffState = diff !== null || diffLoading || diffError !== null;
-  const showTabBar = canEdit && hasDiffState;
+  const isMarkdownFile = filePath?.match(/\.(?:md|mdx|markdown)$/i) !== null;
+  const showTabBar = (canEdit && hasDiffState) || isMarkdownFile;
   const diffTabId = `${tabIdPrefix}-diff-tab`;
   const editTabId = `${tabIdPrefix}-edit-tab`;
+  const viewTabId = `${tabIdPrefix}-view-tab`;
   const diffPanelId = `${tabIdPrefix}-diff-panel`;
   const editPanelId = `${tabIdPrefix}-edit-panel`;
+  const viewPanelId = `${tabIdPrefix}-view-panel`;
 
   useEffect(() => {
     if (!allowEdit && defaultTab === "edit") {
@@ -605,6 +609,19 @@ function QuickEditDrawer({
                     Edit
                   </TabButton>
                 )}
+                {isMarkdownFile && (
+                  <TabButton
+                    active={activeTab === "view"}
+                    role="tab"
+                    id={viewTabId}
+                    aria-selected={activeTab === "view"}
+                    aria-controls={viewPanelId}
+                    tabIndex={activeTab === "view" ? 0 : -1}
+                    onClick={() => setActiveTab("view")}
+                  >
+                    View
+                  </TabButton>
+                )}
               </div>
             )}
             {largeFileWarning && (
@@ -624,7 +641,24 @@ function QuickEditDrawer({
             )}
             <div className="flex-1 min-h-0">
               <AnimatePresence mode="wait" initial={false}>
-                {activeTab === "diff" && hasDiffState ? (
+                {activeTab === "view" && isMarkdownFile ? (
+                  <motion.div
+                    key="view"
+                    className="h-full w-full overflow-auto"
+                    role={showTabBar ? "tabpanel" : undefined}
+                    id={showTabBar ? viewPanelId : undefined}
+                    aria-labelledby={showTabBar ? viewTabId : undefined}
+                    variants={contentVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={contentTransition}
+                  >
+                    <div className="px-6 py-4">
+                      <Markdown content={content} />
+                    </div>
+                  </motion.div>
+                ) : activeTab === "diff" && hasDiffState ? (
                   <motion.div
                     key="diff"
                     className="h-full w-full"
