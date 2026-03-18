@@ -60,8 +60,8 @@ const sessionUpdateScheduler = createFrameTask(() => {
   });
 });
 
-function sortSessionsByUpdatedAt(sessions: Iterable<AgentSessionSnapshot>): AgentSessionSnapshot[] {
-  return [...sessions].sort((left, right) => right.updatedAtMs - left.updatedAtMs);
+function sortSessionsByCreatedAt(sessions: Iterable<AgentSessionSnapshot>): AgentSessionSnapshot[] {
+  return [...sessions].sort((left, right) => right.createdAtMs - left.createdAtMs);
 }
 
 function deriveOrderedOpenSessions(sessions: AgentSessionSnapshot[]): AgentSessionSnapshot[] {
@@ -79,7 +79,7 @@ function replaceState(nextState: AgentRuntimeStoreState): void {
 
 function updateSessionsMap(mutator: (previous: Map<string, AgentSessionSnapshot>) => Map<string, AgentSessionSnapshot>): void {
   const nextSessions = mutator(state.sessions);
-  const orderedSessions = sortSessionsByUpdatedAt(nextSessions.values());
+  const orderedSessions = sortSessionsByCreatedAt(nextSessions.values());
   replaceState({
     ...state,
     sessions: nextSessions,
@@ -168,7 +168,7 @@ async function initializeAgentRuntimeStore(): Promise<void> {
     console.warn("Failed to initialize agent runtime sessions:", sessionsResult.reason);
   }
 
-  const orderedSessions = sortSessionsByUpdatedAt(nextSessions.values());
+  const orderedSessions = sortSessionsByCreatedAt(nextSessions.values());
   replaceState({
     ...state,
     capabilities: nextCapabilities,
