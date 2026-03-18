@@ -1,5 +1,5 @@
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, RefObject } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import {
   Button,
@@ -26,6 +26,7 @@ import {
 import type {
   AgentSessionComposerAttachment,
   AgentSessionComposerDraft,
+  AgentSessionComposerHandle,
   AgentSessionComposerProps,
 } from "./AgentSessionView.types";
 
@@ -155,13 +156,13 @@ function isInteractionModeShortcut(event: KeyboardEvent<HTMLTextAreaElement>): b
     && !event.altKey;
 }
 
-function AgentSessionComposerContainer({
+const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, AgentSessionComposerProps>(function AgentSessionComposerContainer({
   session,
   capabilities,
   onSendPrompt,
   onStageAttachment,
   onDiscardAttachment,
-}: AgentSessionComposerProps) {
+}, ref) {
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<AgentSessionComposerDraft>(() => {
     const storedDraft = readStoredDrafts()[session.id];
@@ -170,6 +171,12 @@ function AgentSessionComposerContainer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStagingAttachment, setIsStagingAttachment] = useState(false);
   const draftRef = useRef(draft);
+
+  useImperativeHandle(ref, () => ({
+    setText(text: string) {
+      setDraft((prev) => ({ ...prev, text }));
+    },
+  }), []);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -569,6 +576,6 @@ function AgentSessionComposerContainer({
       </div>
     </div>
   );
-}
+});
 
 export default AgentSessionComposerContainer;

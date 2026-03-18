@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import type { AgentSessionSnapshot, WorkspaceSession } from "../../../entities";
+import type { ReactNode, Ref } from "react";
+import type { AgentSessionSnapshot, Project, WorkspaceMember, WorkspaceSession } from "../../../entities";
 import type {
   AgentRuntimeAttachment,
   AgentRuntimeAttachmentKind,
@@ -10,6 +10,12 @@ import type {
   GitChangeEntry,
 } from "../../../shared";
 import type { AgentTimelineItem } from "../lib/agentTimeline.pure";
+
+export type AgentSidebarTab = "changes" | "linear" | "queue";
+
+export interface AgentSessionComposerHandle {
+  setText: (text: string) => void;
+}
 
 export interface AgentSessionComposerAttachment extends AgentRuntimeAttachment {
   previewUrl?: string | null;
@@ -30,6 +36,8 @@ export interface AgentSessionViewProps {
   lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
   dismissedAttentionKeyBySessionId: Map<string, string>;
   capabilities: AgentRuntimeCapabilities | null;
+  projects: Project[];
+  workspaceMembersByWorkspaceId: Map<number, WorkspaceMember[]>;
   onSelectSession: (sessionId: string) => void;
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
@@ -106,6 +114,10 @@ export interface AgentSessionViewPresentationalProps {
   changesSidebarVisible: boolean;
   activeChangedFilePath: string | null;
   changeDrawer: ReactNode;
+  sidebarTab: AgentSidebarTab;
+  linearPanel: ReactNode;
+  queuePanel: ReactNode;
+  composerRef: Ref<AgentSessionComposerHandle>;
   onSelectSession: (sessionId: string) => void;
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
@@ -116,6 +128,7 @@ export interface AgentSessionViewPresentationalProps {
   onRequestAnswerChange: (index: number, value: string) => void;
   onToggleChangesSidebar: () => void;
   onCloseChangesSidebar: () => void;
+  onSidebarTabChange: (tab: AgentSidebarTab) => void;
   onOpenChangedFile: (entry: GitChangeEntry, mode: ChangesMode) => Promise<void>;
   onSendPrompt: AgentSessionViewProps["onSendPrompt"];
   onStageAttachment: AgentSessionViewProps["onStageAttachment"];

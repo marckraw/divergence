@@ -45,7 +45,7 @@ function PromptQueuePanel({
         <div className="flex items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-semibold text-text">Prompt Queue</h3>
-            <p className="text-xs text-subtext">Queue prompts and send them to this active terminal.</p>
+            <p className="text-xs text-subtext">Queue prompts and send them to the active session.</p>
           </div>
           <Button
             variant="secondary"

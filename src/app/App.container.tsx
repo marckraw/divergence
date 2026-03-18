@@ -1030,6 +1030,8 @@ function App() {
           lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
           dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           capabilities={agentRuntimeCapabilities}
+          projects={projects}
+          workspaceMembersByWorkspaceId={membersByWorkspaceId}
           onSelectSession={(sessionId) => {
             void handleSelectWorkspaceSession(sessionId);
           }}
