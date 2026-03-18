@@ -1,7 +1,7 @@
 import { AnimatePresence } from "framer-motion";
 import WorkspaceSessionTabsPresentational from "../../workspace-session-tabs";
 import { ChangesTree } from "../../../features/changes-tree";
-import { Button, ModalShell, Textarea, ToolbarButton } from "../../../shared";
+import { Button, ModalShell, TabButton, Textarea, ToolbarButton } from "../../../shared";
 import AgentSessionComposerContainer from "./AgentSessionComposer.container";
 import AgentSessionHeaderContainer from "./AgentSessionHeader.container";
 import AgentSessionTimelineContainer from "./AgentSessionTimeline.container";
@@ -22,6 +22,10 @@ function AgentSessionViewPresentational({
   changesSidebarVisible,
   activeChangedFilePath,
   changeDrawer,
+  sidebarTab,
+  linearPanel,
+  queuePanel,
+  composerRef,
   onSelectSession,
   onDismissSessionAttention,
   onCloseSession,
@@ -32,6 +36,7 @@ function AgentSessionViewPresentational({
   onRequestAnswerChange,
   onToggleChangesSidebar,
   onCloseChangesSidebar,
+  onSidebarTabChange,
   onOpenChangedFile,
   onSendPrompt,
   onStageAttachment,
@@ -41,6 +46,35 @@ function AgentSessionViewPresentational({
   const pendingRequest = session.pendingRequest;
   const canSubmitPendingRequest = pendingRequest?.kind === "user-input"
     && (pendingRequest.questions ?? []).every((_, index) => Boolean(requestAnswers[index]?.trim()));
+
+  const sidebarTabBar = (
+    <div className="flex items-center border-b border-surface">
+      <TabButton active={sidebarTab === "changes"} onClick={() => onSidebarTabChange("changes")}>
+        Changes
+      </TabButton>
+      <TabButton active={sidebarTab === "linear"} onClick={() => onSidebarTabChange("linear")}>
+        Linear
+      </TabButton>
+      <TabButton active={sidebarTab === "queue"} onClick={() => onSidebarTabChange("queue")}>
+        Queue
+      </TabButton>
+    </div>
+  );
+
+  const sidebarContent = (
+    <div className="flex-1 min-h-0 overflow-auto">
+      {sidebarTab === "changes" && (
+        <ChangesTree
+          rootPath={session.path}
+          activeFilePath={activeChangedFilePath}
+          pollWhileActive={session.runtimeStatus === "running"}
+          onOpenChange={(entry, mode) => { void onOpenChangedFile(entry, mode); }}
+        />
+      )}
+      {sidebarTab === "linear" && linearPanel}
+      {sidebarTab === "queue" && queuePanel}
+    </div>
+  );
 
   return (
     <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
@@ -63,7 +97,7 @@ function AgentSessionViewPresentational({
           className="xl:hidden"
           iconOnly
           onClick={onToggleChangesSidebar}
-          title={changesSidebarVisible ? "Hide changes" : "Show changes"}
+          title={changesSidebarVisible ? "Hide sidebar" : "Show sidebar"}
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path
@@ -163,6 +197,7 @@ function AgentSessionViewPresentational({
           />
 
           <AgentSessionComposerContainer
+            ref={composerRef}
             key={session.id}
             session={session}
             capabilities={capabilities}
@@ -172,13 +207,9 @@ function AgentSessionViewPresentational({
           />
         </div>
 
-        <aside className="hidden xl:flex xl:min-h-0 xl:min-w-[20rem] xl:w-80 xl:border-l xl:border-surface">
-          <ChangesTree
-            rootPath={session.path}
-            activeFilePath={activeChangedFilePath}
-            pollWhileActive={session.runtimeStatus === "running"}
-            onOpenChange={(entry, mode) => { void onOpenChangedFile(entry, mode); }}
-          />
+        <aside className="hidden xl:flex xl:flex-col xl:min-h-0 xl:min-w-[20rem] xl:w-80 xl:border-l xl:border-surface">
+          {sidebarTabBar}
+          {sidebarContent}
         </aside>
 
         <AnimatePresence>
@@ -189,13 +220,9 @@ function AgentSessionViewPresentational({
               panelClassName="h-full w-full max-w-[20rem] rounded-none border-l border-surface shadow-2xl"
               size="xl"
             >
-              <div className="h-full min-h-0">
-                <ChangesTree
-                  rootPath={session.path}
-                  activeFilePath={activeChangedFilePath}
-                  pollWhileActive={session.runtimeStatus === "running"}
-                  onOpenChange={(entry, mode) => { void onOpenChangedFile(entry, mode); }}
-                />
+              <div className="h-full min-h-0 flex flex-col">
+                {sidebarTabBar}
+                {sidebarContent}
               </div>
             </ModalShell>
           )}

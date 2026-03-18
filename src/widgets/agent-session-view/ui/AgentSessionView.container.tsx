@@ -1,12 +1,42 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AgentSessionViewPresentational from "./AgentSessionView.presentational";
-import type { AgentSessionViewProps } from "./AgentSessionView.types";
+import type { AgentSessionComposerHandle, AgentSessionViewProps, AgentSidebarTab } from "./AgentSessionView.types";
 import { buildAgentTimeline } from "../lib/agentTimeline.pure";
 import { useAgentRuntimeSession } from "../../../features/agent-runtime";
 import AgentSessionChangeDrawer from "./AgentSessionChangeDrawer.container";
 import { DEFAULT_EDITOR_THEME_DARK, DEFAULT_EDITOR_THEME_LIGHT } from "../../../shared";
 import { useAppSettings, useFileEditor, type ChangesMode, type GitChangeEntry } from "../../../shared";
 import { buildAgentSessionSettingsPatch } from "../../../entities";
+import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
+import { PromptQueuePanel } from "../../../features/prompt-queue";
+import { useAgentLinearTaskQueue } from "../model/useAgentLinearTaskQueue";
+import { useAgentPromptQueue } from "../model/useAgentPromptQueue";
+
+function resolveAgentQueueScope(
+  session: { targetType: string; projectId: number; targetId: number; workspaceOwnerId?: number } | null,
+): { scopeType: "project" | "workspace"; scopeId: number } | null {
+  if (!session) {
+    return null;
+  }
+
+  if (session.targetType === "project" || session.targetType === "divergence") {
+    if (session.projectId <= 0) return null;
+    return {
+      scopeType: "project",
+      scopeId: session.projectId,
+    };
+  }
+
+  const workspaceScopeId = session.workspaceOwnerId ?? session.targetId;
+  if (workspaceScopeId <= 0) {
+    return null;
+  }
+
+  return {
+    scopeType: "workspace",
+    scopeId: workspaceScopeId,
+  };
+}
 
 function AgentSessionViewContainer(props: AgentSessionViewProps) {
   const session = useAgentRuntimeSession(props.sessionId);
@@ -15,6 +45,8 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
   const [requestAnswers, setRequestAnswers] = useState<string[]>([]);
   const [isResolvingRequest, setIsResolvingRequest] = useState(false);
   const [changesSidebarVisible, setChangesSidebarVisible] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<AgentSidebarTab>("changes");
+  const composerRef = useRef<AgentSessionComposerHandle>(null);
   const sessionMessages = session?.messages ?? null;
   const sessionActivities = session?.activities ?? null;
   const timelineItems = useMemo(
@@ -50,12 +82,71 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
     activeRootPath: session?.path ?? null,
   });
 
+  const handleSetComposerText = useCallback((text: string) => {
+    composerRef.current?.setText(text);
+  }, []);
+
+  const queueScope = useMemo(
+    () => resolveAgentQueueScope(session),
+    [session],
+  );
+
+  const {
+    linearProjectName,
+    visibleLinearIssues,
+    linearTotalIssueCount,
+    linearLoading,
+    linearRefreshing,
+    linearError,
+    linearInfoMessage,
+    linearSendingIssueId,
+    linearStatusFilter,
+    linearSearchQuery,
+    linearWorkflowStates,
+    linearUpdatingIssueId,
+    linearStatePickerOpenIssueId,
+    setLinearStatusFilter,
+    setLinearSearchQuery,
+    setLinearStatePickerOpenIssueId,
+    handleLinearRefresh,
+    handleLinearSendIssue,
+    handleLinearUpdateIssueState,
+    resetLinearState,
+  } = useAgentLinearTaskQueue({
+    session,
+    appSettings,
+    projects: props.projects,
+    workspaceMembersByWorkspaceId: props.workspaceMembersByWorkspaceId,
+    sidebarTab,
+    onSetComposerText: handleSetComposerText,
+  });
+
+  const {
+    queueItems,
+    queueDraft,
+    queueLoading,
+    queueError,
+    queueingPrompt,
+    queueActionItemId,
+    queueSendingItemId,
+    setQueueDraft,
+    handleQueuePrompt,
+    handleQueueRemoveItem,
+    handleQueueClear,
+    handleQueueSendItem,
+  } = useAgentPromptQueue({
+    queueScope,
+    onSetComposerText: handleSetComposerText,
+  });
+
   useEffect(() => {
     setIsUpdatingSessionSettings(false);
     setIsResolvingRequest(false);
     setChangesSidebarVisible(false);
+    setSidebarTab("changes");
     resetFileEditor();
-  }, [props.sessionId, resetFileEditor]);
+    resetLinearState();
+  }, [props.sessionId, resetFileEditor, resetLinearState]);
 
   useEffect(() => {
     const questions = session?.pendingRequest?.questions ?? [];
@@ -158,6 +249,47 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
     return null;
   }
 
+  const linearPanel = (
+    <LinearTaskQueuePanel
+      projectName={linearProjectName}
+      items={visibleLinearIssues}
+      totalCount={linearTotalIssueCount}
+      loading={linearLoading}
+      refreshing={linearRefreshing}
+      error={linearError}
+      infoMessage={linearInfoMessage}
+      sendingItemId={linearSendingIssueId}
+      statusFilter={linearStatusFilter}
+      searchQuery={linearSearchQuery}
+      workflowStates={linearWorkflowStates}
+      updatingIssueId={linearUpdatingIssueId}
+      statePickerOpenIssueId={linearStatePickerOpenIssueId}
+      onToggleStatePicker={setLinearStatePickerOpenIssueId}
+      onRefresh={handleLinearRefresh}
+      onStatusFilterChange={setLinearStatusFilter}
+      onSearchQueryChange={setLinearSearchQuery}
+      onSendItem={handleLinearSendIssue}
+      onUpdateIssueState={handleLinearUpdateIssueState}
+    />
+  );
+
+  const queuePanel = (
+    <PromptQueuePanel
+      items={queueItems}
+      draft={queueDraft}
+      loading={queueLoading}
+      error={queueError}
+      queueing={queueingPrompt}
+      actionItemId={queueActionItemId}
+      sendingItemId={queueSendingItemId}
+      onDraftChange={setQueueDraft}
+      onQueuePrompt={handleQueuePrompt}
+      onSendItem={handleQueueSendItem}
+      onRemoveItem={handleQueueRemoveItem}
+      onClear={handleQueueClear}
+    />
+  );
+
   return (
     <AgentSessionViewPresentational
       session={session}
@@ -173,6 +305,9 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
       isResolvingRequest={isResolvingRequest}
       changesSidebarVisible={changesSidebarVisible}
       activeChangedFilePath={openFilePath}
+      sidebarTab={sidebarTab}
+      linearPanel={linearPanel}
+      queuePanel={queuePanel}
       changeDrawer={(
         <AgentSessionChangeDrawer
           isOpen={isDrawerOpen}
@@ -198,6 +333,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
           onClose={handleCloseDrawer}
         />
       )}
+      composerRef={composerRef}
       onSelectSession={props.onSelectSession}
       onDismissSessionAttention={props.onDismissSessionAttention}
       onCloseSession={props.onCloseSession}
@@ -208,6 +344,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
       onRequestAnswerChange={handleRequestAnswerChange}
       onToggleChangesSidebar={() => setChangesSidebarVisible((previous) => !previous)}
       onCloseChangesSidebar={() => setChangesSidebarVisible(false)}
+      onSidebarTabChange={setSidebarTab}
       onOpenChangedFile={handleOpenChangedFile}
       onSendPrompt={props.onSendPrompt}
       onStageAttachment={props.onStageAttachment}

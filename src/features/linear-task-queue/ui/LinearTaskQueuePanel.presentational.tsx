@@ -179,7 +179,7 @@ function LinearTaskQueuePanel({
             <p className="text-xs text-subtext">
               {projectName
                 ? `Fetched from ${projectName}`
-                : "Fetch project issues and send one as a prompt to this terminal."}
+                : "Fetch project issues and send one as a prompt."}
             </p>
           </div>
           <Button
