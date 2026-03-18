@@ -2,6 +2,7 @@ import type {
   AgentRuntimeAttachment,
   AgentRuntimeConversationContext,
   AgentRuntimeDebugEvent,
+  AgentRuntimeEffort,
   AgentRuntimeInteractionMode,
   AgentRuntimeProvider,
   AgentRuntimeSessionNameMode,
@@ -86,6 +87,7 @@ export interface AgentSession {
   id: string;
   provider: AgentProvider;
   model: string;
+  effort?: AgentRuntimeEffort;
   targetType: AgentSessionTargetType;
   targetId: number;
   projectId: number;

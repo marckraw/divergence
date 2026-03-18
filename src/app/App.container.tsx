@@ -1035,7 +1035,7 @@ function App() {
           }}
           onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
-          onUpdateModel={(sessionId, model) => updateAgentSession({ sessionId, model })}
+          onUpdateSessionSettings={(sessionId, input) => updateAgentSession({ sessionId, ...input })}
           onSendPrompt={startAgentTurn}
           onStageAttachment={stageAgentAttachment}
           onDiscardAttachment={discardAgentAttachment}

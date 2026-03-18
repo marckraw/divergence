@@ -6,7 +6,8 @@ mod provider_registry;
 
 use self::codex::send_codex_message;
 use self::provider_registry::{
-    default_model_for_provider, normalize_agent_model, provider_descriptors,
+    default_effort_for_provider_model, default_model_for_provider, normalize_agent_effort,
+    normalize_agent_model, provider_descriptors,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -340,6 +341,8 @@ pub struct AgentSessionSnapshot {
     pub provider: AgentProvider,
     #[serde(default)]
     pub model: String,
+    #[serde(default)]
+    pub effort: Option<String>,
     pub target_type: AgentTargetType,
     pub target_id: i64,
     pub project_id: i64,
@@ -379,6 +382,7 @@ pub struct AgentSessionSummary {
     pub id: String,
     pub provider: AgentProvider,
     pub model: String,
+    pub effort: Option<String>,
     pub target_type: AgentTargetType,
     pub target_id: i64,
     pub project_id: i64,
@@ -415,6 +419,7 @@ pub struct CreateAgentSessionInput {
     pub session_role: Option<AgentSessionRole>,
     pub name_mode: Option<AgentSessionNameMode>,
     pub model: Option<String>,
+    pub effort: Option<String>,
     pub name: String,
     pub path: String,
 }
@@ -464,6 +469,7 @@ pub struct UpdateAgentSessionInput {
     pub session_id: String,
     pub is_open: Option<bool>,
     pub model: Option<String>,
+    pub effort: Option<String>,
     pub name: Option<String>,
     pub name_mode: Option<AgentSessionNameMode>,
 }
@@ -486,6 +492,7 @@ fn summarize_session(session: &AgentSessionSnapshot) -> AgentSessionSummary {
         id: session.id.clone(),
         provider: session.provider.clone(),
         model: session.model.clone(),
+        effort: session.effort.clone(),
         target_type: session.target_type,
         target_id: session.target_id,
         project_id: session.project_id,
@@ -648,10 +655,12 @@ impl AgentRuntimeState {
 
         let now = now_ms();
         let model = normalize_agent_model(&input.provider, input.model.as_deref());
+        let effort = normalize_agent_effort(&input.provider, &model, input.effort.as_deref());
         let snapshot = AgentSessionSnapshot {
             id: format!("agent-{}", Uuid::new_v4()),
             provider: input.provider,
             model,
+            effort,
             target_type: input.target_type,
             target_id: input.target_id,
             project_id: input.project_id,
@@ -881,9 +890,15 @@ impl AgentRuntimeState {
     ) -> Result<AgentSessionSnapshot, String> {
         let has_open_update = input.is_open.is_some();
         let has_model_update = input.model.is_some();
+        let has_effort_update = input.effort.is_some();
         let has_name_update = input.name.is_some();
         let has_name_mode_update = input.name_mode.is_some();
-        if !has_open_update && !has_model_update && !has_name_update && !has_name_mode_update {
+        if !has_open_update
+            && !has_model_update
+            && !has_effort_update
+            && !has_name_update
+            && !has_name_mode_update
+        {
             return self
                 .get_session(&input.session_id)?
                 .ok_or_else(|| format!("Agent session not found: {}", input.session_id));
@@ -893,17 +908,33 @@ impl AgentRuntimeState {
             if matches!(
                 session.runtime_status,
                 AgentRuntimeStatus::Running | AgentRuntimeStatus::Waiting
-            ) && has_model_update
+            ) && (has_model_update || has_effort_update)
             {
-                return Err("Cannot change the model while an agent turn is running.".to_string());
+                return Err(
+                    "Cannot change model or effort while an agent turn is running.".to_string()
+                );
             }
 
             if let Some(is_open) = input.is_open {
                 session.is_open = is_open;
             }
 
-            if let Some(model) = input.model.as_deref() {
-                session.model = normalize_agent_model(&session.provider, Some(model));
+            let next_model = if let Some(model) = input.model.as_deref() {
+                normalize_agent_model(&session.provider, Some(model))
+            } else {
+                session.model.clone()
+            };
+
+            if has_model_update {
+                session.model = next_model.clone();
+            }
+
+            if has_model_update || has_effort_update {
+                session.effort = normalize_agent_effort(
+                    &session.provider,
+                    &next_model,
+                    input.effort.as_deref().or(session.effort.as_deref()),
+                );
             }
 
             if let Some(name) = input.name.as_deref() {
@@ -1490,6 +1521,11 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
     if session.model.trim().is_empty() {
         session.model = default_model_for_provider(&session.provider).to_string();
     }
+    session.effort = normalize_agent_effort(
+        &session.provider,
+        &session.model,
+        session.effort.as_deref(),
+    );
     if matches!(
         session.session_role,
         AgentSessionRole::ReviewAgent | AgentSessionRole::Manual
@@ -2276,6 +2312,7 @@ mod tests {
             id: "session-1".to_string(),
             provider: AgentProvider::Claude,
             model: "sonnet".to_string(),
+            effort: Some("medium".to_string()),
             target_type: AgentTargetType::Project,
             target_id: 1,
             project_id: 1,
@@ -2361,6 +2398,7 @@ mod tests {
             id: session_id.to_string(),
             provider: AgentProvider::Codex,
             model: "gpt-5.4".to_string(),
+            effort: Some("medium".to_string()),
             target_type: AgentTargetType::Project,
             target_id: 1,
             project_id: 1,

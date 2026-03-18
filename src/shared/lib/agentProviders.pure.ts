@@ -1,6 +1,7 @@
 import type {
   AgentRuntimeAttachmentKind,
   AgentRuntimeCapabilities,
+  AgentRuntimeEffort,
   AgentRuntimeModelOption,
   AgentRuntimeProvider,
   AgentRuntimeProviderDescriptor,
@@ -36,6 +37,46 @@ const PROVIDER_ICON_CLASSES: Record<AgentRuntimeProvider, string> = {
   cursor: "text-blue-300",
   gemini: "text-emerald-300",
 };
+
+const EFFORT_LABELS: Record<AgentRuntimeEffort, string> = {
+  none: "None",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "X-High",
+  max: "Max",
+};
+
+const LOW_MEDIUM_HIGH: AgentRuntimeEffort[] = ["low", "medium", "high"];
+const LOW_TO_XHIGH: AgentRuntimeEffort[] = ["low", "medium", "high", "xhigh"];
+const NONE_TO_XHIGH: AgentRuntimeEffort[] = ["none", "low", "medium", "high", "xhigh"];
+
+function buildEffortOptions(efforts: AgentRuntimeEffort[]) {
+  return efforts.map((slug) => ({
+    slug,
+    label: EFFORT_LABELS[slug],
+  }));
+}
+
+function isClaudeOpusModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return normalized === "opus" || normalized === "claude-opus-4-6";
+}
+
+function getCodexEfforts(model: string): AgentRuntimeEffort[] {
+  const normalized = model.trim().toLowerCase();
+  if (normalized === "gpt-5.4" || normalized === "gpt-5.2") {
+    return NONE_TO_XHIGH;
+  }
+  if (
+    normalized === "gpt-5.3-codex"
+    || normalized === "gpt-5.3-codex-spark"
+    || normalized === "gpt-5.2-codex"
+  ) {
+    return LOW_TO_XHIGH;
+  }
+  return LOW_MEDIUM_HIGH;
+}
 
 export function getAgentProviderLabel(provider: AgentRuntimeProvider): string {
   return PROVIDER_LABELS[provider];
@@ -106,6 +147,54 @@ export function getAgentRuntimeProviderModelOptions(
   });
 
   return merged;
+}
+
+export function getAgentRuntimeProviderEffortOptions(
+  provider: AgentRuntimeProvider,
+  model: string,
+): { slug: AgentRuntimeEffort; label: string }[] {
+  switch (provider) {
+    case "claude":
+      return buildEffortOptions(
+        isClaudeOpusModel(model)
+          ? [...LOW_MEDIUM_HIGH, "max"]
+          : LOW_MEDIUM_HIGH,
+      );
+    case "codex":
+      return buildEffortOptions(getCodexEfforts(model));
+    case "cursor":
+    case "gemini":
+    default:
+      return [];
+  }
+}
+
+export function getAgentRuntimeDefaultEffort(
+  provider: AgentRuntimeProvider,
+  model: string,
+): AgentRuntimeEffort | undefined {
+  return getAgentRuntimeProviderEffortOptions(provider, model).find((option) => option.slug === "medium")?.slug;
+}
+
+export function normalizeAgentRuntimeEffort(
+  provider: AgentRuntimeProvider,
+  model: string,
+  effort?: AgentRuntimeEffort,
+): AgentRuntimeEffort | undefined {
+  const options = getAgentRuntimeProviderEffortOptions(provider, model);
+  if (options.length === 0) {
+    return undefined;
+  }
+
+  if (effort && options.some((option) => option.slug === effort)) {
+    return effort;
+  }
+
+  return getAgentRuntimeDefaultEffort(provider, model);
+}
+
+export function getAgentRuntimeEffortLabel(effort: AgentRuntimeEffort): string {
+  return EFFORT_LABELS[effort];
 }
 
 export function supportsAgentRuntimePlanMode(

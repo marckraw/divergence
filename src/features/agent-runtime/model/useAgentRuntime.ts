@@ -57,6 +57,7 @@ interface UseAgentRuntimeResult {
     sessionId: string;
     isOpen?: boolean;
     model?: string;
+    effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
     name?: string;
     nameMode?: "default" | "auto" | "manual";
   }) => Promise<void>;
@@ -165,6 +166,7 @@ export function useAgentRuntime({
       sessionId: string;
       isOpen?: boolean;
       model?: string;
+      effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
       name?: string;
       nameMode?: "default" | "auto" | "manual";
     }

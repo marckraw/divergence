@@ -33,6 +33,7 @@ export type {
 export {
   createAgentSessionLabel,
   createEmptyAgentSessionSnapshot,
+  buildAgentSessionSettingsPatch,
   getAgentSessionTimestamp,
   suggestAgentSessionTitle,
 } from "./agent-session";

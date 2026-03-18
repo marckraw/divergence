@@ -3,10 +3,11 @@ import AgentSessionViewPresentational from "./AgentSessionView.presentational";
 import type { AgentSessionViewProps } from "./AgentSessionView.types";
 import { buildAgentTimeline } from "../lib/agentTimeline.pure";
 import { useAgentRuntimeSession } from "../../../features/agent-runtime";
+import { buildAgentSessionSettingsPatch } from "../../../entities";
 
 function AgentSessionViewContainer(props: AgentSessionViewProps) {
   const session = useAgentRuntimeSession(props.sessionId);
-  const [isUpdatingModel, setIsUpdatingModel] = useState(false);
+  const [isUpdatingSessionSettings, setIsUpdatingSessionSettings] = useState(false);
   const [requestAnswers, setRequestAnswers] = useState<string[]>([]);
   const [isResolvingRequest, setIsResolvingRequest] = useState(false);
   const sessionMessages = session?.messages ?? null;
@@ -17,7 +18,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
   );
 
   useEffect(() => {
-    setIsUpdatingModel(false);
+    setIsUpdatingSessionSettings(false);
     setIsResolvingRequest(false);
   }, [props.sessionId]);
 
@@ -36,17 +37,40 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
   }, []);
 
   const handleModelChange = useCallback(async (model: string) => {
-    if (!session || !model.trim() || isUpdatingModel || model === session.model) {
+    if (!session || !model.trim() || isUpdatingSessionSettings || model === session.model) {
       return;
     }
 
-    setIsUpdatingModel(true);
-    try {
-      await props.onUpdateModel(session.id, model);
-    } finally {
-      setIsUpdatingModel(false);
+    const patch = buildAgentSessionSettingsPatch(session, { model });
+    if (Object.keys(patch).length === 0) {
+      return;
     }
-  }, [isUpdatingModel, props, session]);
+
+    setIsUpdatingSessionSettings(true);
+    try {
+      await props.onUpdateSessionSettings(session.id, patch);
+    } finally {
+      setIsUpdatingSessionSettings(false);
+    }
+  }, [isUpdatingSessionSettings, props, session]);
+
+  const handleEffortChange = useCallback(async (effort: "none" | "low" | "medium" | "high" | "xhigh" | "max") => {
+    if (!session || isUpdatingSessionSettings) {
+      return;
+    }
+
+    const patch = buildAgentSessionSettingsPatch(session, { effort });
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+
+    setIsUpdatingSessionSettings(true);
+    try {
+      await props.onUpdateSessionSettings(session.id, patch);
+    } finally {
+      setIsUpdatingSessionSettings(false);
+    }
+  }, [isUpdatingSessionSettings, props, session]);
 
   const handleSubmitRequest = useCallback(async () => {
     if (!session) {
@@ -102,13 +126,14 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
       dismissedAttentionKeyBySessionId={props.dismissedAttentionKeyBySessionId}
       capabilities={props.capabilities}
       timelineItems={timelineItems}
-      isUpdatingModel={isUpdatingModel}
+      isUpdatingSessionSettings={isUpdatingSessionSettings}
       requestAnswers={requestAnswers}
       isResolvingRequest={isResolvingRequest}
       onSelectSession={props.onSelectSession}
       onDismissSessionAttention={props.onDismissSessionAttention}
       onCloseSession={props.onCloseSession}
       onModelChange={handleModelChange}
+      onEffortChange={handleEffortChange}
       onSubmitRequest={handleSubmitRequest}
       onResolveApproval={handleResolveApproval}
       onRequestAnswerChange={handleRequestAnswerChange}
