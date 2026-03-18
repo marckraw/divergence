@@ -24,6 +24,8 @@ export type AgentRuntimeMessageStatus = "streaming" | "done" | "error";
 
 export type AgentRuntimeActivityStatus = "running" | "completed" | "error";
 
+export type AgentRuntimeEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export type AgentRuntimeRequestKind = "approval" | "user-input";
 
 export type AgentRuntimeRequestStatus = "open" | "resolved";
@@ -153,6 +155,7 @@ export interface AgentRuntimeSessionSnapshot {
   id: string;
   provider: AgentRuntimeProvider;
   model: string;
+  effort?: AgentRuntimeEffort;
   targetType: AgentRuntimeTargetType;
   targetId: number;
   projectId: number;
@@ -183,6 +186,7 @@ export interface AgentRuntimeSessionSummary {
   id: string;
   provider: AgentRuntimeProvider;
   model: string;
+  effort?: AgentRuntimeEffort;
   targetType: AgentRuntimeTargetType;
   targetId: number;
   projectId: number;
@@ -217,6 +221,7 @@ export interface CreateAgentSessionInput {
   sessionRole?: AgentRuntimeSessionRole;
   nameMode?: AgentRuntimeSessionNameMode;
   model?: string;
+  effort?: AgentRuntimeEffort;
   name: string;
   path: string;
 }
@@ -248,6 +253,7 @@ export interface UpdateAgentSessionInput {
   sessionId: string;
   isOpen?: boolean;
   model?: string;
+  effort?: AgentRuntimeEffort;
   name?: string;
   nameMode?: AgentRuntimeSessionNameMode;
 }

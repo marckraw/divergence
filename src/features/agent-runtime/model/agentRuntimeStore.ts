@@ -328,6 +328,7 @@ export async function updateAgentRuntimeSessionState(input: {
   sessionId: string;
   isOpen?: boolean;
   model?: string;
+  effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   name?: string;
   nameMode?: "default" | "auto" | "manual";
 }): Promise<AgentSessionSnapshot> {

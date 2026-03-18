@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   getAgentProviderLabel,
+  getAgentRuntimeEffortLabel,
+  getAgentRuntimeProviderEffortOptions,
   getAgentRuntimeProviderModelOptions,
   Markdown,
   ProgressBar,
@@ -26,8 +28,9 @@ import type { AgentSessionHeaderProps } from "./AgentSessionView.types";
 function AgentSessionHeaderContainer({
   session,
   capabilities,
-  isUpdatingModel,
+  isUpdatingSessionSettings,
   onModelChange,
+  onEffortChange,
   onStopSession,
 }: AgentSessionHeaderProps) {
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -38,8 +41,12 @@ function AgentSessionHeaderContainer({
     session.provider,
     settings.customAgentModels,
   );
+  const effortOptions = getAgentRuntimeProviderEffortOptions(session.provider, session.model);
   const providerLabel = getAgentProviderLabel(session.provider);
   const selectedModelLabel = modelOptions.find((option) => option.slug === session.model)?.label ?? session.model;
+  const selectedEffort = effortOptions.find((option) => option.slug === session.effort)?.slug
+    ?? effortOptions.find((option) => option.slug === "medium")?.slug;
+  const selectedEffortLabel = selectedEffort ? getAgentRuntimeEffortLabel(selectedEffort) : null;
   const conversationContext = useMemo(
     () => buildAgentConversationContextSummary(session),
     [session],
@@ -80,6 +87,11 @@ function AgentSessionHeaderContainer({
             <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
               {selectedModelLabel}
             </span>
+            {selectedEffortLabel ? (
+              <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
+                {selectedEffortLabel}
+              </span>
+            ) : null}
           </div>
           <p className="mt-1 text-xs text-subtext truncate">{session.path}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -132,7 +144,7 @@ function AgentSessionHeaderContainer({
                 void onModelChange(value);
               }}
               disabled={
-                isUpdatingModel
+                isUpdatingSessionSettings
                 || session.runtimeStatus === "running"
                 || session.runtimeStatus === "waiting"
               }
@@ -142,6 +154,30 @@ function AgentSessionHeaderContainer({
               </SelectTrigger>
               <SelectContent>
                 {modelOptions.map((option) => (
+                  <SelectItem key={option.slug} value={option.slug}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          {effortOptions.length > 0 && selectedEffort ? (
+            <Select
+              value={selectedEffort}
+              onValueChange={(value) => {
+                void onEffortChange(value as "none" | "low" | "medium" | "high" | "xhigh" | "max");
+              }}
+              disabled={
+                isUpdatingSessionSettings
+                || session.runtimeStatus === "running"
+                || session.runtimeStatus === "waiting"
+              }
+            >
+              <SelectTrigger className="h-8 min-w-[9rem] bg-main/60 text-xs">
+                <SelectValue placeholder="Select effort" />
+              </SelectTrigger>
+              <SelectContent>
+                {effortOptions.map((option) => (
                   <SelectItem key={option.slug} value={option.slug}>
                     {option.label}
                   </SelectItem>

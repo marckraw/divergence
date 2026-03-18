@@ -9,8 +9,12 @@ import {
   getAgentRuntimeProviderAttachmentKinds,
   getAgentRuntimeProviderDefaultModel,
   getAgentRuntimeProviderDescriptor,
+  getAgentRuntimeProviderEffortOptions,
+  getAgentRuntimeDefaultEffort,
+  getAgentRuntimeEffortLabel,
   getAgentRuntimeProviderModelOptions,
   indexAgentRuntimeProviders,
+  normalizeAgentRuntimeEffort,
   supportsAgentRuntimeImageAttachments,
   supportsAgentRuntimePdfAttachments,
   supportsAgentRuntimePlanMode,
@@ -158,6 +162,37 @@ describe("agentProviders.pure", () => {
       { slug: "gpt-5.4", label: "gpt-5.4" },
       { slug: "o3", label: "o3" },
     ]);
+  });
+
+  it("returns provider and model aware effort options", () => {
+    expect(getAgentRuntimeProviderEffortOptions("codex", "gpt-5.4").map((option) => option.slug)).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(getAgentRuntimeProviderEffortOptions("codex", "gpt-5.3-codex").map((option) => option.slug)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(getAgentRuntimeProviderEffortOptions("claude", "opus").map((option) => option.slug)).toEqual([
+      "low",
+      "medium",
+      "high",
+      "max",
+    ]);
+    expect(getAgentRuntimeProviderEffortOptions("gemini", "gemini-2.5-pro")).toEqual([]);
+  });
+
+  it("normalizes invalid or missing effort values to sensible defaults", () => {
+    expect(getAgentRuntimeDefaultEffort("codex", "gpt-5.4")).toBe("medium");
+    expect(normalizeAgentRuntimeEffort("codex", "gpt-5.3-codex", "none")).toBe("medium");
+    expect(normalizeAgentRuntimeEffort("claude", "opus", "max")).toBe("max");
+    expect(normalizeAgentRuntimeEffort("cursor", "auto", "medium")).toBeUndefined();
+    expect(getAgentRuntimeEffortLabel("xhigh")).toBe("X-High");
   });
 
   it("returns available providers in stable order", () => {

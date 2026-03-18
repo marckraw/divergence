@@ -20,6 +20,7 @@ const conversationContextSourceSchema = z.enum(["codex", "unavailable"]);
 const messageRoleSchema = z.enum(["user", "assistant", "system"]);
 const messageStatusSchema = z.enum(["streaming", "done", "error"]);
 const activityStatusSchema = z.enum(["running", "completed", "error"]);
+const effortSchema = z.enum(["none", "low", "medium", "high", "xhigh", "max"]);
 const requestKindSchema = z.enum(["approval", "user-input"]);
 const requestStatusSchema = z.enum(["open", "resolved"]);
 const providerTransportSchema = z
@@ -161,6 +162,7 @@ export const agentRuntimeSessionSnapshotSchema = z.object({
   id: z.string(),
   provider: providerSchema,
   model: z.string(),
+  effort: optionalNullToUndefined(effortSchema),
   targetType: targetTypeSchema,
   targetId: z.number(),
   projectId: z.number(),
@@ -191,6 +193,7 @@ export const agentRuntimeSessionSummarySchema = z.object({
   id: z.string(),
   provider: providerSchema,
   model: z.string(),
+  effort: optionalNullToUndefined(effortSchema),
   targetType: targetTypeSchema,
   targetId: z.number(),
   projectId: z.number(),
