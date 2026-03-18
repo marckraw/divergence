@@ -80,7 +80,7 @@ export function getSessionsForWorkspace(
         if (a.isOpen !== b.isOpen) {
           return a.isOpen ? -1 : 1;
         }
-        return b.updatedAtMs - a.updatedAtMs;
+        return b.createdAtMs - a.createdAtMs;
       }
       if (isAgentSession(a) !== isAgentSession(b)) {
         return isAgentSession(a) ? 1 : -1;
