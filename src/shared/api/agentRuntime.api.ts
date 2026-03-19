@@ -6,6 +6,7 @@ import type {
   AgentRuntimeSessionSnapshot,
   AgentRuntimeSessionSummary,
   AgentRuntimeSessionUpdatedEvent,
+  AgentSkillDescriptor,
   CreateAgentSessionInput,
   RespondAgentRequestInput,
   StageAgentRuntimeAttachmentInput,
@@ -19,6 +20,7 @@ import {
   parseAgentRuntimeSessionSnapshots,
   parseAgentRuntimeSessionSummaries,
   parseAgentRuntimeSessionUpdatedEvent,
+  parseAgentSkillDescriptors,
 } from "./agentRuntime.schemas";
 
 const AGENT_RUNTIME_UPDATED_EVENT = "agent-runtime-session-updated";
@@ -149,6 +151,14 @@ export async function updateAgentRuntimeSession(
       nameMode: input.nameMode,
     },
   }));
+}
+
+export async function discoverAgentSkills(
+  projectPath: string,
+): Promise<AgentSkillDescriptor[]> {
+  return parseAgentSkillDescriptors(
+    await invoke<unknown>("discover_agent_skills", { projectPath }),
+  );
 }
 
 export async function onAgentRuntimeSessionUpdated(

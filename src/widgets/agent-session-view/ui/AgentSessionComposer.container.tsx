@@ -14,7 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../../../shared";
-import type { AgentRuntimeAttachment } from "../../../shared";
+import type { AgentRuntimeAttachment, AgentSkillDescriptor } from "../../../shared";
 import {
   getErrorMessage,
 } from "../../../shared";
@@ -23,6 +23,8 @@ import {
   getAttachmentButtonLabel,
   supportsAttachmentMimeType,
 } from "../lib/attachmentComposer.pure";
+import { useAgentSkillDiscovery } from "../model/useAgentSkillDiscovery";
+import AgentSkillAutocompletePresentational from "./AgentSkillAutocomplete.presentational";
 import type {
   AgentSessionComposerAttachment,
   AgentSessionComposerDraft,
@@ -171,6 +173,42 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStagingAttachment, setIsStagingAttachment] = useState(false);
   const draftRef = useRef(draft);
+
+  const skillDiscovery = useAgentSkillDiscovery(session.path);
+  const [skillAutocompleteOpen, setSkillAutocompleteOpen] = useState(false);
+  const [skillSelectedIndex, setSkillSelectedIndex] = useState(0);
+
+  const slashQuery = useMemo(() => {
+    const text = draft.text;
+    if (!text.startsWith("/")) {
+      return null;
+    }
+    const spaceIndex = text.indexOf(" ");
+    if (spaceIndex === -1) {
+      return text.slice(1);
+    }
+    return null;
+  }, [draft.text]);
+
+  const { skills: discoveredSkills, updateFilter: updateSkillFilter } = skillDiscovery;
+
+  useEffect(() => {
+    if (slashQuery !== null && discoveredSkills.length > 0) {
+      updateSkillFilter(slashQuery);
+      setSkillAutocompleteOpen(true);
+      setSkillSelectedIndex(0);
+    } else {
+      setSkillAutocompleteOpen(false);
+    }
+  }, [slashQuery, discoveredSkills.length, updateSkillFilter]);
+
+  const handleSkillSelect = useCallback((skill: AgentSkillDescriptor) => {
+    setDraft((previous) => ({
+      ...previous,
+      text: `/${skill.name} `,
+    }));
+    setSkillAutocompleteOpen(false);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     setText(text: string) {
@@ -499,6 +537,16 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
                 {attachmentSupportMessage}
               </p>
             )}
+            <div className="relative">
+              {skillAutocompleteOpen && (
+                <div className="absolute bottom-full left-0 z-50 mb-1 w-full max-w-xl rounded-xl border border-surface bg-sidebar shadow-lg">
+                  <AgentSkillAutocompletePresentational
+                    skills={skillDiscovery.matchingSkills}
+                    selectedIndex={skillSelectedIndex}
+                    onSelect={handleSkillSelect}
+                  />
+                </div>
+              )}
             <Textarea
               value={draft.text}
               onChange={(event) => {
@@ -518,6 +566,32 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
               }}
               onDragOver={handleComposerDragOver}
               onKeyDown={(event) => {
+                if (skillAutocompleteOpen && skillDiscovery.matchingSkills.length > 0) {
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setSkillSelectedIndex((previous) =>
+                      previous < skillDiscovery.matchingSkills.length - 1 ? previous + 1 : 0,
+                    );
+                    return;
+                  }
+                  if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setSkillSelectedIndex((previous) =>
+                      previous > 0 ? previous - 1 : skillDiscovery.matchingSkills.length - 1,
+                    );
+                    return;
+                  }
+                  if (event.key === "Enter" || event.key === "Tab") {
+                    event.preventDefault();
+                    handleSkillSelect(skillDiscovery.matchingSkills[skillSelectedIndex]);
+                    return;
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setSkillAutocompleteOpen(false);
+                    return;
+                  }
+                }
                 if (
                   isInteractionModeShortcut(event)
                   && supportsPlanMode
@@ -544,6 +618,7 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
               }
               className="min-h-[112px] resize-y rounded-2xl bg-main/80"
             />
+            </div>
           </>
         )}
         <div className="flex items-center justify-between gap-3">

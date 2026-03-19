@@ -2,6 +2,7 @@ use crate::agent_runtime::{
     AgentAttachment, AgentRuntimeCapabilities, AgentRuntimeState, AgentSessionSnapshot,
     AgentSessionSummary, CreateAgentSessionInput, RespondAgentRequestInput,
     StageAgentAttachmentInput, StartAgentTurnInput, UpdateAgentSessionInput,
+    skills::AgentSkillDescriptor,
 };
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
@@ -163,6 +164,13 @@ pub async fn respond_agent_request(
     agent_runtime: State<'_, AgentRuntimeState>,
 ) -> Result<AgentSessionSnapshot, String> {
     agent_runtime.respond_to_request(&app_handle, input)
+}
+
+#[tauri::command]
+pub async fn discover_agent_skills(
+    project_path: String,
+) -> Result<Vec<AgentSkillDescriptor>, String> {
+    Ok(crate::agent_runtime::skills::discover_skills(&project_path))
 }
 
 #[tauri::command]
