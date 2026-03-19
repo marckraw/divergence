@@ -689,11 +689,12 @@ impl AgentRuntimeState {
                         .get("result")
                         .map(truncate_json_details)
                         .or_else(|| item.get("error").map(truncate_json_details));
-                    let status = if item.get("error").is_some() {
-                        AgentActivityStatus::Error
-                    } else {
-                        AgentActivityStatus::Completed
-                    };
+                    let status =
+                        if item.get("error").is_some_and(|v| !v.is_null()) {
+                            AgentActivityStatus::Error
+                        } else {
+                            AgentActivityStatus::Completed
+                        };
                     let snapshot = self.mutate_session(session_id, |session| {
                         complete_activity(session, &activity_id, details, status);
                         push_runtime_event(
@@ -902,6 +903,51 @@ impl AgentRuntimeState {
                         session_id: session_id.to_string(),
                         json_rpc_id,
                         decisions: default_codex_approval_decisions(),
+                    },
+                )?;
+            }
+            "item/mcpToolCall/requestApproval" => {
+                let server = params
+                    .get("server")
+                    .and_then(Value::as_str)
+                    .unwrap_or("mcp");
+                let tool = params
+                    .get("tool")
+                    .and_then(Value::as_str)
+                    .unwrap_or("tool");
+                let title = format!("{server}:{tool}");
+                let reason = params
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .map(str::to_string);
+                let decisions = collect_codex_approval_decisions(
+                    params.get("availableDecisions").and_then(Value::as_array),
+                );
+                let request_id = format!("request-{}", Uuid::new_v4());
+                self.open_pending_request(
+                    app,
+                    session_id,
+                    AgentRequest {
+                        id: request_id.clone(),
+                        kind: AgentRequestKind::Approval,
+                        title,
+                        description: reason,
+                        options: Some(decisions.iter().map(|(option, _)| option.clone()).collect()),
+                        questions: None,
+                        status: AgentRequestStatus::Open,
+                        opened_at_ms: now_ms(),
+                        resolved_at_ms: None,
+                    },
+                )?;
+                self.store_pending_request_transport(
+                    &request_id,
+                    PendingRequestTransport::CodexApproval {
+                        session_id: session_id.to_string(),
+                        json_rpc_id,
+                        decisions: decisions
+                            .into_iter()
+                            .map(|(option, value)| (option.id, value))
+                            .collect(),
                     },
                 )?;
             }
