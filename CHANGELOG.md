@@ -1,5 +1,11 @@
 # divergence
 
+## 0.36.2
+
+### Patch Changes
+
+- da3b925: Migrate to chaperone v0.5.0 presets (pure-functions, presentational-components) and bump CI version
+
 ## 0.36.1
 
 ### Patch Changes
