@@ -244,18 +244,40 @@ impl AgentRuntimeState {
                             .and_then(Value::as_str)
                             .map(str::to_string)
                             .unwrap_or_else(|| format!("activity-{}", Uuid::new_v4()));
-                        let tool_name = content
+                        let raw_tool_name = content
                             .get("name")
                             .and_then(Value::as_str)
-                            .unwrap_or("Tool")
-                            .to_string();
-                        let details = content.get("input").map(truncate_json_details);
+                            .unwrap_or("Tool");
+                        let input_value = content.get("input");
+
+                        let is_skill = raw_tool_name.eq_ignore_ascii_case("skill");
+                        let skill_name = if is_skill {
+                            input_value
+                                .and_then(|input| input.get("skill"))
+                                .and_then(Value::as_str)
+                                .map(str::to_string)
+                        } else {
+                            None
+                        };
+
+                        let (activity_kind, tool_name) = if is_skill {
+                            (
+                                "skill".to_string(),
+                                skill_name
+                                    .clone()
+                                    .map(|name| format!("/{name}"))
+                                    .unwrap_or_else(|| "Skill".to_string()),
+                            )
+                        } else {
+                            ("tool".to_string(), raw_tool_name.to_string())
+                        };
+                        let details = input_value.map(truncate_json_details);
 
                         let snapshot = self.mutate_session(session_id, |session| {
                             if !session.activities.iter().any(|item| item.id == activity_id) {
                                 session.activities.push(create_activity(
                                     activity_id.clone(),
-                                    "tool".to_string(),
+                                    activity_kind.clone(),
                                     tool_name.clone(),
                                     AgentActivityStatus::Running,
                                     details,
@@ -265,8 +287,12 @@ impl AgentRuntimeState {
                             }
                             push_runtime_event(
                                 session,
-                                "Running tool",
-                                "Claude started a tool call.",
+                                if is_skill { "Running skill" } else { "Running tool" },
+                                if is_skill {
+                                    "Claude started a skill invocation."
+                                } else {
+                                    "Claude started a tool call."
+                                },
                                 Some(tool_name.clone()),
                             );
                             session.updated_at_ms = now_ms();

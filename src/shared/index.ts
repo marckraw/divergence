@@ -257,6 +257,7 @@ export {
   createAgentRuntimeSession,
   discardAgentRuntimeAttachment,
   deleteAgentRuntimeSession,
+  discoverAgentSkills,
   getAgentRuntimeCapabilities,
   getAgentRuntimeSession,
   listAgentRuntimeSessionSummaries,
@@ -309,4 +310,7 @@ export type {
   StageAgentRuntimeAttachmentInput,
   StartAgentTurnInput,
   UpdateAgentSessionInput,
+  AgentSkillDescriptor,
+  AgentSkillSource,
+  AgentSkillScope,
 } from "./api/agentRuntime.types";
