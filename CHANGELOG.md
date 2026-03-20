@@ -1,5 +1,11 @@
 # divergence
 
+## 0.37.0
+
+### Minor Changes
+
+- d282cd6: Robust CLI binary detection with login shell and fnm fallbacks, and CLI version display in session header and settings
+
 ## 0.36.2
 
 ### Patch Changes
