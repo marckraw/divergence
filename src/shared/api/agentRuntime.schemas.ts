@@ -5,6 +5,7 @@ import type {
   AgentRuntimeSessionSnapshot,
   AgentRuntimeSessionSummary,
   AgentRuntimeSessionUpdatedEvent,
+  AgentSkillDescriptor,
 } from "./agentRuntime.types";
 
 const providerSchema = z.enum(["claude", "codex", "cursor", "gemini"]);
@@ -284,4 +285,23 @@ export function parseAgentRuntimeSessionUpdatedEvent(value: unknown): AgentRunti
 
 export function parseAgentRuntimeAttachment(value: unknown): AgentRuntimeAttachment {
   return parseWithSchema(agentRuntimeAttachmentSchema, value, "agent runtime attachment");
+}
+
+const agentSkillSourceSchema = z.enum(["bundled", "user", "system"]);
+const agentSkillScopeSchema = z.enum(["global", "project"]);
+
+const agentSkillDescriptorSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  source: agentSkillSourceSchema,
+  scope: agentSkillScopeSchema,
+  providerHint: z.string().nullable().optional(),
+});
+
+export function parseAgentSkillDescriptors(value: unknown): AgentSkillDescriptor[] {
+  return parseWithSchema(
+    z.array(agentSkillDescriptorSchema),
+    value,
+    "agent skill descriptors",
+  );
 }

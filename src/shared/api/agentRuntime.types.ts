@@ -263,3 +263,14 @@ export interface AgentRuntimeSessionUpdatedEvent {
   sessionId: string;
   snapshot: AgentRuntimeSessionSnapshot;
 }
+
+export type AgentSkillSource = "bundled" | "user" | "system";
+export type AgentSkillScope = "global" | "project";
+
+export interface AgentSkillDescriptor {
+  name: string;
+  description: string;
+  source: AgentSkillSource;
+  scope: AgentSkillScope;
+  providerHint?: string | null;
+}

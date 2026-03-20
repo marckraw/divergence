@@ -95,6 +95,9 @@ function buildGroupedActivitySummary(groupKey: string, activities: AgentActivity
       if (groupKey.startsWith("mcp:")) {
         return `${first} ${count} times`;
       }
+      if (groupKey.startsWith("skill:")) {
+        return `${first} ${count} times`;
+      }
       return `${first} (${count} steps)`;
     }
   }

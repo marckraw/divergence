@@ -3,6 +3,7 @@ mod codex;
 mod cursor;
 mod gemini;
 mod provider_registry;
+pub mod skills;
 
 use self::codex::send_codex_message;
 use self::provider_registry::{
@@ -2097,6 +2098,11 @@ fn derive_activity_metadata(
                 None => format!("Ran {}", compact_label(trimmed_title)),
             }),
             Some("search".to_string()),
+        )
+    } else if normalized_kind == "skill" {
+        (
+            Some(format!("Ran skill {}", compact_label(trimmed_title))),
+            Some(format!("skill:{}", normalized_title)),
         )
     } else if normalized_title == "thinking" || normalized_kind == "thought_process" {
         (Some("Thinking".to_string()), Some("thinking".to_string()))

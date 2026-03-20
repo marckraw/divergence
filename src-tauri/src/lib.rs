@@ -150,6 +150,7 @@ pub fn run() {
             commands::delete_agent_session,
             commands::update_agent_session,
             commands::respond_agent_request,
+            commands::discover_agent_skills,
             commands::create_workspace_folder,
             commands::update_workspace_folder,
             commands::delete_workspace_folder,
