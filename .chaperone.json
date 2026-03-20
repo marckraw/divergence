@@ -1,5 +1,9 @@
 {
   "version": "1.0.0",
+  "extends": [
+    "chaperone/pure-functions",
+    "chaperone/presentational-components"
+  ],
   "project": {
     "typescript": {
       "detected": true,
@@ -29,16 +33,8 @@
         "id": "no-side-effects-in-presentational",
         "severity": "error",
         "files": "src/**/*.presentational.tsx",
-        "pattern": "\\b(useEffect|useLayoutEffect|useInsertionEffect|invoke|fetch|Database\\.load|spawn)\\b",
-        "message": "Presentational components must be side-effect free"
-      },
-      {
-        "type": "regex",
-        "id": "no-stateful-hooks-in-presentational",
-        "severity": "error",
-        "files": "src/**/*.presentational.tsx",
-        "pattern": "\\b(useState|useReducer|useImperativeHandle)\\b",
-        "message": "Presentational components must not own local stateful hooks; move state orchestration to *.container.tsx"
+        "pattern": "\\b(invoke|Database\\.load|spawn)\\b",
+        "message": "Presentational components must not use Tauri-specific side effects (invoke, Database.load, spawn)"
       },
       {
         "type": "regex",
@@ -117,16 +113,8 @@
         "id": "no-side-effects-in-pure-files",
         "severity": "error",
         "files": "src/**/*.pure.ts",
-        "pattern": "\\b(localStorage|sessionStorage|window\\.dispatchEvent|fetch|XMLHttpRequest|WebSocket|EventSource|invoke|spawn|Database\\.load)\\b",
-        "message": "Pure files must stay side-effect free. Move IO and orchestration into *.api.ts or *.service.ts."
-      },
-      {
-        "type": "regex",
-        "id": "no-api-imports-in-pure-files",
-        "severity": "error",
-        "files": "src/**/*.pure.ts",
-        "pattern": "from\\s+[\"'][^\"']+\\.api[\"']",
-        "message": "Pure files must not import *.api.ts modules."
+        "pattern": "\\b(window\\.dispatchEvent|EventSource|invoke|spawn|Database\\.load)\\b",
+        "message": "Pure files must not use Tauri-specific side effects (invoke, spawn, Database.load, window.dispatchEvent, EventSource)"
       },
       {
         "type": "regex",
@@ -279,32 +267,6 @@
           "function-variable"
         ],
         "message": "Exported pure functions must be referenced in unit tests"
-      },
-      {
-        "type": "file-pairing",
-        "id": "pure-files-require-sibling-tests",
-        "severity": "error",
-        "files": "src/**/*.pure.ts",
-        "pair": {
-          "from": "^(.*)\\.pure\\.ts$",
-          "to": "$1.pure.test.ts"
-        },
-        "mustExist": true,
-        "requireTransformMatch": true,
-        "message": "Every *.pure.ts file must have a sibling *.pure.test.ts file"
-      },
-      {
-        "type": "file-pairing",
-        "id": "pure-tests-require-sibling-source",
-        "severity": "error",
-        "files": "src/**/*.pure.test.ts",
-        "pair": {
-          "from": "^(.*)\\.pure\\.test\\.ts$",
-          "to": "$1.pure.ts"
-        },
-        "mustExist": true,
-        "requireTransformMatch": true,
-        "message": "Every *.pure.test.ts file must have a sibling *.pure.ts file"
       },
       {
         "type": "regex",
