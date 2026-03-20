@@ -73,6 +73,7 @@ pub struct AgentRuntimeProviderReadiness {
     pub details: Vec<String>,
     pub binary_candidates: Vec<String>,
     pub detected_command: Option<String>,
+    pub detected_version: Option<String>,
     pub auth_status: AgentRuntimeProviderAuthStatus,
 }
 

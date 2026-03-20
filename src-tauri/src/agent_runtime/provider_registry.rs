@@ -1,8 +1,12 @@
 use super::*;
+use std::ffi::OsString;
+use std::thread;
+use std::time::{Duration, Instant};
 
 const LOW_MEDIUM_HIGH_EFFORTS: &[&str] = &["low", "medium", "high"];
 const LOW_TO_XHIGH_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
 const NONE_TO_XHIGH_EFFORTS: &[&str] = &["none", "low", "medium", "high", "xhigh"];
+const LOGIN_SHELL_BINARY_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
     let (cursor_default_model, cursor_model_options) = cursor_model_catalog();
@@ -201,7 +205,9 @@ pub(super) fn build_claude_command(
     claude_oauth_token: &str,
     attachment_dirs: &[PathBuf],
 ) -> Command {
-    let mut command = Command::new("claude");
+    let binary = detect_claude_binary().unwrap_or_else(|| "claude".to_string());
+    let mut command = Command::new(&binary);
+    apply_binary_dir_to_tokio_command(&mut command, &binary);
     command
         .arg("-p")
         .arg("--verbose")
@@ -240,7 +246,8 @@ pub(super) fn build_cursor_command(
             .to_string()
     })?;
 
-    let mut command = Command::new(binary);
+    let mut command = Command::new(&binary);
+    apply_binary_dir_to_tokio_command(&mut command, &binary);
     command
         .arg("--print")
         .arg("--output-format")
@@ -276,7 +283,8 @@ pub(super) fn build_gemini_command(
             .to_string()
     })?;
 
-    let mut command = Command::new(binary);
+    let mut command = Command::new(&binary);
+    apply_binary_dir_to_tokio_command(&mut command, &binary);
     command
         .arg("-p")
         .arg(build_history_context_prompt(session, prompt));
@@ -356,7 +364,9 @@ fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
         return fallback;
     };
 
-    let Ok(output) = StdCommand::new(command).arg("models").output() else {
+    let mut process = StdCommand::new(&command);
+    apply_binary_dir_to_std_command(&mut process, &command);
+    let Ok(output) = process.arg("models").output() else {
         return fallback;
     };
 
@@ -422,7 +432,9 @@ fn gemini_supports_stream_json() -> bool {
         return false;
     };
 
-    let Ok(output) = StdCommand::new(command).arg("--help").output() else {
+    let mut process = StdCommand::new(&command);
+    apply_binary_dir_to_std_command(&mut process, &command);
+    let Ok(output) = process.arg("--help").output() else {
         return false;
     };
 
@@ -437,15 +449,202 @@ fn gemini_supports_stream_json() -> bool {
 
 fn detect_binary(candidates: &[&str]) -> Option<String> {
     candidates.iter().find_map(|candidate| {
-        StdCommand::new(candidate)
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .ok()
-            .filter(|status| status.success())
-            .map(|_| (*candidate).to_string())
+        resolve_binary_in_process_path(candidate)
+            .or_else(|| resolve_binary_in_login_shell(candidate))
+            .or_else(|| resolve_binary_in_fnm_installations(candidate))
     })
+}
+
+fn resolve_binary_in_process_path(candidate: &str) -> Option<String> {
+    if candidate.contains(std::path::MAIN_SEPARATOR) {
+        let path = PathBuf::from(candidate);
+        return is_executable(&path).then(|| path.to_string_lossy().into_owned());
+    }
+
+    let path_value = std::env::var("PATH").ok()?;
+    find_in_path(&path_value, candidate).map(|path| path.to_string_lossy().into_owned())
+}
+
+fn resolve_binary_in_login_shell(candidate: &str) -> Option<String> {
+    const PROBE_SCRIPT: &str = r#"
+if [ -n "${ZSH_VERSION-}" ]; then
+  whence -p "$1" 2>/dev/null
+elif [ -n "${BASH_VERSION-}" ]; then
+  type -P "$1" 2>/dev/null
+else
+  command -v "$1" 2>/dev/null
+fi
+"#;
+
+    for shell in login_shell_candidates() {
+        let mut command = StdCommand::new(&shell);
+        command.args(["-l", "-c", PROBE_SCRIPT, "divergence-agent-runtime", candidate]);
+        let output = match run_std_command_with_timeout(
+            &mut command,
+            LOGIN_SHELL_BINARY_PROBE_TIMEOUT,
+        ) {
+            Ok(output) => output,
+            Err(_) => continue,
+        };
+        if !output.status.success() {
+            continue;
+        }
+
+        let resolved = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if resolved.is_empty() {
+            continue;
+        }
+
+        let path = PathBuf::from(resolved);
+        if is_executable(&path) {
+            return Some(path.to_string_lossy().into_owned());
+        }
+    }
+
+    None
+}
+
+fn find_in_path(path_value: &str, program: &str) -> Option<PathBuf> {
+    for dir in std::env::split_paths(path_value) {
+        let candidate = dir.join(program);
+        if is_executable(&candidate) {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn resolve_binary_in_fnm_installations(candidate: &str) -> Option<String> {
+    let mut installation_roots = Vec::new();
+
+    if let Ok(fnm_dir) = std::env::var("FNM_DIR") {
+        installation_roots.push(PathBuf::from(fnm_dir));
+    }
+
+    if let Some(home_dir) = dirs::home_dir() {
+        installation_roots.push(home_dir.join("Library/Application Support/fnm"));
+        installation_roots.push(home_dir.join(".local/share/fnm"));
+    }
+
+    for root in installation_roots {
+        let versions_dir = root.join("node-versions");
+        let Ok(entries) = fs::read_dir(versions_dir) else {
+            continue;
+        };
+
+        let mut candidate_paths = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().join("installation").join("bin").join(candidate))
+            .collect::<Vec<_>>();
+        candidate_paths.sort();
+        candidate_paths.reverse();
+
+        for candidate_path in candidate_paths {
+            if is_executable(&candidate_path) {
+                return Some(candidate_path.to_string_lossy().into_owned());
+            }
+        }
+    }
+
+    None
+}
+
+fn is_executable(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+fn login_shell_candidates() -> Vec<String> {
+    let mut candidates = Vec::new();
+    if let Ok(shell) = std::env::var("SHELL") {
+        candidates.push(shell);
+    }
+    candidates.push("/bin/zsh".to_string());
+    candidates.push("/bin/bash".to_string());
+    candidates
+}
+
+fn run_std_command_with_timeout(
+    command: &mut StdCommand,
+    timeout: Duration,
+) -> Result<std::process::Output, std::io::Error> {
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let started_at = Instant::now();
+
+    loop {
+        match child.try_wait()? {
+            Some(_) => return child.wait_with_output(),
+            None if started_at.elapsed() >= timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!(
+                        "Command timed out after {}ms",
+                        timeout.as_millis()
+                    ),
+                ));
+            }
+            None => thread::sleep(Duration::from_millis(10)),
+        }
+    }
+}
+
+fn path_with_binary_dir(binary: &str) -> Option<OsString> {
+    let binary_dir = Path::new(binary).parent()?.to_path_buf();
+    let mut paths = vec![binary_dir.clone()];
+
+    if let Some(existing_path) = std::env::var_os("PATH") {
+        for path in std::env::split_paths(&existing_path) {
+            if path != binary_dir {
+                paths.push(path);
+            }
+        }
+    }
+
+    std::env::join_paths(paths).ok()
+}
+
+pub(super) fn apply_binary_dir_to_tokio_command(command: &mut Command, binary: &str) {
+    if let Some(path) = path_with_binary_dir(binary) {
+        command.env("PATH", path);
+    }
+}
+
+fn apply_binary_dir_to_std_command(command: &mut StdCommand, binary: &str) {
+    if let Some(path) = path_with_binary_dir(binary) {
+        command.env("PATH", path);
+    }
+}
+
+fn read_cli_version(command: &str) -> Option<String> {
+    let mut process = StdCommand::new(command);
+    apply_binary_dir_to_std_command(&mut process, command);
+    let output = process.arg("--version").output().ok()?;
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    read_cli_version_line(&combined)
 }
 
 fn strip_ansi_sequences(input: &str) -> String {
@@ -478,7 +677,7 @@ fn strip_ansi_sequences(input: &str) -> String {
 mod tests {
     use super::{
         build_claude_command, default_effort_for_provider_model, gemini_approval_args,
-        normalize_agent_effort, AgentInteractionMode, AgentProvider, AgentRuntimeStatus,
+        normalize_agent_effort, read_cli_version_line, AgentInteractionMode, AgentProvider, AgentRuntimeStatus,
         AgentSessionNameMode, AgentSessionRole, AgentSessionSnapshot, AgentSessionStatus,
         AgentTargetType,
     };
@@ -531,6 +730,19 @@ mod tests {
     }
 
     #[test]
+    fn extracts_version_from_last_non_empty_output_line() {
+        assert_eq!(
+            read_cli_version_line("warning\ncodex-cli 0.115.0\n\n"),
+            Some("codex-cli 0.115.0".to_string())
+        );
+        assert_eq!(
+            read_cli_version_line("2.1.78 (Claude Code)\n"),
+            Some("2.1.78 (Claude Code)".to_string())
+        );
+        assert_eq!(read_cli_version_line(" \n \n"), None);
+    }
+
+    #[test]
     fn normalizes_effort_by_provider_and_model() {
         assert_eq!(
             default_effort_for_provider_model(&AgentProvider::Codex, "gpt-5.4"),
@@ -570,6 +782,14 @@ mod tests {
     }
 }
 
+fn detect_claude_binary() -> Option<String> {
+    detect_binary(&["claude"])
+}
+
+pub(super) fn detect_codex_binary() -> Option<String> {
+    detect_binary(&["codex"])
+}
+
 fn detect_cursor_binary() -> Option<String> {
     detect_binary(&["cursor-agent", "agent"])
 }
@@ -578,8 +798,18 @@ fn detect_gemini_binary() -> Option<String> {
     detect_binary(&["gemini"])
 }
 
+fn read_cli_version_line(output: &str) -> Option<String> {
+    output
+        .lines()
+        .map(str::trim)
+        .rfind(|line| !line.is_empty())
+        .map(str::to_string)
+}
+
 fn check_codex_auth(command: &str) -> (bool, Option<String>) {
-    match StdCommand::new(command).arg("login").arg("status").output() {
+    let mut process = StdCommand::new(command);
+    apply_binary_dir_to_std_command(&mut process, command);
+    match process.arg("login").arg("status").output() {
         Ok(output) => {
             let combined = format!(
                 "{}{}",
@@ -600,7 +830,9 @@ fn check_codex_auth(command: &str) -> (bool, Option<String>) {
 }
 
 fn check_cursor_auth(command: &str) -> bool {
-    let output = StdCommand::new(command).arg("whoami").output();
+    let mut process = StdCommand::new(command);
+    apply_binary_dir_to_std_command(&mut process, command);
+    let output = process.arg("whoami").output();
     match output {
         Ok(output) => output.status.success(),
         Err(_) => false,
@@ -642,6 +874,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
         AgentProvider::Claude => {
             let detected = detect_binary(&["claude"]);
             if let Some(command) = detected {
+                let version = read_cli_version(&command);
                 AgentRuntimeProviderReadiness {
                     status: AgentRuntimeProviderReadinessStatus::Partial,
                     summary:
@@ -655,6 +888,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     ],
                     binary_candidates: vec!["claude".to_string()],
                     detected_command: Some(command),
+                    detected_version: version,
                     auth_status: AgentRuntimeProviderAuthStatus::Unknown,
                 }
             } else {
@@ -667,12 +901,14 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     ],
                     binary_candidates: vec!["claude".to_string()],
                     detected_command: None,
+                    detected_version: None,
                     auth_status: AgentRuntimeProviderAuthStatus::Missing,
                 }
             }
         }
         AgentProvider::Codex => {
             let detected = detect_binary(&["codex"]);
+            let version = detected.as_deref().and_then(read_cli_version);
             let auth = detected
                 .as_deref()
                 .map(check_codex_auth)
@@ -687,6 +923,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     ],
                     binary_candidates: vec!["codex".to_string()],
                     detected_command: None,
+                    detected_version: None,
                     auth_status: AgentRuntimeProviderAuthStatus::Missing,
                 };
             }
@@ -706,6 +943,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                 details: detail.into_iter().collect(),
                 binary_candidates: vec!["codex".to_string()],
                 detected_command: detected,
+                detected_version: version,
                 auth_status: if authenticated {
                     AgentRuntimeProviderAuthStatus::Authenticated
                 } else {
@@ -716,6 +954,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
         AgentProvider::Cursor => {
             let detected = detect_cursor_binary();
             if let Some(command) = detected.clone() {
+                let version = read_cli_version(&command);
                 let authenticated = check_cursor_auth(&command);
                 AgentRuntimeProviderReadiness {
                     status: if authenticated {
@@ -734,6 +973,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     ],
                     binary_candidates: vec!["cursor-agent".to_string(), "agent".to_string()],
                     detected_command: Some(command),
+                    detected_version: version,
                     auth_status: if authenticated {
                         AgentRuntimeProviderAuthStatus::Authenticated
                     } else {
@@ -749,6 +989,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     ],
                     binary_candidates: vec!["cursor-agent".to_string(), "agent".to_string()],
                     detected_command: None,
+                    detected_version: None,
                     auth_status: AgentRuntimeProviderAuthStatus::Missing,
                 }
             }
@@ -756,6 +997,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
         AgentProvider::Gemini => {
             let detected = detect_gemini_binary();
             if let Some(command) = detected {
+                let version = read_cli_version(&command);
                 let stream_json_supported = gemini_supports_stream_json();
                 AgentRuntimeProviderReadiness {
                     status: AgentRuntimeProviderReadinessStatus::Partial,
@@ -778,6 +1020,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     },
                     binary_candidates: vec!["gemini".to_string()],
                     detected_command: Some(command),
+                    detected_version: version,
                     auth_status: AgentRuntimeProviderAuthStatus::Unknown,
                 }
             } else {
@@ -789,6 +1032,7 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                     ],
                     binary_candidates: vec!["gemini".to_string()],
                     detected_command: None,
+                    detected_version: None,
                     auth_status: AgentRuntimeProviderAuthStatus::Missing,
                 }
             }

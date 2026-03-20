@@ -3,6 +3,7 @@ import {
   Button,
   getAgentProviderLabel,
   getAgentRuntimeEffortLabel,
+  getAgentRuntimeProviderDescriptor,
   getAgentRuntimeProviderEffortOptions,
   getAgentRuntimeProviderModelOptions,
   Markdown,
@@ -41,8 +42,10 @@ function AgentSessionHeaderContainer({
     session.provider,
     settings.customAgentModels,
   );
+  const providerDescriptor = getAgentRuntimeProviderDescriptor(capabilities, session.provider);
   const effortOptions = getAgentRuntimeProviderEffortOptions(session.provider, session.model);
   const providerLabel = getAgentProviderLabel(session.provider);
+  const providerVersion = providerDescriptor?.readiness.detectedVersion ?? null;
   const selectedModelLabel = modelOptions.find((option) => option.slug === session.model)?.label ?? session.model;
   const selectedEffort = effortOptions.find((option) => option.slug === session.effort)?.slug
     ?? effortOptions.find((option) => option.slug === "medium")?.slug;
@@ -90,6 +93,11 @@ function AgentSessionHeaderContainer({
             {selectedEffortLabel ? (
               <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
                 {selectedEffortLabel}
+              </span>
+            ) : null}
+            {providerVersion ? (
+              <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
+                {providerVersion}
               </span>
             ) : null}
           </div>

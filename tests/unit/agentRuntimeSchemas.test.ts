@@ -112,6 +112,7 @@ describe("agentRuntime.schemas", () => {
             details: [],
             binaryCandidates: ["claude"],
             detectedCommand: "claude",
+            detectedVersion: "2.1.78 (Claude Code)",
             authStatus: "authenticated",
           },
           features: {
@@ -137,6 +138,7 @@ describe("agentRuntime.schemas", () => {
             details: [],
             binaryCandidates: ["codex"],
             detectedCommand: "codex",
+            detectedVersion: "codex-cli 0.115.0",
             authStatus: "authenticated",
           },
           features: {
@@ -155,6 +157,8 @@ describe("agentRuntime.schemas", () => {
 
     expect(parsed.providers[0]?.transport).toBe("cli-headless");
     expect(parsed.providers[1]?.transport).toBe("app-server");
+    expect(parsed.providers[0]?.readiness.detectedVersion).toBe("2.1.78 (Claude Code)");
+    expect(parsed.providers[1]?.readiness.detectedVersion).toBe("codex-cli 0.115.0");
   });
 
   it("accepts lightweight runtime session summaries", () => {

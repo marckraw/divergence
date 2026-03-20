@@ -1,3 +1,4 @@
+use super::provider_registry::{apply_binary_dir_to_tokio_command, detect_codex_binary};
 use super::*;
 use serde_json::json;
 
@@ -16,7 +17,19 @@ impl AgentRuntimeState {
             "Starting Codex App Server.",
             Some(session.model.clone()),
         )?;
-        let mut command = Command::new("codex");
+        if !Path::new(&session.path).is_dir() {
+            return Err(format!(
+                "Cannot start Codex App Server because the workspace path does not exist: {}",
+                session.path
+            ));
+        }
+
+        let binary = detect_codex_binary().ok_or_else(|| {
+            "Codex CLI was not found in Divergence's runtime environment. Install Codex or launch Divergence from a shell profile that exposes the Codex binary.".to_string()
+        })?;
+
+        let mut command = Command::new(&binary);
+        apply_binary_dir_to_tokio_command(&mut command, &binary);
         command
             .arg("app-server")
             .current_dir(&session.path)
