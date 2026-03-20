@@ -78,6 +78,7 @@ const agentRuntimeProviderReadinessSchema = z.object({
   details: z.array(z.string()),
   binaryCandidates: z.array(z.string()),
   detectedCommand: z.string().nullable().optional(),
+  detectedVersion: z.string().nullable().optional(),
   authStatus: authStatusSchema,
 });
 

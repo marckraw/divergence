@@ -348,6 +348,9 @@ function SettingsPresentational({
                                 CLI: <span className="text-text">{provider.readiness.detectedCommand ?? "not detected"}</span>
                               </div>
                               <div className="text-[11px] text-subtext">
+                                Version: <span className="text-text">{provider.readiness.detectedVersion ?? "unknown"}</span>
+                              </div>
+                              <div className="text-[11px] text-subtext">
                                 Candidates: <span className="text-text">{provider.readiness.binaryCandidates.join(", ")}</span>
                               </div>
                               {provider.readiness.details.length > 0 && (

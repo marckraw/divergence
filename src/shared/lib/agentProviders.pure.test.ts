@@ -39,6 +39,7 @@ const capabilities: AgentRuntimeCapabilities = {
         details: [],
         binaryCandidates: ["claude"],
         detectedCommand: "claude",
+        detectedVersion: "2.1.78 (Claude Code)",
         authStatus: "authenticated",
       },
       features: {
@@ -64,6 +65,7 @@ const capabilities: AgentRuntimeCapabilities = {
         details: [],
         binaryCandidates: ["cursor-agent"],
         detectedCommand: "cursor-agent",
+        detectedVersion: "1.0.0",
         authStatus: "missing",
       },
       features: {
@@ -89,6 +91,7 @@ const capabilities: AgentRuntimeCapabilities = {
         details: [],
         binaryCandidates: ["codex"],
         detectedCommand: "codex",
+        detectedVersion: "codex-cli 0.115.0",
         authStatus: "authenticated",
       },
       features: {
@@ -114,6 +117,7 @@ const capabilities: AgentRuntimeCapabilities = {
         details: [],
         binaryCandidates: ["gemini"],
         detectedCommand: "gemini",
+        detectedVersion: "0.1.0",
         authStatus: "unknown",
       },
       features: {

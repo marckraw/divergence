@@ -71,6 +71,7 @@ export interface AgentRuntimeProviderReadiness {
   details: string[];
   binaryCandidates: string[];
   detectedCommand?: string | null;
+  detectedVersion?: string | null;
   authStatus: "authenticated" | "missing" | "unknown";
 }
 
