@@ -1,5 +1,19 @@
 # divergence
 
+## 0.39.0
+
+### Minor Changes
+
+- 25634ea: Show changed files in agent conversation session header as a collapsible tree view, extracted from session edit activities
+
+## 0.38.1
+
+### Patch Changes
+
+- 0892b15: fix: show individual files inside new folders in agent session changes tab
+
+  Previously, when a new folder with new files was created, only the folder was displayed in the changes tree without its child files. This was because `git status --porcelain=v2` defaults to showing untracked directories as a single entry. Adding `--untracked-files=all` ensures git reports each individual untracked file, allowing the changes tree to display a full expandable hierarchy.
+
 ## 0.38.0
 
 ### Minor Changes
