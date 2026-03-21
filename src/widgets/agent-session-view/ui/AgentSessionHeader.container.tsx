@@ -20,10 +20,12 @@ import {
   useAppSettings,
 } from "../../../shared";
 import { buildAgentConversationContextSummary } from "../lib/agentConversationContext.pure";
+import { collectSessionChangedFiles } from "../lib/agentSessionChangedFiles.pure";
 import {
   buildAgentRuntimeTelemetrySummary,
   formatRuntimeEventOffset,
 } from "../lib/agentRuntimeTelemetry.pure";
+import AgentSessionChangedFilesPresentational from "./AgentSessionChangedFiles.presentational";
 import type { AgentSessionHeaderProps } from "./AgentSessionView.types";
 
 function AgentSessionHeaderContainer({
@@ -57,6 +59,10 @@ function AgentSessionHeaderContainer({
   const telemetry = useMemo(
     () => buildAgentRuntimeTelemetrySummary(session, nowMs),
     [session, nowMs],
+  );
+  const changedFiles = useMemo(
+    () => collectSessionChangedFiles(session.activities),
+    [session.activities],
   );
   const hasRuntimeTelemetry = session.runtimeEvents.length > 0;
 
@@ -262,6 +268,7 @@ function AgentSessionHeaderContainer({
           </details>
         </div>
       )}
+      <AgentSessionChangedFilesPresentational changedFiles={changedFiles} />
       {session.pendingRequest && (
         <div className="mx-auto mt-4 w-full max-w-5xl rounded-2xl border border-accent/30 bg-accent/10 px-4 py-4 shadow-[0_18px_60px_-42px_rgba(99,102,241,0.65)]">
           <div className="flex items-center justify-between gap-3">
