@@ -1,5 +1,11 @@
 # divergence
 
+## 0.40.0
+
+### Minor Changes
+
+- 8d57455: Introduce a persistent stage layout that lets terminal and agent sessions share split panes, swap the focused pane's content through search, and reuse pane-aware sidebars and shortcuts across session types.
+
 ## 0.39.0
 
 ### Minor Changes
