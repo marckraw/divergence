@@ -1,26 +1,23 @@
 import { useCallback, useEffect } from "react";
-import type { Project, SplitSessionState, WorkspaceSession } from "../../entities";
+import type { Project, StageLayout, StagePane, WorkspaceSession } from "../../entities";
 import { isAgentSession } from "../../entities";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../features/work-sidebar";
-import {
-  closeFocusedSplitPane,
-  focusNextSplitPane,
-  focusPreviousSplitPane,
-  isDefaultSinglePaneState,
-} from "../lib/splitSession.pure";
 import { resolveAppShortcut } from "../lib/appShortcuts.pure";
 import { resolveProjectForNewDivergence } from "../lib/appSelection.pure";
 
 interface UseAppKeyboardShortcutsParams {
   sessions: Map<string, WorkspaceSession>;
   activeSessionId: string | null;
-  splitBySessionId: Map<string, SplitSessionState>;
-  setSplitBySessionId: React.Dispatch<React.SetStateAction<Map<string, SplitSessionState>>>;
+  stageLayout: StageLayout | null;
+  focusedStagePane: StagePane | null;
   projects: Project[];
   createDivergenceFor: Project | null;
   handleCloseSession: (sessionId: string) => void;
-  handleSplitSession: (sessionId: string, orientation: "vertical" | "horizontal") => void;
+  handleSplitStage: (orientation: "vertical" | "horizontal") => void;
+  handleCloseStagePane: (paneId: StagePane["id"]) => void;
   handleReconnectSession: (sessionId: string) => void;
+  focusPreviousStagePane: () => void;
+  focusNextStagePane: () => void;
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
   setIsSidebarOpen: (open: boolean) => void;
@@ -36,13 +33,16 @@ interface UseAppKeyboardShortcutsParams {
 export function useAppKeyboardShortcuts({
   sessions,
   activeSessionId,
-  splitBySessionId,
-  setSplitBySessionId,
+  stageLayout,
+  focusedStagePane,
   projects,
   createDivergenceFor,
   handleCloseSession,
-  handleSplitSession,
+  handleSplitStage,
+  handleCloseStagePane,
   handleReconnectSession,
+  focusPreviousStagePane,
+  focusNextStagePane,
   toggleSidebar,
   toggleRightPanel,
   setIsSidebarOpen,
@@ -109,22 +109,8 @@ export function useAppKeyboardShortcuts({
         return;
       case "close_active_session":
         if (activeSessionId) {
-          const splitState = splitBySessionId.get(activeSessionId) ?? null;
-          if (splitState && splitState.paneIds.length > 1) {
-            setSplitBySessionId((prev) => {
-              const current = prev.get(activeSessionId);
-              if (!current || current.paneIds.length <= 1) {
-                return prev;
-              }
-              const nextState = closeFocusedSplitPane(current);
-              const next = new Map(prev);
-              if (!nextState || isDefaultSinglePaneState(nextState)) {
-                next.delete(activeSessionId);
-              } else {
-                next.set(activeSessionId, nextState);
-              }
-              return next;
-            });
+          if (stageLayout && stageLayout.panes.length > 1 && focusedStagePane) {
+            handleCloseStagePane(focusedStagePane.id);
           } else {
             handleCloseSession(activeSessionId);
           }
@@ -141,11 +127,7 @@ export function useAppKeyboardShortcuts({
       }
       case "split_terminal":
         if (activeSessionId) {
-          const activeSession = sessions.get(activeSessionId);
-          if (!activeSession || isAgentSession(activeSession)) {
-            return;
-          }
-          handleSplitSession(activeSessionId, action.orientation);
+          handleSplitStage(action.orientation);
         }
         return;
       case "reconnect_terminal":
@@ -177,29 +159,13 @@ export function useAppKeyboardShortcuts({
         }
         return;
       case "focus_previous_pane":
-        if (activeSessionId) {
-          setSplitBySessionId((prev) => {
-            const current = prev.get(activeSessionId);
-            if (!current || current.paneIds.length <= 1) {
-              return prev;
-            }
-            const next = new Map(prev);
-            next.set(activeSessionId, focusPreviousSplitPane(current));
-            return next;
-          });
+        if (stageLayout && stageLayout.panes.length > 1) {
+          focusPreviousStagePane();
         }
         return;
       case "focus_next_pane":
-        if (activeSessionId) {
-          setSplitBySessionId((prev) => {
-            const current = prev.get(activeSessionId);
-            if (!current || current.paneIds.length <= 1) {
-              return prev;
-            }
-            const next = new Map(prev);
-            next.set(activeSessionId, focusNextSplitPane(current));
-            return next;
-          });
+        if (stageLayout && stageLayout.panes.length > 1) {
+          focusNextStagePane();
         }
         return;
       default:
@@ -208,12 +174,16 @@ export function useAppKeyboardShortcuts({
   }, [
     sessions,
     activeSessionId,
-    splitBySessionId,
+    stageLayout,
+    focusedStagePane,
     createDivergenceFor,
     resolveProjectForNewDivergenceCallback,
     handleCloseSession,
-    handleSplitSession,
+    handleSplitStage,
+    handleCloseStagePane,
     handleReconnectSession,
+    focusPreviousStagePane,
+    focusNextStagePane,
     toggleSidebar,
     toggleRightPanel,
     setIsSidebarOpen,
@@ -224,7 +194,6 @@ export function useAppKeyboardShortcuts({
     setShowFileQuickSwitcher,
     setShowSettings,
     setCreateDivergenceFor,
-    setSplitBySessionId,
   ]);
 
   useEffect(() => {

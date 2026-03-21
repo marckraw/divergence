@@ -57,6 +57,28 @@ export {
   isAgentSession,
   isTerminalSession,
 } from "./workspace-session";
+export type {
+  StageLayout,
+  StageLayoutAction,
+  StageLayoutOrientation,
+  StagePane,
+  StagePaneId,
+  StagePaneRef,
+} from "./stage-layout";
+export {
+  buildSinglePaneLayout,
+  buildSplitLayout,
+  focusPane,
+  getFocusedPane,
+  getPaneBySessionId,
+  isSinglePane,
+  MAX_STAGE_PANES,
+  removePaneFromLayout,
+  replacePaneRef,
+  resizeAdjacentPanes,
+  resizePanes,
+  STAGE_PANE_IDS,
+} from "./stage-layout";
 export {
   areSplitPaneSizesEqual,
   buildEqualSplitPaneSizes,

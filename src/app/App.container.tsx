@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import Sidebar from "../widgets/sidebar";
-import MainArea from "../widgets/main-area";
-import AgentSessionView from "../widgets/agent-session-view";
 import { InboxPanel } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
 import { useAgentRuntime } from "../features/agent-runtime";
@@ -55,6 +53,7 @@ import {
   suggestAgentSessionTitle,
 } from "../entities";
 import { useSplitPaneManagement } from "./model/useSplitPaneManagement";
+import { useStageLayout } from "./model/useStageLayout";
 import { useGithubInboxPolling } from "./model/useGithubInboxPolling";
 import { useSidebarLayout } from "./model/useSidebarLayout";
 import { useIdleNotification } from "./model/useIdleNotification";
@@ -76,6 +75,7 @@ import {
   type GithubPullRequestSummary,
 } from "../features/github-pr-hub";
 import { buildWorkspaceKey } from "./lib/sessionBuilder.pure";
+import StageView from "./ui/stage-view/StageView.container";
 
 function App() {
   const updater = useUpdater(true);
@@ -97,10 +97,8 @@ function App() {
   const {
     splitBySessionId,
     setSplitBySessionId,
-    handleSplitSession,
     handleFocusSplitPane,
     handleResizeSplitPanes,
-    handleResetSplitSession,
   } = useSplitPaneManagement();
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
   const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
@@ -542,6 +540,24 @@ function App() {
     return next;
   }, [agentSessions, sessions]);
 
+  const {
+    layout: stageLayout,
+    focusedPane: focusedStagePane,
+    handleFocusPane: handleFocusStagePane,
+    handleSplitPane: handleSplitStagePane,
+    handleReplacePaneRef: handleReplaceStagePaneRef,
+    handleResizeAdjacentPanes: handleResizeStageAdjacentPanes,
+    handleClosePane: handleCloseStagePane,
+    handleResetToSinglePane: handleResetStageToSinglePane,
+    focusNextPane: focusNextStagePane,
+    focusPreviousPane: focusPreviousStagePane,
+  } = useStageLayout({
+    workspaceSessions,
+    activeSessionId,
+    setActiveSessionId,
+    restoreTabsOnRestart: appSettings.restoreTabsOnRestart,
+  });
+
   useEffect(() => {
     if (!activeSessionId) {
       return;
@@ -727,13 +743,16 @@ function App() {
   useAppKeyboardShortcuts({
     sessions: workspaceSessions,
     activeSessionId,
-    splitBySessionId,
-    setSplitBySessionId,
+    stageLayout,
+    focusedStagePane,
     projects,
     createDivergenceFor,
     handleCloseSession: handleCloseWorkspaceSession,
-    handleSplitSession,
+    handleSplitStage: handleSplitStagePane,
+    handleCloseStagePane,
     handleReconnectSession,
+    focusPreviousStagePane,
+    focusNextStagePane,
     toggleSidebar,
     toggleRightPanel,
     setIsSidebarOpen,
@@ -786,13 +805,6 @@ function App() {
     appSettings.theme === "light"
       ? DEFAULT_EDITOR_THEME_LIGHT
       : DEFAULT_EDITOR_THEME_DARK;
-  const activeWorkspaceSession = activeSessionId ? workspaceSessions.get(activeSessionId) ?? null : null;
-  const activeSession = activeWorkspaceSession && !isAgentSession(activeWorkspaceSession)
-    ? activeWorkspaceSession
-    : null;
-  const activeAgentSession = activeWorkspaceSession && isAgentSession(activeWorkspaceSession)
-    ? activeWorkspaceSession
-    : null;
   const workspaceSessionList = useMemo(
     () => Array.from(workspaceSessions.values()),
     [workspaceSessions],
@@ -1021,68 +1033,60 @@ function App() {
           )}
           {workTab === "debug" && <DebugConsolePanel />}
         </div>
-      ) : activeAgentSession ? (
-        <AgentSessionView
-          sessionId={activeAgentSession.id}
+      ) : (
+        <StageView
+          layout={stageLayout}
+          workspaceSessions={workspaceSessions}
           sessionList={workspaceSessionList}
           activeSessionId={activeSessionId}
           idleAttentionSessionIds={idleAttentionSessionIds}
           lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
           dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
-          capabilities={agentRuntimeCapabilities}
           projects={projects}
+          terminalSessions={Array.from(sessions.values())}
+          divergencesByProject={divergencesByProject}
           workspaceMembersByWorkspaceId={membersByWorkspaceId}
+          splitBySessionId={splitBySessionId}
+          reconnectBySessionId={reconnectBySessionId}
+          globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
+          appSettings={appSettings}
+          editorTheme={editorTheme}
+          capabilities={agentRuntimeCapabilities}
+          projectsLoading={projectsLoading}
+          divergencesLoading={divergencesLoading}
+          showFileQuickSwitcher={showFileQuickSwitcher}
+          isSidebarOpen={isSidebarOpen}
+          isRightPanelOpen={isRightPanelOpen}
+          onToggleSidebar={toggleSidebar}
+          onToggleRightPanel={toggleRightPanel}
           onSelectSession={(sessionId) => {
             void handleSelectWorkspaceSession(sessionId);
           }}
           onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
+          onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
+          onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
+          onSplitStage={handleSplitStagePane}
+          onResetToSinglePane={handleResetStageToSinglePane}
+          onFocusPane={handleFocusStagePane}
+          onReplacePaneRef={handleReplaceStagePaneRef}
+          onClosePane={handleCloseStagePane}
+          onResizeStageAdjacentPanes={handleResizeStageAdjacentPanes}
+          onStatusChange={handleSessionStatusChange}
+          onRegisterTerminalCommand={handleRegisterTerminalCommand}
+          onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
+          onFocusSplitPane={handleFocusSplitPane}
+          onResizeSplitPanes={handleResizeSplitPanes}
+          onReconnectSession={handleReconnectSession}
+          onRunReviewAgentRequest={handleRunReviewAgent}
+          onProjectSettingsSaved={updateProjectSettings}
+          onSendPromptToSession={handleSendPromptToSession}
           onUpdateSessionSettings={(sessionId, input) => updateAgentSession({ sessionId, ...input })}
           onSendPrompt={startAgentTurn}
           onStageAttachment={stageAgentAttachment}
           onDiscardAttachment={discardAgentAttachment}
           onRespondToRequest={respondToAgentRequest}
           onStopSession={stopAgentSession}
-        />
-      ) : (
-        <MainArea
-          projects={projects}
-          sessions={workspaceSessions}
-          idleAttentionSessionIds={idleAttentionSessionIds}
-          lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
-          dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
-          activeSession={activeSession}
-          onDismissSessionAttention={handleDismissSessionAttention}
-          onCloseSession={handleCloseWorkspaceSession}
-          onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
-          onSelectSession={(sessionId) => {
-            void handleSelectWorkspaceSession(sessionId);
-          }}
-          onStatusChange={handleSessionStatusChange}
-          onRegisterTerminalCommand={handleRegisterTerminalCommand}
-          onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
-          onRunReviewAgentRequest={handleRunReviewAgent}
-          onProjectSettingsSaved={updateProjectSettings}
-          splitBySessionId={splitBySessionId}
-          onSplitSession={handleSplitSession}
-          onFocusSplitPane={handleFocusSplitPane}
-          onResizeSplitPanes={handleResizeSplitPanes}
-          onResetSplitSession={handleResetSplitSession}
-          reconnectBySessionId={reconnectBySessionId}
-          onReconnectSession={handleReconnectSession}
-          globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
-          editorTheme={editorTheme}
-          divergencesByProject={divergencesByProject}
-          projectsLoading={projectsLoading}
-          divergencesLoading={divergencesLoading}
-          showFileQuickSwitcher={showFileQuickSwitcher}
-          onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
-          isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={toggleSidebar}
-          isRightPanelOpen={isRightPanelOpen}
-          onToggleRightPanel={toggleRightPanel}
-          onSendPromptToSession={handleSendPromptToSession}
-          workspaceMembersByWorkspaceId={membersByWorkspaceId}
         />
       )}
 
