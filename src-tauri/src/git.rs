@@ -1450,7 +1450,7 @@ pub fn is_git_repo(path: &Path) -> bool {
 
 pub fn list_changes(repo_path: &Path) -> Result<Vec<GitChange>, String> {
     let output = Command::new("git")
-        .args(["status", "--porcelain=v2", "-z"])
+        .args(["status", "--porcelain=v2", "-z", "--untracked-files=all"])
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to list git changes: {}", e))?;
