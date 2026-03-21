@@ -1,5 +1,11 @@
 # divergence
 
+## 0.39.0
+
+### Minor Changes
+
+- 25634ea: Show changed files in agent conversation session header as a collapsible tree view, extracted from session edit activities
+
 ## 0.38.1
 
 ### Patch Changes
