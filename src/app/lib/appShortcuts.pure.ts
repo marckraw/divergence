@@ -12,26 +12,26 @@ export interface AppShortcutContext {
   isFromEditor: boolean;
   hasActiveSession: boolean;
   activeSessionId: string | null;
-  sessionCount: number;
-  hasCreateDivergenceModalOpen: boolean;
-  canResolveProjectForNewDivergence: boolean;
+  hasOpenStage: boolean;
+  tabCount: number;
 }
 
 export type AppShortcutAction =
   | { type: "toggle_quick_switcher" }
+  | { type: "toggle_quick_switcher_new_tab" }
   | { type: "toggle_file_quick_switcher" }
   | { type: "open_work_inbox" }
   | { type: "toggle_settings" }
   | { type: "toggle_right_panel" }
   | { type: "toggle_sidebar" }
   | { type: "close_overlays" }
-  | { type: "close_active_session" }
-  | { type: "new_divergence" }
+  | { type: "close_focused_pane" }
+  | { type: "new_tab" }
   | { type: "split_terminal"; orientation: SplitOrientation }
   | { type: "reconnect_terminal" }
   | { type: "select_tab"; index: number }
-  | { type: "select_previous_tab" }
-  | { type: "select_next_tab" }
+  | { type: "focus_next_tab" }
+  | { type: "focus_previous_tab" }
   | { type: "focus_previous_pane" }
   | { type: "focus_next_pane" };
 
@@ -45,6 +45,10 @@ export function resolveAppShortcut(
 
   const isMeta = event.metaKey || event.ctrlKey;
   const keyLower = event.key.toLowerCase();
+
+  if (isMeta && event.shiftKey && keyLower === "k") {
+    return { type: "toggle_quick_switcher_new_tab" };
+  }
 
   if (isMeta && keyLower === "k") {
     return { type: "toggle_quick_switcher" };
@@ -77,22 +81,29 @@ export function resolveAppShortcut(
     return { type: "close_overlays" };
   }
 
-  if (isMeta && keyLower === "w") {
-    if (!context.hasActiveSession) {
+  if (event.ctrlKey && event.key === "Tab") {
+    if (context.tabCount <= 1) {
       return null;
     }
-    return { type: "close_active_session" };
+
+    return event.shiftKey
+      ? { type: "focus_previous_tab" }
+      : { type: "focus_next_tab" };
+  }
+
+  if (isMeta && keyLower === "w") {
+    if (!context.hasOpenStage) {
+      return null;
+    }
+    return { type: "close_focused_pane" };
   }
 
   if (isMeta && keyLower === "t") {
-    if (context.hasCreateDivergenceModalOpen || !context.canResolveProjectForNewDivergence) {
-      return null;
-    }
-    return { type: "new_divergence" };
+    return { type: "new_tab" };
   }
 
   if (isMeta && keyLower === "d") {
-    if (!context.hasActiveSession) {
+    if (!context.hasOpenStage && !context.hasActiveSession) {
       return null;
     }
     return {
@@ -110,21 +121,21 @@ export function resolveAppShortcut(
 
   if (isMeta && event.key >= "1" && event.key <= "9") {
     const index = Number(event.key) - 1;
-    if (index >= 0 && index < context.sessionCount) {
+    if (index >= 0 && index < context.tabCount) {
       return { type: "select_tab", index };
     }
     return null;
   }
 
   if (isMeta && event.key === "[") {
-    if (!context.hasActiveSession) {
+    if (!context.hasOpenStage) {
       return null;
     }
     return { type: "focus_previous_pane" };
   }
 
   if (isMeta && event.key === "]") {
-    if (!context.hasActiveSession) {
+    if (!context.hasOpenStage) {
       return null;
     }
     return { type: "focus_next_pane" };

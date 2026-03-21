@@ -1,20 +1,21 @@
 import { useCallback, useEffect } from "react";
-import type { Project, StageLayout, StagePane, WorkspaceSession } from "../../entities";
+import type { StageLayout, StageTabId, WorkspaceSession } from "../../entities";
 import { isAgentSession } from "../../entities";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../features/work-sidebar";
 import { resolveAppShortcut } from "../lib/appShortcuts.pure";
-import { resolveProjectForNewDivergence } from "../lib/appSelection.pure";
 
 interface UseAppKeyboardShortcutsParams {
   sessions: Map<string, WorkspaceSession>;
   activeSessionId: string | null;
   stageLayout: StageLayout | null;
-  focusedStagePane: StagePane | null;
-  projects: Project[];
-  createDivergenceFor: Project | null;
-  handleCloseSession: (sessionId: string) => void;
+  stageTabIds: StageTabId[];
+  quickSwitcherMode: "replace" | "new_tab";
+  handleCreateTab: () => void;
+  handleFocusStageTab: (tabId: StageTabId) => void;
+  handleFocusNextStageTab: () => void;
+  handleFocusPreviousStageTab: () => void;
   handleSplitStage: (orientation: "vertical" | "horizontal") => void;
-  handleCloseStagePane: (paneId: StagePane["id"]) => void;
+  handleCloseFocusedStagePane: () => void;
   handleReconnectSession: (sessionId: string) => void;
   focusPreviousStagePane: () => void;
   focusNextStagePane: () => void;
@@ -23,23 +24,24 @@ interface UseAppKeyboardShortcutsParams {
   setIsSidebarOpen: (open: boolean) => void;
   setSidebarMode: React.Dispatch<React.SetStateAction<WorkSidebarMode>>;
   setWorkTab: (tab: WorkSidebarTab) => void;
-  setActiveSessionId: React.Dispatch<React.SetStateAction<string | null>>;
   setShowQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
+  setQuickSwitcherMode: React.Dispatch<React.SetStateAction<"replace" | "new_tab">>;
   setShowFileQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
   setShowSettings: React.Dispatch<React.SetStateAction<boolean>>;
-  setCreateDivergenceFor: React.Dispatch<React.SetStateAction<Project | null>>;
 }
 
 export function useAppKeyboardShortcuts({
   sessions,
   activeSessionId,
   stageLayout,
-  focusedStagePane,
-  projects,
-  createDivergenceFor,
-  handleCloseSession,
+  stageTabIds,
+  quickSwitcherMode,
+  handleCreateTab,
+  handleFocusStageTab,
+  handleFocusNextStageTab,
+  handleFocusPreviousStageTab,
   handleSplitStage,
-  handleCloseStagePane,
+  handleCloseFocusedStagePane,
   handleReconnectSession,
   focusPreviousStagePane,
   focusNextStagePane,
@@ -48,20 +50,11 @@ export function useAppKeyboardShortcuts({
   setIsSidebarOpen,
   setSidebarMode,
   setWorkTab,
-  setActiveSessionId,
   setShowQuickSwitcher,
+  setQuickSwitcherMode,
   setShowFileQuickSwitcher,
   setShowSettings,
-  setCreateDivergenceFor,
 }: UseAppKeyboardShortcutsParams): void {
-  const resolveProjectForNewDivergenceCallback = useCallback((): Project | null => {
-    return resolveProjectForNewDivergence({
-      activeSessionId,
-      sessions,
-      projects,
-    });
-  }, [activeSessionId, sessions, projects]);
-
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const isFromEditor = e.target instanceof HTMLElement
       ? Boolean(e.target.closest("[data-editor-root='true'], .cm-editor"))
@@ -70,20 +63,23 @@ export function useAppKeyboardShortcuts({
       isFromEditor,
       hasActiveSession: Boolean(activeSessionId),
       activeSessionId,
-      sessionCount: sessions.size,
-      hasCreateDivergenceModalOpen: Boolean(createDivergenceFor),
-      canResolveProjectForNewDivergence: Boolean(resolveProjectForNewDivergenceCallback()),
+      hasOpenStage: Boolean(stageLayout),
+      tabCount: stageTabIds.length,
     });
     if (!action) {
       return;
     }
 
     e.preventDefault();
-    const sessionIds = Array.from(sessions.keys());
 
     switch (action.type) {
       case "toggle_quick_switcher":
-        setShowQuickSwitcher(prev => !prev);
+        setQuickSwitcherMode("replace");
+        setShowQuickSwitcher((prev) => (quickSwitcherMode === "replace" ? !prev : true));
+        return;
+      case "toggle_quick_switcher_new_tab":
+        setQuickSwitcherMode("new_tab");
+        setShowQuickSwitcher((prev) => (quickSwitcherMode === "new_tab" ? !prev : true));
         return;
       case "toggle_file_quick_switcher":
         setShowFileQuickSwitcher(prev => !prev);
@@ -107,26 +103,14 @@ export function useAppKeyboardShortcuts({
         setShowFileQuickSwitcher(false);
         setShowSettings(false);
         return;
-      case "close_active_session":
-        if (activeSessionId) {
-          if (stageLayout && stageLayout.panes.length > 1 && focusedStagePane) {
-            handleCloseStagePane(focusedStagePane.id);
-          } else {
-            handleCloseSession(activeSessionId);
-          }
-        }
+      case "close_focused_pane":
+        handleCloseFocusedStagePane();
         return;
-      case "new_divergence": {
-        const project = resolveProjectForNewDivergenceCallback();
-        if (project) {
-          setShowQuickSwitcher(false);
-          setShowSettings(false);
-          setCreateDivergenceFor(project);
-        }
+      case "new_tab":
+        handleCreateTab();
         return;
-      }
       case "split_terminal":
-        if (activeSessionId) {
+        if (stageLayout || activeSessionId) {
           handleSplitStage(action.orientation);
         }
         return;
@@ -140,23 +124,15 @@ export function useAppKeyboardShortcuts({
         }
         return;
       case "select_tab":
-        if (action.index < sessionIds.length) {
-          setActiveSessionId(sessionIds[action.index]);
+        if (action.index < stageTabIds.length) {
+          handleFocusStageTab(stageTabIds[action.index]);
         }
         return;
-      case "select_previous_tab":
-        if (activeSessionId && sessionIds.length > 1) {
-          const currentIndex = sessionIds.indexOf(activeSessionId);
-          const prevIndex = currentIndex > 0 ? currentIndex - 1 : sessionIds.length - 1;
-          setActiveSessionId(sessionIds[prevIndex]);
-        }
+      case "focus_next_tab":
+        handleFocusNextStageTab();
         return;
-      case "select_next_tab":
-        if (activeSessionId && sessionIds.length > 1) {
-          const currentIndex = sessionIds.indexOf(activeSessionId);
-          const nextIndex = currentIndex < sessionIds.length - 1 ? currentIndex + 1 : 0;
-          setActiveSessionId(sessionIds[nextIndex]);
-        }
+      case "focus_previous_tab":
+        handleFocusPreviousStageTab();
         return;
       case "focus_previous_pane":
         if (stageLayout && stageLayout.panes.length > 1) {
@@ -175,12 +151,14 @@ export function useAppKeyboardShortcuts({
     sessions,
     activeSessionId,
     stageLayout,
-    focusedStagePane,
-    createDivergenceFor,
-    resolveProjectForNewDivergenceCallback,
-    handleCloseSession,
+    stageTabIds,
+    quickSwitcherMode,
+    handleCreateTab,
+    handleFocusStageTab,
+    handleFocusNextStageTab,
+    handleFocusPreviousStageTab,
     handleSplitStage,
-    handleCloseStagePane,
+    handleCloseFocusedStagePane,
     handleReconnectSession,
     focusPreviousStagePane,
     focusNextStagePane,
@@ -189,11 +167,10 @@ export function useAppKeyboardShortcuts({
     setIsSidebarOpen,
     setSidebarMode,
     setWorkTab,
-    setActiveSessionId,
     setShowQuickSwitcher,
+    setQuickSwitcherMode,
     setShowFileQuickSwitcher,
     setShowSettings,
-    setCreateDivergenceFor,
   ]);
 
   useEffect(() => {

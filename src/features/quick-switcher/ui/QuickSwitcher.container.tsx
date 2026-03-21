@@ -14,6 +14,7 @@ function QuickSwitcherContainer({
   sessions,
   workspaces,
   workspaceDivergences,
+  mode,
   onSelect,
   onClose,
 }: QuickSwitcherProps) {
@@ -82,6 +83,7 @@ function QuickSwitcherContainer({
 
   return (
     <QuickSwitcherPresentational
+      mode={mode}
       query={query}
       selectedIndex={selectedIndex}
       filteredItems={filteredItems}

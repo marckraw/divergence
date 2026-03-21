@@ -11,6 +11,7 @@ import {
 import type { QuickSwitcherPresentationalProps } from "./QuickSwitcher.types";
 
 function QuickSwitcherPresentational({
+  mode,
   query,
   selectedIndex,
   filteredItems,
@@ -37,6 +38,16 @@ function QuickSwitcherPresentational({
       panelClassName="w-[500px] max-h-[400px] flex flex-col"
     >
       <div className="p-3 border-b border-surface">
+        <div className="mb-2 flex items-center justify-between gap-2 px-1 text-xs text-subtext">
+          <span>{mode === "new_tab" ? "Open selection in a new layout tab" : "Replace the focused pane in the current tab"}</span>
+          <span className={`rounded-full px-2 py-0.5 uppercase tracking-[0.16em] ${
+            mode === "new_tab"
+              ? "bg-accent/20 text-accent"
+              : "bg-surface text-subtext"
+          }`}>
+            {mode === "new_tab" ? "New Tab" : "Current Tab"}
+          </span>
+        </div>
         <div className="flex items-center gap-2 bg-main px-3 py-2 rounded">
           <svg
             className="w-4 h-4 text-subtext"
@@ -57,7 +68,9 @@ function QuickSwitcherPresentational({
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="Search projects, divergences, sessions, and workspaces..."
+            placeholder={mode === "new_tab"
+              ? "Open project, divergence, session, or workspace in a new tab..."
+              : "Search projects, divergences, sessions, and workspaces..."}
             className="flex-1 bg-transparent text-text placeholder-subtext focus:outline-none"
           />
           <Kbd className="text-subtext">esc</Kbd>
@@ -252,7 +265,7 @@ function QuickSwitcherPresentational({
           <Kbd className="px-1">up/down</Kbd> navigate
         </span>
         <span>
-          <Kbd className="px-1">enter</Kbd> select
+          <Kbd className="px-1">enter</Kbd> {mode === "new_tab" ? "open in new tab" : "select"}
         </span>
         <span>
           <Kbd className="px-1">esc</Kbd> close
