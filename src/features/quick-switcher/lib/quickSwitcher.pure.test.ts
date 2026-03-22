@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Divergence, Project, WorkspaceSession } from "../../../types";
+import type { Divergence, Project, StageTab, WorkspaceSession } from "../../../entities";
 import {
   buildQuickSwitcherSearchResults,
   filterQuickSwitcherSearchResults,
@@ -44,6 +44,39 @@ const sessions = new Map<string, WorkspaceSession>([
   }],
 ]);
 
+const stageTabs: StageTab[] = [
+  {
+    id: "stage-tab-1",
+    label: "Tab 1",
+    layout: {
+      orientation: "vertical",
+      panes: [
+        {
+          id: "stage-pane-1",
+          ref: { kind: "terminal", sessionId: "divergence-10" },
+        },
+      ],
+      paneSizes: [1],
+      focusedPaneId: "stage-pane-1",
+    },
+  },
+  {
+    id: "stage-tab-2",
+    label: "PR Review",
+    layout: {
+      orientation: "vertical",
+      panes: [
+        {
+          id: "stage-pane-1",
+          ref: { kind: "pending" },
+        },
+      ],
+      paneSizes: [1],
+      focusedPaneId: "stage-pane-1",
+    },
+  },
+];
+
 describe("quick switcher utils", () => {
   it("builds combined search list", () => {
     const items = buildQuickSwitcherSearchResults(projects, divergences, sessions);
@@ -58,5 +91,26 @@ describe("quick switcher utils", () => {
     expect(filterQuickSwitcherSearchResults(items, "feat/search")).toHaveLength(2);
     expect(filterQuickSwitcherSearchResults(items, "alpha")).toHaveLength(3);
     expect(filterQuickSwitcherSearchResults(items, "  ")).toHaveLength(4);
+  });
+
+  it("includes stage tabs and matches them by label in reveal mode", () => {
+    const items = buildQuickSwitcherSearchResults(projects, divergences, sessions, undefined, undefined, stageTabs);
+    expect(items.find((item) => item.type === "stage_tab" && (item.item as StageTab).label === "PR Review")).toBeTruthy();
+    expect(filterQuickSwitcherSearchResults(items, "tab 1")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "stage_tab",
+          item: expect.objectContaining({ label: "Tab 1" }),
+        }),
+      ]),
+    );
+    expect(filterQuickSwitcherSearchResults(items, "pr review")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "stage_tab",
+          item: expect.objectContaining({ label: "PR Review" }),
+        }),
+      ]),
+    );
   });
 });
