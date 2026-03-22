@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSplitLayout, buildSinglePaneLayout } from "./stageLayout.pure";
+import { buildSplitLayout, buildSinglePaneLayout, getFocusedPane } from "./stageLayout.pure";
 import {
   addTab,
   addTabWithRef,
@@ -12,6 +12,7 @@ import {
   getActiveTab,
   removeTab,
   removeTabIfEmpty,
+  revealSessionInTabGroup,
   renameTab,
   updateTabLayout,
 } from "./stageTab.pure";
@@ -124,5 +125,32 @@ describe("stageTab", () => {
     expect(group ? findTabBySessionId(group, "terminal-1")?.id : null).toBe("stage-tab-1");
     expect(group ? findTabBySessionId(group, "agent-1")?.id : null).toBe("stage-tab-2");
     expect(group ? findTabBySessionId(group, "missing") : null).toBeNull();
+  });
+
+  it("reveals the tab and pane for an existing session", () => {
+    const group = addTabWithRef(
+      buildSingleTabGroup({ kind: "terminal", sessionId: "terminal-1" }),
+      { kind: "agent", sessionId: "agent-1" },
+    );
+    const secondTab = group?.tabs[1] ?? null;
+    const splitSecondTabLayout = secondTab
+      ? buildSplitLayout(secondTab.layout, { kind: "terminal", sessionId: "terminal-2" }, "horizontal")
+      : null;
+    const withSplitSecondTab = group && splitSecondTabLayout
+      ? updateTabLayout(group, "stage-tab-2", splitSecondTabLayout)
+      : null;
+    const withFirstTabFocused = withSplitSecondTab
+      ? focusTab(withSplitSecondTab, "stage-tab-1")
+      : null;
+    const revealed = withFirstTabFocused
+      ? revealSessionInTabGroup(withFirstTabFocused, "terminal-2")
+      : null;
+
+    expect(revealed?.activeTabId).toBe("stage-tab-2");
+    expect(revealed ? getFocusedPane(getActiveTab(revealed).layout).ref : null).toEqual({
+      kind: "terminal",
+      sessionId: "terminal-2",
+    });
+    expect(withFirstTabFocused ? revealSessionInTabGroup(withFirstTabFocused, "missing") : null).toBeNull();
   });
 });

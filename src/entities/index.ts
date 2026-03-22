@@ -91,6 +91,7 @@ export {
   removeTab,
   removeTabIfEmpty,
   removePaneFromLayout,
+  revealSessionInTabGroup,
   renameTab,
   replacePaneRef,
   resizeAdjacentPanes,

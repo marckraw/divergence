@@ -19,6 +19,7 @@ interface UseSessionPersistenceParams {
 }
 
 interface UseSessionPersistenceResult {
+  hasRestoredTabs: boolean;
   restoredTabsToastMessage: string | null;
   setRestoredTabsToastMessage: React.Dispatch<React.SetStateAction<string | null>>;
 }
@@ -30,6 +31,7 @@ export function useSessionPersistence({
   setActiveSessionId,
   restoreTabsOnRestart,
 }: UseSessionPersistenceParams): UseSessionPersistenceResult {
+  const [hasRestoredTabs, setHasRestoredTabs] = useState(false);
   const [restoredTabsToastMessage, setRestoredTabsToastMessage] = useState<string | null>(null);
   const hasRestoredTabsRef = useRef(false);
   const restoredTabsToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -76,11 +78,13 @@ export function useSessionPersistence({
 
     if (!restoreTabsOnRestart) {
       clearPersistedTerminalTabsState();
+      setHasRestoredTabs(true);
       return;
     }
 
     const restored = loadPersistedTerminalTabsState();
     if (restored.sessions.size === 0) {
+      setHasRestoredTabs(true);
       return;
     }
 
@@ -96,6 +100,7 @@ export function useSessionPersistence({
       setRestoredTabsToastMessage(null);
       restoredTabsToastTimerRef.current = null;
     }, RESTORE_TABS_TOAST_TTL_MS);
+    setHasRestoredTabs(true);
   }, [restoreTabsOnRestart, setSessions, setActiveSessionId]);
 
   useEffect(() => {
@@ -124,6 +129,7 @@ export function useSessionPersistence({
   }, []);
 
   return {
+    hasRestoredTabs,
     restoredTabsToastMessage,
     setRestoredTabsToastMessage,
   };

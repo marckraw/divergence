@@ -1,4 +1,4 @@
-import { buildSinglePaneLayout, getPaneBySessionId } from "./stageLayout.pure";
+import { buildSinglePaneLayout, focusPane, getPaneBySessionId } from "./stageLayout.pure";
 import type { StageLayout, StagePaneRef } from "../model/stageLayout.types";
 import type { StageTab, StageTabGroup } from "../model/stageTab.types";
 import {
@@ -198,4 +198,22 @@ export function getActiveTab(group: StageTabGroup): StageTab {
 
 export function findTabBySessionId(group: StageTabGroup, sessionId: string): StageTab | null {
   return group.tabs.find((tab) => getPaneBySessionId(tab.layout, sessionId) !== null) ?? null;
+}
+
+export function revealSessionInTabGroup(group: StageTabGroup, sessionId: string): StageTabGroup | null {
+  const targetTab = findTabBySessionId(group, sessionId);
+  if (!targetTab) {
+    return null;
+  }
+
+  const targetPane = getPaneBySessionId(targetTab.layout, sessionId);
+  if (!targetPane) {
+    return null;
+  }
+
+  const nextLayout = focusPane(targetTab.layout, targetPane.id);
+  const nextGroup = nextLayout === targetTab.layout
+    ? group
+    : updateTabLayout(group, targetTab.id, nextLayout);
+  return focusTab(nextGroup, targetTab.id);
 }

@@ -24,7 +24,7 @@ describe("app shortcuts utils", () => {
   });
 
   it("resolves core shortcuts", () => {
-    expect(resolveAppShortcut({ ...baseEvent, key: "K", shiftKey: true }, baseContext)?.type).toBe("toggle_quick_switcher_new_tab");
+    expect(resolveAppShortcut({ ...baseEvent, key: "K", shiftKey: true }, baseContext)?.type).toBe("toggle_quick_switcher_reveal");
     expect(resolveAppShortcut({ ...baseEvent, key: "k" }, baseContext)?.type).toBe("toggle_quick_switcher");
     expect(resolveAppShortcut({ ...baseEvent, key: "i" }, baseContext)?.type).toBe("open_work_inbox");
     expect(resolveAppShortcut({ ...baseEvent, key: "," }, baseContext)?.type).toBe("toggle_settings");

@@ -15,6 +15,7 @@ import {
   getPaneBySessionId,
   isAgentSession,
   removePaneFromLayout,
+  revealSessionInTabGroup,
   removeTab,
   renameTab,
   replacePaneRef,
@@ -44,6 +45,7 @@ interface UseStageTabGroupParams {
   workspaceSessions: Map<string, WorkspaceSession>;
   activeSessionId: string | null;
   setActiveSessionId: Dispatch<SetStateAction<string | null>>;
+  isRestoreReady: boolean;
   restoreTabsOnRestart: boolean;
 }
 
@@ -61,6 +63,7 @@ interface UseStageTabGroupResult {
   handleFocusNextTab: () => void;
   handleFocusPreviousTab: () => void;
   handleSelectSession: (sessionId: string) => boolean;
+  handleRevealSession: (sessionId: string) => boolean;
   handleFocusPane: (paneId: StagePaneId) => void;
   handleSplitPane: (orientation: StageLayoutOrientation, ref?: StagePaneRef) => void;
   handleReplacePaneRef: (paneId: StagePaneId, ref: StagePaneRef) => void;
@@ -170,6 +173,7 @@ export function useStageTabGroup({
   workspaceSessions,
   activeSessionId,
   setActiveSessionId,
+  isRestoreReady,
   restoreTabsOnRestart,
 }: UseStageTabGroupParams): UseStageTabGroupResult {
   const [tabGroupState, setTabGroupState] = useState<StageTabGroup | null>(null);
@@ -215,7 +219,7 @@ export function useStageTabGroup({
   }, []);
 
   useEffect(() => {
-    if (hasRestoredLayoutRef.current) {
+    if (hasRestoredLayoutRef.current || (restoreTabsOnRestart && !isRestoreReady)) {
       return;
     }
     hasRestoredLayoutRef.current = true;
@@ -229,7 +233,7 @@ export function useStageTabGroup({
     if (restoredGroup) {
       commitTabGroup(restoredGroup, getActiveFocusedSessionId(restoredGroup));
     }
-  }, [commitTabGroup, restoreTabsOnRestart]);
+  }, [commitTabGroup, isRestoreReady, restoreTabsOnRestart]);
 
   useEffect(() => {
     if (!hasRestoredLayoutRef.current) {
@@ -257,15 +261,23 @@ export function useStageTabGroup({
   }, []);
 
   useEffect(() => {
+    if (!hasRestoredLayoutRef.current || (restoreTabsOnRestart && !isRestoreReady)) {
+      return;
+    }
+
     const nextGroup = pruneTabGroupSessions(tabGroupRef.current, workspaceSessions);
     if (nextGroup === tabGroupRef.current) {
       return;
     }
 
     commitTabGroup(nextGroup, getActiveFocusedSessionId(nextGroup));
-  }, [commitTabGroup, workspaceSessions]);
+  }, [commitTabGroup, isRestoreReady, restoreTabsOnRestart, workspaceSessions]);
 
   useEffect(() => {
+    if (!hasRestoredLayoutRef.current && restoreTabsOnRestart && !isRestoreReady) {
+      return;
+    }
+
     if (!activeSessionId) {
       return;
     }
@@ -281,7 +293,7 @@ export function useStageTabGroup({
     }
 
     commitTabGroup(nextGroup);
-  }, [activeSessionId, commitTabGroup, workspaceSessions]);
+  }, [activeSessionId, commitTabGroup, isRestoreReady, restoreTabsOnRestart, workspaceSessions]);
 
   const activeTab = useMemo(() => {
     if (!tabGroupState || tabGroupState.tabs.length === 0) {
@@ -418,6 +430,21 @@ export function useStageTabGroup({
     commitTabGroup(nextGroup, sessionId);
     return true;
   }, [commitTabGroup, workspaceSessions]);
+
+  const handleRevealSession = useCallback((sessionId: string): boolean => {
+    const currentGroup = tabGroupRef.current;
+    if (!currentGroup) {
+      return false;
+    }
+
+    const nextGroup = revealSessionInTabGroup(currentGroup, sessionId);
+    if (!nextGroup) {
+      return false;
+    }
+
+    commitTabGroup(nextGroup, sessionId);
+    return true;
+  }, [commitTabGroup]);
 
   const handleFocusPane = useCallback((paneId: StagePaneId) => {
     const currentGroup = tabGroupRef.current;
@@ -633,6 +660,7 @@ export function useStageTabGroup({
     handleFocusNextTab,
     handleFocusPreviousTab,
     handleSelectSession,
+    handleRevealSession,
     handleFocusPane,
     handleSplitPane,
     handleReplacePaneRef,

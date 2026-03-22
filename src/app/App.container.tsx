@@ -44,6 +44,7 @@ import type {
   Project,
   Divergence,
   StagePaneRef,
+  StageTab,
   StageTabId,
   Workspace,
   WorkspaceDivergence,
@@ -108,7 +109,7 @@ function App() {
     handleResizeSplitPanes,
   } = useSplitPaneManagement();
   const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
-  const [quickSwitcherMode, setQuickSwitcherMode] = useState<"replace" | "new_tab">("replace");
+  const [quickSwitcherMode, setQuickSwitcherMode] = useState<"replace" | "reveal">("replace");
   const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [renameAgentSessionState, setRenameAgentSessionState] = useState<{
@@ -259,7 +260,11 @@ function App() {
   }, [sessions, setIdleAttentionSessionIds]);
 
   // ── Session Persistence ──
-  const { restoredTabsToastMessage, setRestoredTabsToastMessage } = useSessionPersistence({
+  const {
+    hasRestoredTabs,
+    restoredTabsToastMessage,
+    setRestoredTabsToastMessage,
+  } = useSessionPersistence({
     sessions,
     setSessions,
     activeSessionId,
@@ -269,6 +274,7 @@ function App() {
 
   const {
     capabilities: agentRuntimeCapabilities,
+    hasLoadedInitialSessions,
     agentSessions,
     openAgentSessions,
     getSession: getAgentSession,
@@ -561,6 +567,7 @@ function App() {
     handleRenameTab: handleRenameStageTab,
     handleFocusNextTab: handleFocusNextStageTab,
     handleFocusPreviousTab: handleFocusPreviousStageTab,
+    handleRevealSession: handleRevealStageSession,
     handleFocusPane: handleFocusStagePane,
     handleSplitPane: handleSplitStagePane,
     handleReplacePaneRef: handleReplaceStagePaneRef,
@@ -574,6 +581,7 @@ function App() {
     workspaceSessions,
     activeSessionId,
     setActiveSessionId,
+    isRestoreReady: hasRestoredTabs && hasLoadedInitialSessions,
     restoreTabsOnRestart: appSettings.restoreTabsOnRestart,
   });
   const stageTabIds = useMemo(
@@ -689,37 +697,95 @@ function App() {
     return session.id;
   }, [appSettings.tmuxHistoryLimit, portAllocationByEntityKey, sessionsRef, setSessions]);
 
+  const resolveQuickSwitcherSelectionRef = useCallback(async (
+    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
+    item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence,
+  ): Promise<StagePaneRef | null> => {
+    if (type === "project") {
+      const session = createSession("project", item as Project);
+      return { kind: "terminal", sessionId: session.id };
+    }
+
+    if (type === "divergence") {
+      const session = createSession("divergence", item as Divergence);
+      return { kind: "terminal", sessionId: session.id };
+    }
+
+    if (type === "workspace") {
+      return { kind: "terminal", sessionId: ensureWorkspaceSessionId(item as Workspace) };
+    }
+
+    if (type === "workspace_divergence") {
+      return { kind: "terminal", sessionId: ensureWorkspaceDivergenceSessionId(item as WorkspaceDivergence) };
+    }
+
+    const session = item as WorkspaceSession;
+    if (isAgentSession(session) && !workspaceSessions.has(session.id)) {
+      try {
+        await openAgentSession(session.id);
+      } catch (error) {
+        console.warn("Failed to reopen agent session from quick switcher:", error);
+        return null;
+      }
+    }
+
+    return isAgentSession(session)
+      ? { kind: "agent", sessionId: session.id }
+      : { kind: "terminal", sessionId: session.id };
+  }, [
+    createSession,
+    ensureWorkspaceDivergenceSessionId,
+    ensureWorkspaceSessionId,
+    openAgentSession,
+    workspaceSessions,
+  ]);
+
   const handleOpenQuickSwitcherSelectionInNewTab = useCallback(async (
     type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
     item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence,
   ) => {
-    let ref: StagePaneRef | null = null;
-
-    if (type === "project") {
-      const session = createSession("project", item as Project);
-      ref = { kind: "terminal", sessionId: session.id };
-    } else if (type === "divergence") {
-      const session = createSession("divergence", item as Divergence);
-      ref = { kind: "terminal", sessionId: session.id };
-    } else if (type === "workspace") {
-      ref = { kind: "terminal", sessionId: ensureWorkspaceSessionId(item as Workspace) };
-    } else if (type === "workspace_divergence") {
-      ref = { kind: "terminal", sessionId: ensureWorkspaceDivergenceSessionId(item as WorkspaceDivergence) };
-    } else {
-      const session = item as WorkspaceSession;
-      ref = isAgentSession(session)
-        ? { kind: "agent", sessionId: session.id }
-        : { kind: "terminal", sessionId: session.id };
+    const ref = await resolveQuickSwitcherSelectionRef(type, item);
+    if (!ref || ref.kind === "pending") {
+      return;
     }
 
     setSidebarMode("projects");
     handleCreateStageTabWithRef(ref);
     setShowQuickSwitcher(false);
   }, [
-    createSession,
-    ensureWorkspaceDivergenceSessionId,
-    ensureWorkspaceSessionId,
     handleCreateStageTabWithRef,
+    resolveQuickSwitcherSelectionRef,
+    setSidebarMode,
+  ]);
+
+  const handleRevealQuickSwitcherSelection = useCallback(async (
+    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence" | "stage_tab",
+    item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence | StageTab,
+  ) => {
+    if (type === "stage_tab") {
+      setSidebarMode("projects");
+      handleFocusStageTab((item as StageTab).id);
+      setShowQuickSwitcher(false);
+      return;
+    }
+
+    const revealItem = item as Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence;
+    const ref = await resolveQuickSwitcherSelectionRef(type, revealItem);
+    if (!ref || ref.kind === "pending") {
+      return;
+    }
+
+    setSidebarMode("projects");
+    if (!handleRevealStageSession(ref.sessionId)) {
+      await handleOpenQuickSwitcherSelectionInNewTab(type, revealItem);
+      return;
+    }
+    setShowQuickSwitcher(false);
+  }, [
+    handleOpenQuickSwitcherSelectionInNewTab,
+    handleFocusStageTab,
+    handleRevealStageSession,
+    resolveQuickSwitcherSelectionRef,
     setSidebarMode,
   ]);
 
@@ -1241,12 +1307,13 @@ function App() {
             projects={projects}
             divergencesByProject={divergencesByProject}
             sessions={workspaceSessions}
+            stageTabs={tabGroup?.tabs ?? []}
             workspaces={workspaceList}
             workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
             mode={quickSwitcherMode}
             onSelect={(type, item) => {
-              if (quickSwitcherMode === "new_tab") {
-                void handleOpenQuickSwitcherSelectionInNewTab(type, item);
+              if (quickSwitcherMode === "reveal") {
+                void handleRevealQuickSwitcherSelection(type, item);
                 return;
               }
 

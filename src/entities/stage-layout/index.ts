@@ -46,6 +46,7 @@ export {
   getActiveTab,
   removeTab,
   removeTabIfEmpty,
+  revealSessionInTabGroup,
   renameTab,
   updateTabLayout,
 } from "./lib/stageTab.pure";

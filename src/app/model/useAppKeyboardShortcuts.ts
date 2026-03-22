@@ -9,7 +9,7 @@ interface UseAppKeyboardShortcutsParams {
   activeSessionId: string | null;
   stageLayout: StageLayout | null;
   stageTabIds: StageTabId[];
-  quickSwitcherMode: "replace" | "new_tab";
+  quickSwitcherMode: "replace" | "reveal";
   handleCreateTab: () => void;
   handleFocusStageTab: (tabId: StageTabId) => void;
   handleFocusNextStageTab: () => void;
@@ -25,7 +25,7 @@ interface UseAppKeyboardShortcutsParams {
   setSidebarMode: React.Dispatch<React.SetStateAction<WorkSidebarMode>>;
   setWorkTab: (tab: WorkSidebarTab) => void;
   setShowQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
-  setQuickSwitcherMode: React.Dispatch<React.SetStateAction<"replace" | "new_tab">>;
+  setQuickSwitcherMode: React.Dispatch<React.SetStateAction<"replace" | "reveal">>;
   setShowFileQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
   setShowSettings: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -77,9 +77,9 @@ export function useAppKeyboardShortcuts({
         setQuickSwitcherMode("replace");
         setShowQuickSwitcher((prev) => (quickSwitcherMode === "replace" ? !prev : true));
         return;
-      case "toggle_quick_switcher_new_tab":
-        setQuickSwitcherMode("new_tab");
-        setShowQuickSwitcher((prev) => (quickSwitcherMode === "new_tab" ? !prev : true));
+      case "toggle_quick_switcher_reveal":
+        setQuickSwitcherMode("reveal");
+        setShowQuickSwitcher((prev) => (quickSwitcherMode === "reveal" ? !prev : true));
         return;
       case "toggle_file_quick_switcher":
         setShowFileQuickSwitcher(prev => !prev);
