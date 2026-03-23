@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTimestamp, formatRelativeAge } from "./dateTime.pure";
+import { formatMessageTime, formatTimestamp, formatRelativeAge } from "./dateTime.pure";
 
 describe("formatTimestamp", () => {
   it("returns fallback for null/undefined/zero", () => {
@@ -13,6 +13,39 @@ describe("formatTimestamp", () => {
     const result = formatTimestamp(ms, "fallback");
     expect(result).not.toBe("fallback");
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe("formatMessageTime", () => {
+  it("returns empty string for null/undefined/zero", () => {
+    expect(formatMessageTime(null)).toBe("");
+    expect(formatMessageTime(undefined)).toBe("");
+    expect(formatMessageTime(0)).toBe("");
+  });
+
+  it("returns time only for today", () => {
+    const now = new Date();
+    now.setHours(14, 30, 0, 0);
+    const result = formatMessageTime(now.getTime());
+    // Should be a short time string without a date prefix
+    expect(result).not.toContain("Yesterday");
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.length).toBeLessThanOrEqual(8);
+  });
+
+  it("returns 'Yesterday HH:MM' for yesterday", () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(10, 15, 0, 0);
+    const result = formatMessageTime(yesterday.getTime());
+    expect(result).toMatch(/^Yesterday /);
+  });
+
+  it("returns 'Mon D, HH:MM' for older dates", () => {
+    const old = new Date("2024-01-15T09:30:00");
+    const result = formatMessageTime(old.getTime());
+    expect(result).toContain("Jan");
+    expect(result).toContain("15");
   });
 });
 

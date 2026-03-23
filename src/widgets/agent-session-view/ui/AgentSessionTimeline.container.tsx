@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { Paperclip } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
-import { Button, EmptyState, Markdown } from "../../../shared";
+import { Button, EmptyState, formatMessageTime, Markdown } from "../../../shared";
 import type { AgentActivity, AgentMessage } from "../../../entities";
 import type { AgentTimelineItem } from "../lib/agentTimeline.pure";
 import type { AgentSessionTimelineProps } from "./AgentSessionView.types";
@@ -57,6 +57,7 @@ function areMessagesEqual(left: AgentMessage, right: AgentMessage): boolean {
     && left.role === right.role
     && left.content === right.content
     && left.status === right.status
+    && left.createdAtMs === right.createdAtMs
     && left.interactionMode === right.interactionMode
     && areMessageAttachmentsEqual(left.attachments, right.attachments);
 }
@@ -101,7 +102,14 @@ const AgentTimelineMessageRow = memo(function AgentTimelineMessageRow({
             </span>
           )}
         </div>
-        <span className="text-[11px] text-subtext">{message.status}</span>
+        <div className="flex items-center gap-2">
+          {message.createdAtMs > 0 && (
+            <span className="text-[10px] text-subtext/60" title={new Date(message.createdAtMs).toLocaleString()}>
+              {formatMessageTime(message.createdAtMs)}
+            </span>
+          )}
+          <span className="text-[11px] text-subtext">{message.status}</span>
+        </div>
       </div>
 
       {message.attachments && message.attachments.length > 0 && (
