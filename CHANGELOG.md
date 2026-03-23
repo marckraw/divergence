@@ -1,5 +1,15 @@
 # divergence
 
+## 0.42.0
+
+### Minor Changes
+
+- 5cb6419: Add timestamp display for all assistant messages in the agent session timeline. Shows compact time (HH:MM for today, "Yesterday HH:MM", or "Mon D, HH:MM" for older) next to each message status badge. Timestamps are provider-agnostic, using the existing `createdAtMs` field already set by the Rust agent runtime.
+
+### Patch Changes
+
+- ac7503d: Improve responsive design of agent session conversation view using CSS container queries. The sidebar now shows/hides based on actual container width instead of viewport width, and header, timeline, and composer layouts gracefully adapt to narrow split panes.
+
 ## 0.41.2
 
 ### Patch Changes
