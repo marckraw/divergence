@@ -104,7 +104,11 @@ interface StageViewProps {
   onCreatePendingSession: (paneId: StagePaneId, action: PendingStagePaneCreateAction) => void | Promise<void>;
   onClosePane: (paneId: StagePaneId) => void;
   onResizeStageAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
-  onOpenOrFocusEditorFile: (filePath: string, sourceSession: WorkspaceSession | null) => void;
+  onOpenOrFocusEditorFile: (
+    filePath: string,
+    sourceSession: WorkspaceSession | null,
+    options?: { targetPaneId?: StagePaneId | null },
+  ) => void;
   onOpenOrFocusEditorChange: (
     entry: import("../../../entities").GitChangeEntry,
     mode: import("../../../entities").ChangesMode,
@@ -371,6 +375,25 @@ function StageView({
 
     return next;
   }, [agentProviders, layout, workspaceSessions]);
+  const pendingPaneSourceSessionByPaneId = useMemo(() => {
+    const next = new Map<StagePaneId, WorkspaceSession | null>();
+    if (!layout) {
+      return next;
+    }
+
+    for (const pane of layout.panes) {
+      if (pane.ref.kind !== "pending") {
+        continue;
+      }
+
+      const sourceSession = pane.ref.sourceSessionId
+        ? workspaceSessions.get(pane.ref.sourceSessionId) ?? null
+        : null;
+      next.set(pane.id, sourceSession);
+    }
+
+    return next;
+  }, [layout, workspaceSessions]);
 
   return (
     <main className="flex flex-1 min-w-0 h-full bg-main flex-col">
@@ -502,8 +525,12 @@ function StageView({
                         {pane.ref.kind === "pending" ? (
                           <PendingStagePane
                             sessions={sessionList}
+                            sourceSession={pendingPaneSourceSessionByPaneId.get(pane.id) ?? null}
                             createContext={pendingPaneCreateContextByPaneId.get(pane.id) ?? null}
                             onSelectExistingSession={(sessionId) => handleSelectPendingSession(pane.id, sessionId)}
+                            onOpenFile={(filePath, sourceSession) => {
+                              onOpenOrFocusEditorFile(filePath, sourceSession, { targetPaneId: pane.id });
+                            }}
                             onCreateSession={(action) => {
                               void onCreatePendingSession(pane.id, action);
                             }}

@@ -687,15 +687,19 @@ function App() {
     focusColumn: options?.focusColumn ?? null,
   }), []);
 
-  const showEditorSessionInStage = useCallback((sessionId: string, sourceSession: WorkspaceSession | null) => {
+  const showEditorSessionInStage = useCallback((
+    sessionId: string,
+    options?: { targetPaneId?: StagePaneId | null },
+  ) => {
     if (handleRevealStageSession(sessionId)) {
       setActiveSessionId(sessionId);
       return;
     }
 
     const ref: StagePaneRef = { kind: "editor", sessionId };
-    if (sourceSession && isEditorSession(sourceSession) && stageLayout) {
-      handleReplaceStagePaneRef(stageLayout.focusedPaneId, ref);
+    const targetPaneId = options?.targetPaneId ?? stageLayout?.focusedPaneId ?? null;
+    if (stageLayout && targetPaneId) {
+      handleReplaceStagePaneRef(targetPaneId, ref);
       setActiveSessionId(sessionId);
       return;
     }
@@ -712,6 +716,7 @@ function App() {
   const handleOpenOrFocusEditorFile = useCallback((
     filePath: string,
     sourceSession: WorkspaceSession | null,
+    options?: { targetPaneId?: StagePaneId | null },
   ) => {
     if (!sourceSession) {
       return;
@@ -722,7 +727,7 @@ function App() {
     );
 
     setSidebarMode("projects");
-    showEditorSessionInStage(session.id, sourceSession);
+    showEditorSessionInStage(session.id, options);
   }, [
     buildEditorOpenInputFromSession,
     openOrReuseEditorSession,
@@ -749,7 +754,7 @@ function App() {
     );
 
     setSidebarMode("projects");
-    showEditorSessionInStage(session.id, sourceSession);
+    showEditorSessionInStage(session.id);
   }, [
     buildEditorOpenInputFromSession,
     openOrReuseEditorSession,
@@ -776,7 +781,7 @@ function App() {
     );
 
     setSidebarMode("projects");
-    showEditorSessionInStage(session.id, sourceSession);
+    showEditorSessionInStage(session.id);
   }, [
     buildEditorOpenInputFromSession,
     openOrReuseEditorSession,

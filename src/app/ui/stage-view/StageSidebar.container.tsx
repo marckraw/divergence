@@ -45,7 +45,7 @@ import { usePromptQueue } from "../../../widgets/main-area/model/usePromptQueue"
 
 type TerminalSidebarTab = "settings" | "files" | "changes" | "search" | "queue" | "linear" | "review" | "tmux";
 type EditorSidebarTab = "files" | "changes" | "search";
-type AgentSidebarTab = "changes" | "linear" | "queue";
+type AgentSidebarTab = "files" | "changes" | "linear" | "queue";
 const EMPTY_REVIEW_COMMENTS: DiffReviewComment[] = [];
 
 function resolveAgentQueueScope(
@@ -164,7 +164,7 @@ function StageSidebar({
 }: StageSidebarProps) {
   const [terminalTab, setTerminalTab] = useState<TerminalSidebarTab>("settings");
   const [editorTab, setEditorTab] = useState<EditorSidebarTab>("files");
-  const [agentTab, setAgentTab] = useState<AgentSidebarTab>("changes");
+  const [agentTab, setAgentTab] = useState<AgentSidebarTab>("files");
   const [changesMode, setChangesMode] = useState<ChangesMode>("working");
   const [reviewRunError, setReviewRunError] = useState<string | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
@@ -335,7 +335,7 @@ function StageSidebar({
     appSettings,
     projects,
     workspaceMembersByWorkspaceId,
-    sidebarTab: agentTab,
+    sidebarTab: agentTab === "files" ? "changes" : agentTab,
     onSetComposerText: handleSetComposerText,
   });
 
@@ -627,6 +627,15 @@ function StageSidebar({
     }
 
     switch (tab) {
+      case "files":
+        return (
+          <FileExplorer
+            rootPath={activeAgentSession.path}
+            activeFilePath={null}
+            onOpenFile={(path) => onOpenOrFocusEditorFile(path, activeAgentSession)}
+            onRemoveFile={handleRemoveFile}
+          />
+        );
       case "changes":
         return (
           <ChangesTree
@@ -682,6 +691,7 @@ function StageSidebar({
     }
   }, [
     activeAgentSession,
+    handleRemoveFile,
     agentLinearError,
     agentLinearInfoMessage,
     agentLinearLoading,
@@ -710,6 +720,7 @@ function StageSidebar({
     handleAgentQueueRemoveItem,
     handleAgentQueueSendItem,
     handleOpenChange,
+    onOpenOrFocusEditorFile,
     openFilePath,
     setAgentLinearSearchQuery,
     setAgentLinearStatePickerOpenIssueId,
@@ -756,7 +767,7 @@ function StageSidebar({
           </div>
         ) : (
           <div className="flex items-center border-b border-surface">
-            {(["changes", "linear", "queue"] as const).map((tab) => (
+            {(["files", "changes", "linear", "queue"] as const).map((tab) => (
               <TabButton key={tab} active={agentTab === tab} onClick={() => setAgentTab(tab)}>
                 {tab[0].toUpperCase() + tab.slice(1)}
               </TabButton>
