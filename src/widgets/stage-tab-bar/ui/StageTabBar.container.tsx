@@ -1,12 +1,12 @@
 import { useCallback, useState } from "react";
 import type { StageTab, StageTabId } from "../../../entities";
-import { MAX_STAGE_TABS } from "../../../entities";
 import StageTabBarPresentational from "./StageTabBar.presentational";
 
 interface StageTabBarProps {
   tabs: StageTab[];
   activeTabId: StageTabId | null;
   attentionTabIds?: Set<StageTabId>;
+  maxStageTabs: number;
   onSelectTab: (tabId: StageTabId) => void;
   onCreateTab: () => void;
   onCloseTab: (tabId: StageTabId) => void;
@@ -18,6 +18,7 @@ function StageTabBarContainer({
   tabs,
   activeTabId,
   attentionTabIds = new Set<StageTabId>(),
+  maxStageTabs,
   onSelectTab,
   onCreateTab,
   onCloseTab,
@@ -52,7 +53,8 @@ function StageTabBarContainer({
       tabs={tabs}
       activeTabId={activeTabId}
       attentionTabIds={attentionTabIds}
-      canCreateTab={tabs.length < MAX_STAGE_TABS}
+      canCreateTab={tabs.length < maxStageTabs}
+      maxStageTabs={maxStageTabs}
       editingTabId={editingTabId}
       editingLabel={editingLabel}
       onSelectTab={onSelectTab}

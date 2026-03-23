@@ -46,11 +46,11 @@ describe("stageTab", () => {
     expect(withAgent?.tabs[2]?.layout.panes[0]?.ref).toEqual({ kind: "agent", sessionId: "agent-1" });
 
     let fullGroup = base;
-    for (let index = 0; index < 8; index += 1) {
-      fullGroup = addTab(fullGroup) ?? fullGroup;
+    for (let index = 0; index < 2; index += 1) {
+      fullGroup = addTab(fullGroup, 3) ?? fullGroup;
     }
-    expect(fullGroup.tabs).toHaveLength(9);
-    expect(addTab(fullGroup)).toBeNull();
+    expect(fullGroup.tabs).toHaveLength(3);
+    expect(addTab(fullGroup, 3)).toBeNull();
   });
 
   it("removes tabs and focuses an adjacent tab", () => {

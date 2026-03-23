@@ -60,6 +60,7 @@ interface StageViewProps {
   tabs: StageTab[];
   activeTabId: StageTabId | null;
   attentionTabIds: Set<StageTabId>;
+  maxStageTabs: number;
   layout: StageLayout | null;
   workspaceSessions: Map<string, WorkspaceSession>;
   sessionList: WorkspaceSession[];
@@ -173,6 +174,7 @@ function StageView({
   tabs,
   activeTabId,
   attentionTabIds,
+  maxStageTabs,
   layout,
   workspaceSessions,
   sessionList,
@@ -401,6 +403,7 @@ function StageView({
         tabs={tabs}
         activeTabId={activeTabId}
         attentionTabIds={attentionTabIds}
+        maxStageTabs={maxStageTabs}
         onSelectTab={onFocusTab}
         onCreateTab={onCreateTab}
         onCloseTab={onCloseTab}

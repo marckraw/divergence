@@ -45,12 +45,16 @@ export function buildSingleTabGroup(ref: StagePaneRef): StageTabGroup {
   };
 }
 
-export function addTab(group: StageTabGroup): StageTabGroup | null {
-  return addTabWithRef(group, { kind: "pending" });
+export function addTab(group: StageTabGroup, maxTabs: number = MAX_STAGE_TABS): StageTabGroup | null {
+  return addTabWithRef(group, { kind: "pending" }, maxTabs);
 }
 
-export function addTabWithRef(group: StageTabGroup, ref: StagePaneRef): StageTabGroup | null {
-  if (group.tabs.length >= MAX_STAGE_TABS) {
+export function addTabWithRef(
+  group: StageTabGroup,
+  ref: StagePaneRef,
+  maxTabs: number = MAX_STAGE_TABS,
+): StageTabGroup | null {
+  if (group.tabs.length >= maxTabs) {
     return null;
   }
 
