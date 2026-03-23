@@ -18,20 +18,20 @@ import type { EditorThemeId } from "./editorThemes.pure";
 import { getLanguageKind } from "./languageDetection.pure";
 
 const divergenceDarkPalette = {
-  background: "#121318",
-  panel: "#171922",
-  gutter: "#161820",
-  activeLine: "#1b1f29",
-  border: "#2a2f3a",
-  text: "#d8dee9",
-  subtext: "#7f8797",
-  cursor: "#f9e2af",
-  selection: "#3b426133",
-  selectionFocused: "#4c566a59",
-  searchMatch: "#f9e2af22",
-  searchMatchSelected: "#f9e2af40",
-  bracketMatch: "#89b4fa26",
-  invalidBackground: "#f38ba81f",
+  background: "#1b1d23",
+  panel: "#1f2330",
+  gutter: "#191c24",
+  activeLine: "#222735",
+  border: "#2c3242",
+  text: "#c0caf5",
+  subtext: "#6b7394",
+  cursor: "#7aa2f7",
+  selection: "#2e3c642e",
+  selectionFocused: "#33467c4a",
+  searchMatch: "#ff9e6420",
+  searchMatchSelected: "#ff9e6440",
+  bracketMatch: "#7aa2f726",
+  invalidBackground: "#f7768e22",
 };
 
 const divergenceLightPalette = {
@@ -52,25 +52,25 @@ const divergenceLightPalette = {
 };
 
 const syntaxTheme = HighlightStyle.define([
-  { tag: t.keyword, color: "#cba6f7", fontWeight: "600" },
-  { tag: [t.name, t.deleted, t.character, t.macroName, t.variableName], color: "#d8dee9" },
-  { tag: t.propertyName, color: "#89b4fa" },
-  { tag: [t.function(t.variableName), t.labelName], color: "#f9e2af" },
-  { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: "#f5c2e7" },
-  { tag: [t.definition(t.name), t.separator, t.punctuation], color: "#9399b2" },
-  { tag: [t.typeName, t.className], color: "#94e2d5" },
-  { tag: [t.number, t.bool, t.null, t.atom, t.literal, t.unit], color: "#fab387" },
-  { tag: [t.operator], color: "#89dceb" },
-  { tag: [t.string, t.special(t.string)], color: "#a6e3a1" },
-  { tag: [t.regexp, t.escape, t.link], color: "#89dceb" },
-  { tag: [t.meta, t.comment], color: "#6c7086", fontStyle: "italic" },
-  { tag: t.tagName, color: "#f38ba8" },
-  { tag: t.attributeName, color: "#f9e2af" },
-  { tag: t.heading, color: "#89b4fa", fontWeight: "600" },
+  { tag: [t.keyword, t.moduleKeyword, t.controlKeyword, t.definitionKeyword], color: "#bb9af7", fontWeight: "600" },
+  { tag: [t.name, t.deleted, t.character, t.macroName, t.variableName, t.labelName], color: "#c0caf5" },
+  { tag: t.propertyName, color: "#73daca" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#7aa2f7" },
+  { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: "#7dcfff" },
+  { tag: [t.definition(t.name), t.separator, t.punctuation], color: "#9aa5ce" },
+  { tag: [t.typeName, t.className, t.namespace], color: "#2ac3de" },
+  { tag: [t.number, t.bool, t.null, t.atom, t.literal, t.unit], color: "#ff9e64" },
+  { tag: [t.operator], color: "#89ddff" },
+  { tag: [t.string, t.special(t.string)], color: "#9ece6a" },
+  { tag: [t.regexp, t.escape, t.link], color: "#b4f9f8" },
+  { tag: [t.meta, t.comment], color: "#565f89", fontStyle: "italic" },
+  { tag: t.tagName, color: "#f7768e" },
+  { tag: t.attributeName, color: "#bb9af7" },
+  { tag: t.heading, color: "#7aa2f7", fontWeight: "600" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strong, fontWeight: "700" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: t.invalid, color: "#f38ba8", backgroundColor: divergenceDarkPalette.invalidBackground },
+  { tag: t.invalid, color: "#f7768e", backgroundColor: divergenceDarkPalette.invalidBackground },
 ]);
 
 const divergenceTheme = EditorView.theme(
@@ -110,7 +110,7 @@ const divergenceTheme = EditorView.theme(
     },
     ".cm-nonmatchingBracket": {
       backgroundColor: divergenceDarkPalette.invalidBackground,
-      color: "#f38ba8",
+      color: "#f7768e",
     },
     ".cm-searchMatch": {
       backgroundColor: divergenceDarkPalette.searchMatch,
@@ -120,8 +120,8 @@ const divergenceTheme = EditorView.theme(
       backgroundColor: divergenceDarkPalette.searchMatchSelected,
     },
     ".cm-selectionMatch": {
-      backgroundColor: "#89b4fa1f",
-      outline: "1px solid #89b4fa2f",
+      backgroundColor: "#73daca1c",
+      outline: "1px solid #73daca30",
     },
     ".cm-panels": {
       backgroundColor: divergenceDarkPalette.panel,
