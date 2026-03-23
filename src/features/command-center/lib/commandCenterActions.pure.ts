@@ -1,77 +1,53 @@
-import type { AgentProvider, WorkspaceSession } from "../../../../entities";
+import type { AgentProvider, WorkspaceSession } from "../../../entities";
 import {
   getWorkspaceSessionTargetId,
   getWorkspaceSessionTargetType,
-} from "../../../../entities";
-import { getAgentProviderLabel } from "../../../../shared";
+} from "../../../entities";
+import { getAgentProviderLabel } from "../../../shared";
+import type { CreateAction } from "../ui/CommandCenter.types";
 
-export interface PendingStagePaneCreateAction {
-  id: string;
-  label: string;
-  description: string;
-  targetType: "project" | "divergence" | "workspace" | "workspace_divergence";
-  targetId: number;
-  sessionKind: "terminal" | "agent";
-  provider?: AgentProvider;
-}
-
-export interface PendingStagePaneCreateContext {
-  title: string;
-  description: string;
-  actions: PendingStagePaneCreateAction[];
-}
-
-function getTargetCopy(targetType: PendingStagePaneCreateAction["targetType"]): {
-  title: string;
-  description: string;
+function getTargetCopy(targetType: CreateAction["targetType"]): {
   terminalLabel: string;
   terminalDescription: string;
 } {
   switch (targetType) {
     case "divergence":
       return {
-        title: "Create from this divergence",
-        description: "Open another session for the same divergence in this pane.",
         terminalLabel: "New Session",
         terminalDescription: "Create another terminal session for this divergence.",
       };
     case "workspace":
       return {
-        title: "Create from this workspace",
-        description: "Open another session for the same workspace in this pane.",
         terminalLabel: "Open Terminal",
         terminalDescription: "Open the workspace terminal in this pane.",
       };
     case "workspace_divergence":
       return {
-        title: "Create from this workspace divergence",
-        description: "Open another session for the same workspace divergence in this pane.",
         terminalLabel: "Open Terminal",
         terminalDescription: "Open the workspace divergence terminal in this pane.",
       };
     case "project":
     default:
       return {
-        title: "Create from this project",
-        description: "Open another session for the same project in this pane.",
         terminalLabel: "New Session",
         terminalDescription: "Create another terminal session for this project.",
       };
   }
 }
 
-export function buildPendingStagePaneCreateContext(
+export function buildCommandCenterCreateActions(
   sourceSession: WorkspaceSession | null,
   agentProviders: AgentProvider[],
-): PendingStagePaneCreateContext | null {
+): CreateAction[] {
   if (!sourceSession) {
-    return null;
+    return [];
   }
 
   const targetType = getWorkspaceSessionTargetType(sourceSession);
   const targetId = getWorkspaceSessionTargetId(sourceSession);
   const copy = getTargetCopy(targetType);
-  const actions: PendingStagePaneCreateAction[] = [
+
+  return [
     {
       id: `terminal:${targetType}:${targetId}`,
       label: copy.terminalLabel,
@@ -90,10 +66,4 @@ export function buildPendingStagePaneCreateContext(
       provider,
     })),
   ];
-
-  return {
-    title: copy.title,
-    description: copy.description,
-    actions,
-  };
 }

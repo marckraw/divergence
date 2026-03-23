@@ -67,7 +67,7 @@ interface UseStageTabGroupResult {
   handleSelectSession: (sessionId: string) => boolean;
   handleRevealSession: (sessionId: string) => boolean;
   handleFocusPane: (paneId: StagePaneId) => void;
-  handleSplitPane: (orientation: StageLayoutOrientation, ref?: StagePaneRef) => void;
+  handleSplitPane: (orientation: StageLayoutOrientation, ref?: StagePaneRef) => StagePaneId | null;
   handleReplacePaneRef: (paneId: StagePaneId, ref: StagePaneRef) => void;
   handleResizePanes: (paneSizes: number[]) => void;
   handleResizeAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
@@ -496,7 +496,7 @@ export function useStageTabGroup({
     );
   }, [commitTabGroup, setActiveSessionId]);
 
-  const handleSplitPane = useCallback((orientation: StageLayoutOrientation, ref: StagePaneRef = { kind: "pending" }) => {
+  const handleSplitPane = useCallback((orientation: StageLayoutOrientation, ref: StagePaneRef = { kind: "pending" }): StagePaneId | null => {
     const currentGroup = tabGroupRef.current;
     if (!currentGroup) {
       const activeRef = buildStagePaneRef(activeSessionId ? workspaceSessions.get(activeSessionId) : null);
@@ -504,17 +504,18 @@ export function useStageTabGroup({
         const nextRef = resolvePendingRef(ref, activeSessionId);
         const singleTabGroup = buildSingleTabGroup(activeRef);
         const singleTab = getActiveTab(singleTabGroup);
+        const splitLayout = buildSplitLayout(singleTab.layout, nextRef, orientation);
         commitTabGroup(
-          updateTabLayout(singleTabGroup, singleTab.id, buildSplitLayout(singleTab.layout, nextRef, orientation)),
+          updateTabLayout(singleTabGroup, singleTab.id, splitLayout),
           nextRef.kind === "pending" ? null : nextRef.sessionId,
         );
-        return;
+        return splitLayout.focusedPaneId;
       }
 
       if (ref.kind !== "pending") {
         commitTabGroup(buildSingleTabGroup(ref), ref.sessionId);
       }
-      return;
+      return null;
     }
 
     const currentTab = getActiveTab(currentGroup);
@@ -526,13 +527,14 @@ export function useStageTabGroup({
     const nextLayout = buildSplitLayout(currentTab.layout, nextRef, orientation);
     if (nextLayout === currentTab.layout) {
       setActiveSessionId(getFocusedSessionIdFromLayout(currentTab.layout));
-      return;
+      return null;
     }
 
     commitTabGroup(
       updateTabLayout(currentGroup, currentTab.id, nextLayout),
       getFocusedSessionIdFromLayout(nextLayout),
     );
+    return nextLayout.focusedPaneId;
   }, [activeSessionId, commitTabGroup, setActiveSessionId, workspaceSessions]);
 
   const handleReplacePaneRef = useCallback((paneId: StagePaneId, ref: StagePaneRef) => {

@@ -1,20 +1,21 @@
 import { useCallback, useEffect } from "react";
 import type { StageLayout, StageTabId, WorkspaceSession } from "../../entities";
 import { isAgentSession } from "../../entities";
+import type { CommandCenterMode } from "../../features/command-center";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../features/work-sidebar";
 import { resolveAppShortcut } from "../lib/appShortcuts.pure";
+import type { StagePaneId } from "../../entities";
 
 interface UseAppKeyboardShortcutsParams {
   sessions: Map<string, WorkspaceSession>;
   activeSessionId: string | null;
   stageLayout: StageLayout | null;
   stageTabIds: StageTabId[];
-  quickSwitcherMode: "replace" | "reveal";
   handleCreateTab: () => void;
   handleFocusStageTab: (tabId: StageTabId) => void;
   handleFocusNextStageTab: () => void;
   handleFocusPreviousStageTab: () => void;
-  handleSplitStage: (orientation: "vertical" | "horizontal") => void;
+  handleSplitStage: (orientation: "vertical" | "horizontal") => StagePaneId | null;
   handleCloseFocusedStagePane: () => void;
   handleReconnectSession: (sessionId: string) => void;
   focusPreviousStagePane: () => void;
@@ -24,9 +25,9 @@ interface UseAppKeyboardShortcutsParams {
   setIsSidebarOpen: (open: boolean) => void;
   setSidebarMode: React.Dispatch<React.SetStateAction<WorkSidebarMode>>;
   setWorkTab: (tab: WorkSidebarTab) => void;
-  setShowQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
-  setQuickSwitcherMode: React.Dispatch<React.SetStateAction<"replace" | "reveal">>;
-  setShowFileQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
+  setCommandCenterMode: React.Dispatch<React.SetStateAction<CommandCenterMode | null>>;
+  focusedPaneId: StagePaneId;
+  activeSessionPath: string;
   setShowSettings: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -35,7 +36,6 @@ export function useAppKeyboardShortcuts({
   activeSessionId,
   stageLayout,
   stageTabIds,
-  quickSwitcherMode,
   handleCreateTab,
   handleFocusStageTab,
   handleFocusNextStageTab,
@@ -50,9 +50,9 @@ export function useAppKeyboardShortcuts({
   setIsSidebarOpen,
   setSidebarMode,
   setWorkTab,
-  setShowQuickSwitcher,
-  setQuickSwitcherMode,
-  setShowFileQuickSwitcher,
+  setCommandCenterMode,
+  focusedPaneId,
+  activeSessionPath,
   setShowSettings,
 }: UseAppKeyboardShortcutsParams): void {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -74,15 +74,23 @@ export function useAppKeyboardShortcuts({
 
     switch (action.type) {
       case "toggle_quick_switcher":
-        setQuickSwitcherMode("replace");
-        setShowQuickSwitcher((prev) => (quickSwitcherMode === "replace" ? !prev : true));
+        setCommandCenterMode((prev) =>
+          prev?.kind === "replace" ? null : { kind: "replace", targetPaneId: focusedPaneId },
+        );
         return;
       case "toggle_quick_switcher_reveal":
-        setQuickSwitcherMode("reveal");
-        setShowQuickSwitcher((prev) => (quickSwitcherMode === "reveal" ? !prev : true));
+        setCommandCenterMode((prev) =>
+          prev?.kind === "reveal" ? null : { kind: "reveal" },
+        );
         return;
       case "toggle_file_quick_switcher":
-        setShowFileQuickSwitcher(prev => !prev);
+        setCommandCenterMode((prev) =>
+          prev?.kind === "open-file" ? null : {
+            kind: "open-file",
+            targetPaneId: focusedPaneId,
+            rootPath: activeSessionPath,
+          },
+        );
         return;
       case "open_work_inbox":
         setIsSidebarOpen(true);
@@ -99,8 +107,7 @@ export function useAppKeyboardShortcuts({
         toggleSidebar();
         return;
       case "close_overlays":
-        setShowQuickSwitcher(false);
-        setShowFileQuickSwitcher(false);
+        setCommandCenterMode(null);
         setShowSettings(false);
         return;
       case "close_focused_pane":
@@ -109,11 +116,19 @@ export function useAppKeyboardShortcuts({
       case "new_tab":
         handleCreateTab();
         return;
-      case "split_terminal":
+      case "split_terminal": {
         if (stageLayout || activeSessionId) {
-          handleSplitStage(action.orientation);
+          const newPaneId = handleSplitStage(action.orientation);
+          if (newPaneId) {
+            setCommandCenterMode({
+              kind: "open-in-pane",
+              targetPaneId: newPaneId,
+              sourceSessionId: activeSessionId ?? undefined,
+            });
+          }
         }
         return;
+      }
       case "reconnect_terminal":
         if (activeSessionId) {
           const activeSession = sessions.get(activeSessionId);
@@ -152,7 +167,6 @@ export function useAppKeyboardShortcuts({
     activeSessionId,
     stageLayout,
     stageTabIds,
-    quickSwitcherMode,
     handleCreateTab,
     handleFocusStageTab,
     handleFocusNextStageTab,
@@ -167,9 +181,9 @@ export function useAppKeyboardShortcuts({
     setIsSidebarOpen,
     setSidebarMode,
     setWorkTab,
-    setShowQuickSwitcher,
-    setQuickSwitcherMode,
-    setShowFileQuickSwitcher,
+    setCommandCenterMode,
+    focusedPaneId,
+    activeSessionPath,
     setShowSettings,
   ]);
 
