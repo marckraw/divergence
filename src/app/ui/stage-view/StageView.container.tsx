@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 import type {
+  AgentProvider,
   Divergence,
   Project,
   SplitSessionState,
@@ -44,6 +45,10 @@ import AgentStagePane from "./AgentStagePane.container";
 import PendingStagePane from "./PendingStagePane.container";
 import StageSidebar from "./StageSidebar.container";
 import TerminalStagePane from "./TerminalStagePane.container";
+import {
+  buildPendingStagePaneCreateContext,
+  type PendingStagePaneCreateAction,
+} from "./lib/pendingStagePane.pure";
 
 interface StageViewProps {
   tabs: StageTab[];
@@ -57,6 +62,7 @@ interface StageViewProps {
   lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
   dismissedAttentionKeyBySessionId: Map<string, string>;
   projects: Project[];
+  agentProviders: AgentProvider[];
   terminalSessions: TerminalSession[];
   divergencesByProject: Map<number, Divergence[]>;
   workspaceMembersByWorkspaceId: Map<number, WorkspaceMember[]>;
@@ -87,6 +93,7 @@ interface StageViewProps {
   onResetToSinglePane: (sessionId?: string | null) => void;
   onFocusPane: (paneId: StagePaneId) => void;
   onReplacePaneRef: (paneId: StagePaneId, ref: StagePaneRef) => void;
+  onCreatePendingSession: (paneId: StagePaneId, action: PendingStagePaneCreateAction) => void | Promise<void>;
   onClosePane: (paneId: StagePaneId) => void;
   onResizeStageAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
@@ -142,6 +149,7 @@ function StageView({
   lastViewedRuntimeEventAtMsBySessionId,
   dismissedAttentionKeyBySessionId,
   projects,
+  agentProviders,
   terminalSessions,
   divergencesByProject,
   workspaceMembersByWorkspaceId,
@@ -172,6 +180,7 @@ function StageView({
   onResetToSinglePane,
   onFocusPane,
   onReplacePaneRef,
+  onCreatePendingSession,
   onClosePane,
   onResizeStageAdjacentPanes,
   onStatusChange,
@@ -299,6 +308,26 @@ function StageView({
 
     return next;
   }, [layout, workspaceSessions]);
+
+  const pendingPaneCreateContextByPaneId = useMemo(() => {
+    const next = new Map<StagePaneId, ReturnType<typeof buildPendingStagePaneCreateContext>>();
+    if (!layout) {
+      return next;
+    }
+
+    for (const pane of layout.panes) {
+      if (pane.ref.kind !== "pending") {
+        continue;
+      }
+
+      const sourceSession = pane.ref.sourceSessionId
+        ? workspaceSessions.get(pane.ref.sourceSessionId) ?? null
+        : null;
+      next.set(pane.id, buildPendingStagePaneCreateContext(sourceSession, agentProviders));
+    }
+
+    return next;
+  }, [agentProviders, layout, workspaceSessions]);
 
   return (
     <main className="flex flex-1 min-w-0 h-full bg-main flex-col">
@@ -430,7 +459,11 @@ function StageView({
                         {pane.ref.kind === "pending" ? (
                           <PendingStagePane
                             sessions={sessionList}
+                            createContext={pendingPaneCreateContextByPaneId.get(pane.id) ?? null}
                             onSelectExistingSession={(sessionId) => handleSelectPendingSession(pane.id, sessionId)}
+                            onCreateSession={(action) => {
+                              void onCreatePendingSession(pane.id, action);
+                            }}
                             onClose={() => onClosePane(pane.id)}
                           />
                         ) : session && isTerminalSession(session) ? (

@@ -71,6 +71,7 @@ function SidebarPresentational({
   onSelectProject,
   onSelectDivergence,
   onSelectSession,
+  onRevealSession,
   onDismissSessionAttention,
   onCloseSession,
   onDeleteAgentSession,
@@ -373,7 +374,7 @@ function SidebarPresentational({
                       <Button
                         type="button"
                         className={`w-full justify-start gap-2 rounded-md px-2 py-2 text-left transition-colors ${getAttentionRowClass(attentionState, session.id === activeSessionId)}`}
-                        onClick={() => onSelectSession(session.id)}
+                        onClick={() => onRevealSession(session.id)}
                         variant="ghost"
                         size="sm"
                       >

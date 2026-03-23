@@ -43,6 +43,7 @@ import type {
   AgentProvider,
   Project,
   Divergence,
+  StagePaneId,
   StagePaneRef,
   StageTab,
   StageTabId,
@@ -84,6 +85,7 @@ import {
   buildWorkspaceTerminalSession,
 } from "./lib/sessionBuilder.pure";
 import StageView from "./ui/stage-view/StageView.container";
+import type { PendingStagePaneCreateAction } from "./ui/stage-view/lib/pendingStagePane.pure";
 
 function App() {
   const updater = useUpdater(true);
@@ -177,6 +179,29 @@ function App() {
     projects.forEach((project) => map.set(project.id, project));
     return map;
   }, [projects]);
+  const divergenceById = useMemo(() => {
+    const map = new Map<number, Divergence>();
+    divergencesByProject.forEach((divergences) => {
+      divergences.forEach((divergence) => {
+        map.set(divergence.id, divergence);
+      });
+    });
+    return map;
+  }, [divergencesByProject]);
+  const workspaceById = useMemo(() => {
+    const map = new Map<number, Workspace>();
+    workspaceList.forEach((workspace) => map.set(workspace.id, workspace));
+    return map;
+  }, [workspaceList]);
+  const workspaceDivergenceById = useMemo(() => {
+    const map = new Map<number, WorkspaceDivergence>();
+    workspaceDivergencesByWorkspaceId.forEach((workspaceDivergences) => {
+      workspaceDivergences.forEach((workspaceDivergence) => {
+        map.set(workspaceDivergence.id, workspaceDivergence);
+      });
+    });
+    return map;
+  }, [workspaceDivergencesByWorkspaceId]);
 
   // ── Session Management ──
   // Use a ref to break the circular dependency between useSessionManagement
@@ -197,6 +222,7 @@ function App() {
     statusBySessionRef,
     reconnectBySessionId,
     createSession,
+    createManualSession,
     handleSelectProject: handleSelectProjectRaw,
     handleSelectDivergence: handleSelectDivergenceRaw,
     handleCreateAdditionalSession,
@@ -589,7 +615,7 @@ function App() {
     [tabGroup],
   );
 
-  const handleCreateAgentSession = async (input: {
+  const createTargetedAgentSession = useCallback(async (input: {
     provider: AgentProvider;
     type: "project" | "divergence" | "workspace" | "workspace_divergence";
     item: Project | Divergence | Workspace | WorkspaceDivergence;
@@ -625,8 +651,21 @@ function App() {
       name: `${input.item.name} • ${input.provider}${conversationSuffix}`,
       path,
     });
+    return session;
+  }, [
+    agentRuntimeCapabilities,
+    agentSessions,
+    createAgentSession,
+  ]);
+
+  const handleCreateAgentSession = useCallback(async (input: {
+    provider: AgentProvider;
+    type: "project" | "divergence" | "workspace" | "workspace_divergence";
+    item: Project | Divergence | Workspace | WorkspaceDivergence;
+  }) => {
+    const session = await createTargetedAgentSession(input);
     setActiveSessionId(session.id);
-  };
+  }, [createTargetedAgentSession, setActiveSessionId]);
 
   const handleSelectWorkspaceSession = async (sessionId: string) => {
     if (workspaceSessions.has(sessionId)) {
@@ -758,6 +797,29 @@ function App() {
     setSidebarMode,
   ]);
 
+  const handleRevealWorkspaceSession = useCallback(async (sessionId: string) => {
+    const session = sidebarSessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+
+    const ref = await resolveQuickSwitcherSelectionRef("session", session);
+    if (!ref || ref.kind === "pending") {
+      return;
+    }
+
+    setSidebarMode("projects");
+    if (!handleRevealStageSession(ref.sessionId)) {
+      handleCreateStageTabWithRef(ref);
+    }
+  }, [
+    handleCreateStageTabWithRef,
+    handleRevealStageSession,
+    resolveQuickSwitcherSelectionRef,
+    setSidebarMode,
+    sidebarSessions,
+  ]);
+
   const handleRevealQuickSwitcherSelection = useCallback(async (
     type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence" | "stage_tab",
     item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence | StageTab,
@@ -787,6 +849,129 @@ function App() {
     handleRevealStageSession,
     resolveQuickSwitcherSelectionRef,
     setSidebarMode,
+  ]);
+
+  const handleCreatePendingPaneSession = useCallback(async (
+    paneId: StagePaneId,
+    action: PendingStagePaneCreateAction,
+  ) => {
+    let ref: StagePaneRef | null = null;
+
+    if (action.sessionKind === "terminal") {
+      switch (action.targetType) {
+        case "project": {
+          const project = projectById.get(action.targetId);
+          if (!project) {
+            return;
+          }
+          const session = createManualSession("project", project);
+          ref = { kind: "terminal", sessionId: session.id };
+          break;
+        }
+        case "divergence": {
+          const divergence = divergenceById.get(action.targetId);
+          if (!divergence) {
+            return;
+          }
+          const session = createManualSession("divergence", divergence);
+          ref = { kind: "terminal", sessionId: session.id };
+          break;
+        }
+        case "workspace": {
+          const workspace = workspaceById.get(action.targetId);
+          if (!workspace) {
+            return;
+          }
+          ref = { kind: "terminal", sessionId: ensureWorkspaceSessionId(workspace) };
+          break;
+        }
+        case "workspace_divergence": {
+          const workspaceDivergence = workspaceDivergenceById.get(action.targetId);
+          if (!workspaceDivergence) {
+            return;
+          }
+          ref = { kind: "terminal", sessionId: ensureWorkspaceDivergenceSessionId(workspaceDivergence) };
+          break;
+        }
+      }
+    } else {
+      if (!action.provider) {
+        return;
+      }
+
+      switch (action.targetType) {
+        case "project": {
+          const project = projectById.get(action.targetId);
+          if (!project) {
+            return;
+          }
+          const session = await createTargetedAgentSession({
+            provider: action.provider,
+            type: "project",
+            item: project,
+          });
+          ref = { kind: "agent", sessionId: session.id };
+          break;
+        }
+        case "divergence": {
+          const divergence = divergenceById.get(action.targetId);
+          if (!divergence) {
+            return;
+          }
+          const session = await createTargetedAgentSession({
+            provider: action.provider,
+            type: "divergence",
+            item: divergence,
+          });
+          ref = { kind: "agent", sessionId: session.id };
+          break;
+        }
+        case "workspace": {
+          const workspace = workspaceById.get(action.targetId);
+          if (!workspace) {
+            return;
+          }
+          const session = await createTargetedAgentSession({
+            provider: action.provider,
+            type: "workspace",
+            item: workspace,
+          });
+          ref = { kind: "agent", sessionId: session.id };
+          break;
+        }
+        case "workspace_divergence": {
+          const workspaceDivergence = workspaceDivergenceById.get(action.targetId);
+          if (!workspaceDivergence) {
+            return;
+          }
+          const session = await createTargetedAgentSession({
+            provider: action.provider,
+            type: "workspace_divergence",
+            item: workspaceDivergence,
+          });
+          ref = { kind: "agent", sessionId: session.id };
+          break;
+        }
+      }
+    }
+
+    if (!ref) {
+      return;
+    }
+
+    setSidebarMode("projects");
+    handleReplaceStagePaneRef(paneId, ref);
+  }, [
+    createManualSession,
+    createTargetedAgentSession,
+    divergenceById,
+    ensureWorkspaceDivergenceSessionId,
+    ensureWorkspaceSessionId,
+    handleReplaceStagePaneRef,
+    projectById,
+    setSidebarMode,
+    workspaceById,
+    workspaceDivergenceById,
   ]);
 
   const handleCloseWorkspaceSession = (sessionId: string) => {
@@ -1132,6 +1317,9 @@ function App() {
           onSelectSession={(sessionId) => {
             void handleSelectWorkspaceSession(sessionId);
           }}
+          onRevealSession={(sessionId) => {
+            void handleRevealWorkspaceSession(sessionId);
+          }}
           onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
           onDeleteAgentSession={handleDeleteAgentConversation}
@@ -1248,6 +1436,7 @@ function App() {
           lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
           dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           projects={projects}
+          agentProviders={agentProviders}
           terminalSessions={Array.from(sessions.values())}
           divergencesByProject={divergencesByProject}
           workspaceMembersByWorkspaceId={membersByWorkspaceId}
@@ -1280,6 +1469,7 @@ function App() {
           onResetToSinglePane={handleResetStageToSinglePane}
           onFocusPane={handleFocusStagePane}
           onReplacePaneRef={handleReplaceStagePaneRef}
+          onCreatePendingSession={handleCreatePendingPaneSession}
           onClosePane={handleCloseStagePane}
           onResizeStageAdjacentPanes={handleResizeStageAdjacentPanes}
           onStatusChange={handleSessionStatusChange}
