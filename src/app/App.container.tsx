@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import Sidebar from "../widgets/sidebar";
 import { InboxPanel } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
@@ -36,6 +37,7 @@ import {
   ModalShell,
   ProgressBar,
   TextInput,
+  Toaster,
   useAppSettings,
   useUpdater,
 } from "../shared";
@@ -609,11 +611,15 @@ function App() {
     setActiveSessionId,
     isRestoreReady: hasRestoredTabs && hasLoadedInitialSessions,
     restoreTabsOnRestart: appSettings.restoreTabsOnRestart,
+    maxStageTabs: appSettings.maxStageTabs,
   });
   const stageTabIds = useMemo(
     () => tabGroup?.tabs.map((tab) => tab.id) ?? [],
     [tabGroup],
   );
+  const notifyMaxStageTabsReached = useCallback(() => {
+    toast.info(`Layout tabs are limited to ${appSettings.maxStageTabs}. Adjust the limit in Settings > General.`);
+  }, [appSettings.maxStageTabs]);
 
   const createTargetedAgentSession = useCallback(async (input: {
     provider: AgentProvider;
@@ -789,10 +795,14 @@ function App() {
     }
 
     setSidebarMode("projects");
-    handleCreateStageTabWithRef(ref);
+    if (!handleCreateStageTabWithRef(ref)) {
+      notifyMaxStageTabsReached();
+      return;
+    }
     setShowQuickSwitcher(false);
   }, [
     handleCreateStageTabWithRef,
+    notifyMaxStageTabsReached,
     resolveQuickSwitcherSelectionRef,
     setSidebarMode,
   ]);
@@ -810,11 +820,14 @@ function App() {
 
     setSidebarMode("projects");
     if (!handleRevealStageSession(ref.sessionId)) {
-      handleCreateStageTabWithRef(ref);
+      if (!handleCreateStageTabWithRef(ref)) {
+        notifyMaxStageTabsReached();
+      }
     }
   }, [
     handleCreateStageTabWithRef,
     handleRevealStageSession,
+    notifyMaxStageTabsReached,
     resolveQuickSwitcherSelectionRef,
     setSidebarMode,
     sidebarSessions,
@@ -1080,7 +1093,9 @@ function App() {
     quickSwitcherMode,
     handleCreateTab: () => {
       setSidebarMode("projects");
-      handleCreateStageTab();
+      if (!handleCreateStageTab()) {
+        notifyMaxStageTabsReached();
+      }
     },
     handleFocusStageTab: (tabId) => {
       setSidebarMode("projects");
@@ -1428,6 +1443,7 @@ function App() {
           tabs={tabGroup?.tabs ?? []}
           activeTabId={activeTab?.id ?? null}
           attentionTabIds={stageTabAttentionIds}
+          maxStageTabs={appSettings.maxStageTabs}
           layout={stageLayout}
           workspaceSessions={workspaceSessions}
           sessionList={workspaceSessionList}
@@ -1453,7 +1469,11 @@ function App() {
           isRightPanelOpen={isRightPanelOpen}
           onToggleSidebar={toggleSidebar}
           onToggleRightPanel={toggleRightPanel}
-          onCreateTab={() => handleCreateStageTab()}
+          onCreateTab={() => {
+            if (!handleCreateStageTab()) {
+              notifyMaxStageTabsReached();
+            }
+          }}
           onCloseTab={handleCloseStageTab}
           onCloseOtherTabs={handleCloseOtherStageTabs}
           onFocusTab={handleFocusStageTab}
@@ -1716,6 +1736,7 @@ function App() {
           </div>
         </div>
       )}
+      <Toaster />
     </div>
   );
 }

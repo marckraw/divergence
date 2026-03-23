@@ -8,6 +8,17 @@ export const STAGE_TAB_IDS = [
   "stage-tab-7",
   "stage-tab-8",
   "stage-tab-9",
+  "stage-tab-10",
+  "stage-tab-11",
+  "stage-tab-12",
+  "stage-tab-13",
+  "stage-tab-14",
+  "stage-tab-15",
+  "stage-tab-16",
+  "stage-tab-17",
+  "stage-tab-18",
+  "stage-tab-19",
+  "stage-tab-20",
 ] as const;
 
 export type StageTabId = (typeof STAGE_TAB_IDS)[number];

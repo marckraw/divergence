@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   DEFAULT_APP_SETTINGS,
+  normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
   loadAppSettings,
   refreshAgentRuntimeCapabilities,
@@ -80,6 +81,7 @@ function SettingsContainer({
     const normalized = {
       ...settings,
       tmuxHistoryLimit: normalizeTmuxHistoryLimit(settings.tmuxHistoryLimit),
+      maxStageTabs: normalizeMaxStageTabs(settings.maxStageTabs),
     };
     const saved = saveAppSettings(normalized);
     broadcastAppSettings(saved);

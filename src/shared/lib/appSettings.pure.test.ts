@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_APP_SETTINGS,
+  DEFAULT_MAX_STAGE_TABS,
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeAppSettings,
   normalizeCustomAgentModels,
+  normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
 } from "./appSettings.pure";
 
@@ -17,6 +19,19 @@ describe("normalizeTmuxHistoryLimit", () => {
     expect(normalizeTmuxHistoryLimit(1200.6)).toBe(1201);
     expect(normalizeTmuxHistoryLimit(100)).toBe(1000);
     expect(normalizeTmuxHistoryLimit(999999)).toBe(500000);
+  });
+});
+
+describe("normalizeMaxStageTabs", () => {
+  it("uses fallback for invalid values", () => {
+    expect(normalizeMaxStageTabs("abc", 12)).toBe(12);
+    expect(normalizeMaxStageTabs(undefined)).toBe(DEFAULT_MAX_STAGE_TABS);
+  });
+
+  it("rounds and clamps values", () => {
+    expect(normalizeMaxStageTabs(11.6)).toBe(12);
+    expect(normalizeMaxStageTabs(0)).toBe(1);
+    expect(normalizeMaxStageTabs(999)).toBe(20);
   });
 });
 
@@ -175,6 +190,18 @@ describe("normalizeAppSettings", () => {
   it("defaults restoreTabsOnRestart to false", () => {
     const normalized = normalizeAppSettings();
     expect(normalized.restoreTabsOnRestart).toBe(false);
+  });
+
+  it("defaults maxStageTabs to 20", () => {
+    const normalized = normalizeAppSettings();
+    expect(normalized.maxStageTabs).toBe(20);
+  });
+
+  it("normalizes maxStageTabs within bounds", () => {
+    expect(normalizeAppSettings({ maxStageTabs: 17 }).maxStageTabs).toBe(17);
+    expect(normalizeAppSettings({ maxStageTabs: 0 }).maxStageTabs).toBe(1);
+    expect(normalizeAppSettings({ maxStageTabs: 999 }).maxStageTabs).toBe(20);
+    expect(normalizeAppSettings({ maxStageTabs: "12" as never }).maxStageTabs).toBe(12);
   });
 
   it("preserves boolean restoreTabsOnRestart", () => {
