@@ -14,6 +14,7 @@ interface StageTabBarPresentationalProps {
   activeTabId: StageTabId | null;
   attentionTabIds: Set<StageTabId>;
   canCreateTab: boolean;
+  maxStageTabs: number;
   editingTabId: StageTabId | null;
   editingLabel: string;
   onSelectTab: (tabId: StageTabId) => void;
@@ -31,6 +32,7 @@ function StageTabBarPresentational({
   activeTabId,
   attentionTabIds,
   canCreateTab,
+  maxStageTabs,
   editingTabId,
   editingLabel,
   onSelectTab,
@@ -139,7 +141,7 @@ function StageTabBarPresentational({
         <ToolbarButton
           onClick={onCreateTab}
           disabled={!canCreateTab}
-          title={canCreateTab ? "Create a new layout tab (Cmd+T)" : "Maximum of 9 layout tabs"}
+          title={canCreateTab ? "Create a new layout tab (Cmd+T)" : `Maximum of ${maxStageTabs} layout tabs`}
         >
           +
         </ToolbarButton>

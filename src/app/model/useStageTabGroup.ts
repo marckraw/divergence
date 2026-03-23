@@ -47,6 +47,7 @@ interface UseStageTabGroupParams {
   setActiveSessionId: Dispatch<SetStateAction<string | null>>;
   isRestoreReady: boolean;
   restoreTabsOnRestart: boolean;
+  maxStageTabs: number;
 }
 
 interface UseStageTabGroupResult {
@@ -54,8 +55,8 @@ interface UseStageTabGroupResult {
   activeTab: StageTab | null;
   layout: StageLayout | null;
   focusedPane: StagePane | null;
-  handleCreateTab: () => void;
-  handleCreateTabWithRef: (ref: StagePaneRef) => void;
+  handleCreateTab: () => boolean;
+  handleCreateTabWithRef: (ref: StagePaneRef) => boolean;
   handleCloseTab: (tabId: StageTabId) => void;
   handleCloseOtherTabs: (tabId: StageTabId) => void;
   handleFocusTab: (tabId: StageTabId) => void;
@@ -190,6 +191,7 @@ export function useStageTabGroup({
   setActiveSessionId,
   isRestoreReady,
   restoreTabsOnRestart,
+  maxStageTabs,
 }: UseStageTabGroupParams): UseStageTabGroupResult {
   const [tabGroupState, setTabGroupState] = useState<StageTabGroup | null>(null);
   const tabGroupRef = useRef<StageTabGroup | null>(tabGroupState);
@@ -330,26 +332,28 @@ export function useStageTabGroup({
   const handleCreateTab = useCallback(() => {
     const currentGroup = tabGroupRef.current;
     const nextGroup = currentGroup
-      ? addTab(currentGroup)
+      ? addTab(currentGroup, maxStageTabs)
       : buildSingleTabGroup({ kind: "pending" });
     if (!nextGroup) {
-      return;
+      return false;
     }
 
     commitTabGroup(nextGroup, null);
-  }, [commitTabGroup]);
+    return true;
+  }, [commitTabGroup, maxStageTabs]);
 
   const handleCreateTabWithRef = useCallback((ref: StagePaneRef) => {
     const currentGroup = tabGroupRef.current;
     const nextGroup = currentGroup
-      ? addTabWithRef(currentGroup, ref)
+      ? addTabWithRef(currentGroup, ref, maxStageTabs)
       : buildSingleTabGroup(ref);
     if (!nextGroup) {
-      return;
+      return false;
     }
 
     commitTabGroup(nextGroup, ref.kind === "pending" ? null : ref.sessionId);
-  }, [commitTabGroup]);
+    return true;
+  }, [commitTabGroup, maxStageTabs]);
 
   const handleCloseTab = useCallback((tabId: StageTabId) => {
     const currentGroup = tabGroupRef.current;

@@ -10,6 +10,9 @@ import type { AgentRuntimeProvider } from "../api/agentRuntime.types";
 export const SETTINGS_STORAGE_KEY = "divergence-settings";
 export const SETTINGS_UPDATED_EVENT = "divergence-settings-updated";
 export const DEFAULT_TMUX_HISTORY_LIMIT = 50000;
+export const DEFAULT_MAX_STAGE_TABS = 20;
+export const MIN_MAX_STAGE_TABS = 1;
+export const MAX_MAX_STAGE_TABS = 20;
 const MIN_TMUX_HISTORY_LIMIT = 1000;
 const MAX_TMUX_HISTORY_LIMIT = 500000;
 const AGENT_RUNTIME_PROVIDERS: AgentRuntimeProvider[] = ["claude", "codex", "cursor", "gemini"];
@@ -22,6 +25,7 @@ export interface AppSettings {
   editorThemeForLightMode: EditorThemeId;
   editorThemeForDarkMode: EditorThemeId;
   tmuxHistoryLimit: number;
+  maxStageTabs: number;
   restoreTabsOnRestart: boolean;
   divergenceBasePath?: string;
   agentCommandClaude: string;
@@ -43,6 +47,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   editorThemeForLightMode: DEFAULT_EDITOR_THEME_LIGHT,
   editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
+  maxStageTabs: DEFAULT_MAX_STAGE_TABS,
   restoreTabsOnRestart: false,
   divergenceBasePath: "",
   agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
@@ -104,6 +109,19 @@ export function normalizeTmuxHistoryLimit(
   }
   const rounded = Math.round(parsed);
   return Math.min(Math.max(rounded, MIN_TMUX_HISTORY_LIMIT), MAX_TMUX_HISTORY_LIMIT);
+}
+
+export function normalizeMaxStageTabs(
+  value: unknown,
+  fallback: number = DEFAULT_MAX_STAGE_TABS,
+): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const rounded = Math.round(parsed);
+  return Math.min(Math.max(rounded, MIN_MAX_STAGE_TABS), MAX_MAX_STAGE_TABS);
 }
 
 function normalizeCustomAgentModelList(value: unknown): string[] {
@@ -200,6 +218,7 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     ...DEFAULT_APP_SETTINGS,
     ...input,
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
+    maxStageTabs: normalizeMaxStageTabs(input?.maxStageTabs),
     restoreTabsOnRestart,
     editorThemeForLightMode,
     editorThemeForDarkMode,
