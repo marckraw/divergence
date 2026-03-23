@@ -1167,14 +1167,39 @@ function App() {
 
   const sourceSessionForCommandCenter = useMemo(() => {
     if (!commandCenterMode) return null;
+
+    // Explicit source for open-in-pane
     if (commandCenterMode.kind === "open-in-pane" && commandCenterMode.sourceSessionId) {
       return workspaceSessions.get(commandCenterMode.sourceSessionId) ?? null;
     }
+
+    // Active session (focused pane has a session)
     if (activeSessionId) {
-      return workspaceSessions.get(activeSessionId) ?? null;
+      const session = workspaceSessions.get(activeSessionId);
+      if (session) return session;
     }
+
+    // Target pane's session (e.g. replace mode when focused pane is pending)
+    if ("targetPaneId" in commandCenterMode && stageLayout) {
+      const targetPane = stageLayout.panes.find((p) => p.id === commandCenterMode.targetPaneId);
+      if (targetPane && targetPane.ref.kind !== "pending") {
+        const session = workspaceSessions.get(targetPane.ref.sessionId);
+        if (session) return session;
+      }
+    }
+
+    // Fall back to any session in any visible pane
+    if (stageLayout) {
+      for (const pane of stageLayout.panes) {
+        if (pane.ref.kind !== "pending") {
+          const session = workspaceSessions.get(pane.ref.sessionId);
+          if (session) return session;
+        }
+      }
+    }
+
     return null;
-  }, [commandCenterMode, activeSessionId, workspaceSessions]);
+  }, [commandCenterMode, activeSessionId, workspaceSessions, stageLayout]);
 
   const handleCommandCenterSelect = useCallback(async (result: CommandCenterSearchResult) => {
     if (!commandCenterMode) return;
