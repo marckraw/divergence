@@ -1564,6 +1564,8 @@ function App() {
         return next;
       });
     }
+
+    handleCloseWorkspaceSession(sessionId);
   };
 
   const stageTabAttentionIds = useMemo(() => {
