@@ -55,10 +55,12 @@ function CodeEditorCore({
 }: CodeEditorCoreProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const contentRef = useRef(content);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
   const onCloseRef = useRef(onClose);
   const lastRevealRequestKeyRef = useRef<number | null>(null);
+  contentRef.current = content;
   const languageExtensions = useMemo(() => getLanguageExtension(filePath), [filePath]);
   const themeExtensions = useMemo(
     () => themeExtensionsById[editorTheme] ?? themeExtensionsById[DEFAULT_EDITOR_THEME],
@@ -108,7 +110,7 @@ function CodeEditorCore({
     lastRevealRequestKeyRef.current = null;
 
     const state = EditorState.create({
-      doc: content,
+      doc: contentRef.current,
       extensions: [
         basicSetup,
         baseTheme,
@@ -153,7 +155,6 @@ function CodeEditorCore({
     additionalExtensions,
     autoFocus,
     completionExtensions,
-    content,
     isReadOnly,
     keyBindings,
     languageExtensions,

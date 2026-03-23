@@ -21,6 +21,9 @@ describe("app shortcuts utils", () => {
   it("ignores prevented/editor events", () => {
     expect(resolveAppShortcut({ ...baseEvent, defaultPrevented: true }, baseContext)).toBeNull();
     expect(resolveAppShortcut(baseEvent, { ...baseContext, isFromEditor: true })).toBeNull();
+    expect(resolveAppShortcut({ ...baseEvent, key: "w" }, { ...baseContext, isFromEditor: true })).toEqual({
+      type: "close_focused_pane",
+    });
   });
 
   it("resolves core shortcuts", () => {
