@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import type { Project, StageLayout, StagePane, WorkspaceSession } from "../../entities";
 import { isAgentSession } from "../../entities";
+import type { CommandCenterMode } from "../../features/command-center";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../features/work-sidebar";
 import { resolveAppShortcut } from "../lib/appShortcuts.pure";
 import { resolveProjectForNewDivergence } from "../lib/appSelection.pure";
@@ -13,7 +14,7 @@ interface UseAppKeyboardShortcutsParams {
   projects: Project[];
   createDivergenceFor: Project | null;
   handleCloseSession: (sessionId: string) => void;
-  handleSplitStage: (orientation: "vertical" | "horizontal") => void;
+  handleSplitStage: (orientation: "vertical" | "horizontal") => import("../../entities").StagePaneId | null;
   handleCloseStagePane: (paneId: StagePane["id"]) => void;
   handleReconnectSession: (sessionId: string) => void;
   focusPreviousStagePane: () => void;
@@ -24,8 +25,7 @@ interface UseAppKeyboardShortcutsParams {
   setSidebarMode: React.Dispatch<React.SetStateAction<WorkSidebarMode>>;
   setWorkTab: (tab: WorkSidebarTab) => void;
   setActiveSessionId: React.Dispatch<React.SetStateAction<string | null>>;
-  setShowQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
-  setShowFileQuickSwitcher: React.Dispatch<React.SetStateAction<boolean>>;
+  setCommandCenterMode: React.Dispatch<React.SetStateAction<CommandCenterMode | null>>;
   setShowSettings: React.Dispatch<React.SetStateAction<boolean>>;
   setCreateDivergenceFor: React.Dispatch<React.SetStateAction<Project | null>>;
 }
@@ -49,8 +49,7 @@ export function useAppKeyboardShortcuts({
   setSidebarMode,
   setWorkTab,
   setActiveSessionId,
-  setShowQuickSwitcher,
-  setShowFileQuickSwitcher,
+  setCommandCenterMode,
   setShowSettings,
   setCreateDivergenceFor,
 }: UseAppKeyboardShortcutsParams): void {
@@ -83,10 +82,31 @@ export function useAppKeyboardShortcuts({
 
     switch (action.type) {
       case "toggle_quick_switcher":
-        setShowQuickSwitcher(prev => !prev);
+        if (!focusedStagePane) {
+          return;
+        }
+        setCommandCenterMode((previous) => previous
+          ? null
+          : { kind: "replace", targetPaneId: focusedStagePane.id });
+        return;
+      case "toggle_quick_switcher_reveal":
+        setCommandCenterMode((previous) => previous?.kind === "reveal" ? null : { kind: "reveal" });
         return;
       case "toggle_file_quick_switcher":
-        setShowFileQuickSwitcher(prev => !prev);
+        if (!activeSessionId || !focusedStagePane) {
+          return;
+        }
+        const activeSession = sessions.get(activeSessionId);
+        if (!activeSession) {
+          return;
+        }
+        setCommandCenterMode((previous) => previous
+          ? null
+          : {
+            kind: "open-file",
+            targetPaneId: focusedStagePane.id,
+            rootPath: activeSession.path,
+          });
         return;
       case "open_work_inbox":
         setIsSidebarOpen(true);
@@ -103,8 +123,7 @@ export function useAppKeyboardShortcuts({
         toggleSidebar();
         return;
       case "close_overlays":
-        setShowQuickSwitcher(false);
-        setShowFileQuickSwitcher(false);
+        setCommandCenterMode(null);
         setShowSettings(false);
         return;
       case "close_active_session":
@@ -119,7 +138,7 @@ export function useAppKeyboardShortcuts({
       case "new_divergence": {
         const project = resolveProjectForNewDivergenceCallback();
         if (project) {
-          setShowQuickSwitcher(false);
+          setCommandCenterMode(null);
           setShowSettings(false);
           setCreateDivergenceFor(project);
         }
@@ -127,7 +146,14 @@ export function useAppKeyboardShortcuts({
       }
       case "split_terminal":
         if (activeSessionId) {
-          handleSplitStage(action.orientation);
+          const paneId = handleSplitStage(action.orientation);
+          if (paneId) {
+            setCommandCenterMode({
+              kind: "open-in-pane",
+              targetPaneId: paneId,
+              sourceSessionId: activeSessionId,
+            });
+          }
         }
         return;
       case "reconnect_terminal":
@@ -190,8 +216,7 @@ export function useAppKeyboardShortcuts({
     setSidebarMode,
     setWorkTab,
     setActiveSessionId,
-    setShowQuickSwitcher,
-    setShowFileQuickSwitcher,
+    setCommandCenterMode,
     setShowSettings,
     setCreateDivergenceFor,
   ]);

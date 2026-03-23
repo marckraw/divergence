@@ -4,7 +4,7 @@ import Sidebar from "../widgets/sidebar";
 import { InboxPanel } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
 import { useAgentRuntime } from "../features/agent-runtime";
-import QuickSwitcher from "../features/quick-switcher";
+import { CommandCenter, type CommandCenterMode, type CommandCenterSearchResult } from "../features/command-center";
 import { onMobileHandshake } from "./api/mobileHandshake.api";
 import Settings from "../widgets/settings-modal";
 import type { SettingsCategoryId } from "../widgets/settings-modal";
@@ -43,6 +43,8 @@ import type {
   AgentProvider,
   Project,
   Divergence,
+  StagePaneId,
+  StagePaneRef,
   Workspace,
   WorkspaceDivergence,
   WorkspaceSession,
@@ -100,8 +102,11 @@ function App() {
     handleFocusSplitPane,
     handleResizeSplitPanes,
   } = useSplitPaneManagement();
-  const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
-  const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
+  const [commandCenterMode, setCommandCenterMode] = useState<CommandCenterMode | null>(null);
+  const [requestedFilePath, setRequestedFilePath] = useState<string | null>(null);
+  const [pendingPaneSourceSessionIdByPaneId, setPendingPaneSourceSessionIdByPaneId] = useState<Map<StagePaneId, string>>(
+    () => new Map(),
+  );
   const [showSettings, setShowSettings] = useState(false);
   const [renameAgentSessionState, setRenameAgentSessionState] = useState<{
     sessionId: string;
@@ -117,6 +122,7 @@ function App() {
     isSidebarOpen,
     setIsSidebarOpen,
     isRightPanelOpen,
+    setIsRightPanelOpen,
     sidebarWidth,
     isDraggingSidebar,
     sidebarMode,
@@ -131,7 +137,7 @@ function App() {
     handleWorkTabChange,
   } = useSidebarLayout({
     onModeChange: () => {
-      setShowQuickSwitcher(false);
+      setCommandCenterMode(null);
       setShowSettings(false);
     },
   });
@@ -457,13 +463,15 @@ function App() {
 
   // Wrap handleSelectProject / handleSelectDivergence to also set sidebar mode
   const handleSelectProject = useCallback((project: Project) => {
-    handleSelectProjectRaw(project);
+    const session = handleSelectProjectRaw(project);
     setSidebarMode("projects");
+    return session;
   }, [handleSelectProjectRaw, setSidebarMode]);
 
   const handleSelectDivergence = useCallback((divergence: Divergence) => {
-    handleSelectDivergenceRaw(divergence);
+    const session = handleSelectDivergenceRaw(divergence);
     setSidebarMode("projects");
+    return session;
   }, [handleSelectDivergenceRaw, setSidebarMode]);
 
   const handleOpenGithubPrDivergence = useCallback(async (
@@ -579,6 +587,98 @@ function App() {
     }
   }, [activeSessionId, openAgentSessions, appSettings.restoreTabsOnRestart, sessions.size, setActiveSessionId]);
 
+  useEffect(() => {
+    setPendingPaneSourceSessionIdByPaneId((previous) => {
+      if (!stageLayout) {
+        return previous.size === 0 ? previous : new Map();
+      }
+
+      const pendingPaneIds = new Set(
+        stageLayout.panes
+          .filter((pane) => pane.ref.kind === "pending")
+          .map((pane) => pane.id),
+      );
+      let changed = false;
+      const next = new Map<StagePaneId, string>();
+
+      previous.forEach((sessionId, paneId) => {
+        if (pendingPaneIds.has(paneId)) {
+          next.set(paneId, sessionId);
+        } else {
+          changed = true;
+        }
+      });
+
+      return changed || next.size !== previous.size ? next : previous;
+    });
+  }, [stageLayout]);
+
+  const resolveSessionRef = useCallback((sessionId: string): StagePaneRef | null => {
+    const session = workspaceSessions.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    return isAgentSession(session)
+      ? { kind: "agent", sessionId: session.id }
+      : { kind: "terminal", sessionId: session.id };
+  }, [workspaceSessions]);
+
+  const handleReplaceStagePaneRefWithTracking = useCallback((paneId: StagePaneId, ref: StagePaneRef) => {
+    setPendingPaneSourceSessionIdByPaneId((previous) => {
+      if (!previous.has(paneId)) {
+        return previous;
+      }
+      const next = new Map(previous);
+      next.delete(paneId);
+      return next;
+    });
+    handleReplaceStagePaneRef(paneId, ref);
+  }, [handleReplaceStagePaneRef]);
+
+  const handleCloseStagePaneWithTracking = useCallback((paneId: StagePaneId) => {
+    setPendingPaneSourceSessionIdByPaneId((previous) => {
+      if (!previous.has(paneId)) {
+        return previous;
+      }
+      const next = new Map(previous);
+      next.delete(paneId);
+      return next;
+    });
+    handleCloseStagePane(paneId);
+  }, [handleCloseStagePane]);
+
+  const handleSplitStageWithCommandCenter = useCallback((orientation: "vertical" | "horizontal") => {
+    const sourceSessionId = focusedStagePane?.ref.kind === "pending"
+      ? pendingPaneSourceSessionIdByPaneId.get(focusedStagePane.id) ?? activeSessionId ?? undefined
+      : activeSessionId ?? undefined;
+    const paneId = handleSplitStagePane(orientation);
+    if (!paneId) {
+      return null;
+    }
+
+    if (sourceSessionId) {
+      setPendingPaneSourceSessionIdByPaneId((previous) => {
+        const next = new Map(previous);
+        next.set(paneId, sourceSessionId);
+        return next;
+      });
+    }
+
+    setCommandCenterMode({
+      kind: "open-in-pane",
+      targetPaneId: paneId,
+      sourceSessionId,
+    });
+
+    return paneId;
+  }, [
+    activeSessionId,
+    focusedStagePane,
+    handleSplitStagePane,
+    pendingPaneSourceSessionIdByPaneId,
+  ]);
+
   const handleCreateAgentSession = async (input: {
     provider: AgentProvider;
     type: "project" | "divergence" | "workspace" | "workspace_divergence";
@@ -616,6 +716,7 @@ function App() {
       path,
     });
     setActiveSessionId(session.id);
+    return session;
   };
 
   const handleSelectWorkspaceSession = async (sessionId: string) => {
@@ -639,6 +740,38 @@ function App() {
     }
     setActiveSessionId(sessionId);
   };
+
+  const getCommandCenterSourceSession = useCallback((mode: CommandCenterMode | null): WorkspaceSession | null => {
+    if (!mode) {
+      return null;
+    }
+
+    if (mode.kind === "reveal") {
+      return activeSessionId ? workspaceSessions.get(activeSessionId) ?? null : null;
+    }
+
+    if (mode.kind === "open-in-pane") {
+      return workspaceSessions.get(mode.sourceSessionId ?? "") ?? null;
+    }
+
+    const targetPaneId = "targetPaneId" in mode ? mode.targetPaneId : undefined;
+    const pane = targetPaneId
+      ? stageLayout?.panes.find((item) => item.id === targetPaneId) ?? null
+      : null;
+    if (!pane) {
+      return activeSessionId ? workspaceSessions.get(activeSessionId) ?? null : null;
+    }
+    if (pane.ref.kind === "pending") {
+      const sourceSessionId = pendingPaneSourceSessionIdByPaneId.get(pane.id);
+      return sourceSessionId ? workspaceSessions.get(sourceSessionId) ?? null : null;
+    }
+    return workspaceSessions.get(pane.ref.sessionId) ?? null;
+  }, [activeSessionId, pendingPaneSourceSessionIdByPaneId, stageLayout, workspaceSessions]);
+
+  const commandCenterSourceSession = useMemo(
+    () => getCommandCenterSourceSession(commandCenterMode),
+    [commandCenterMode, getCommandCenterSourceSession],
+  );
 
   const handleCloseWorkspaceSession = (sessionId: string) => {
     if (sessionsRef.current.has(sessionId)) {
@@ -748,8 +881,8 @@ function App() {
     projects,
     createDivergenceFor,
     handleCloseSession: handleCloseWorkspaceSession,
-    handleSplitStage: handleSplitStagePane,
-    handleCloseStagePane,
+    handleSplitStage: handleSplitStageWithCommandCenter,
+    handleCloseStagePane: handleCloseStagePaneWithTracking,
     handleReconnectSession,
     focusPreviousStagePane,
     focusNextStagePane,
@@ -759,8 +892,7 @@ function App() {
     setSidebarMode,
     setWorkTab,
     setActiveSessionId,
-    setShowQuickSwitcher,
-    setShowFileQuickSwitcher,
+    setCommandCenterMode,
     setShowSettings,
     setCreateDivergenceFor,
   });
@@ -901,6 +1033,206 @@ function App() {
     }
   };
 
+  const handleOpenPendingPaneCommandCenter = useCallback((paneId: StagePaneId) => {
+    handleFocusStagePane(paneId);
+    setCommandCenterMode({
+      kind: "open-in-pane",
+      targetPaneId: paneId,
+      sourceSessionId: pendingPaneSourceSessionIdByPaneId.get(paneId),
+    });
+  }, [handleFocusStagePane, pendingPaneSourceSessionIdByPaneId]);
+
+  const handleSelectCommandCenterFile = useCallback((filePath: string) => {
+    if (!commandCenterMode) {
+      return;
+    }
+
+    const targetPaneId = "targetPaneId" in commandCenterMode ? commandCenterMode.targetPaneId : undefined;
+    if (targetPaneId) {
+      handleFocusStagePane(targetPaneId);
+    }
+
+    const currentPane = targetPaneId
+      ? stageLayout?.panes.find((pane) => pane.id === targetPaneId) ?? null
+      : focusedStagePane;
+    let sessionId = commandCenterSourceSession?.id ?? null;
+    if (currentPane) {
+      if (currentPane.ref.kind === "pending") {
+        sessionId = pendingPaneSourceSessionIdByPaneId.get(currentPane.id) ?? sessionId;
+      } else {
+        sessionId = currentPane.ref.sessionId;
+      }
+    }
+
+    if (!sessionId) {
+      return;
+    }
+
+    const nextRef = resolveSessionRef(sessionId);
+    if (targetPaneId && nextRef) {
+      handleReplaceStagePaneRefWithTracking(targetPaneId, nextRef);
+    }
+
+    setActiveSessionId(sessionId);
+    setIsRightPanelOpen(true);
+    setRequestedFilePath(filePath);
+  }, [
+    commandCenterMode,
+    commandCenterSourceSession,
+    focusedStagePane,
+    handleFocusStagePane,
+    handleReplaceStagePaneRefWithTracking,
+    pendingPaneSourceSessionIdByPaneId,
+    resolveSessionRef,
+    setIsRightPanelOpen,
+    setActiveSessionId,
+    stageLayout,
+  ]);
+
+  const handleCommandCenterSelect = useCallback(async (result: CommandCenterSearchResult) => {
+    const mode = commandCenterMode;
+    if (!mode) {
+      return;
+    }
+
+    const targetPaneId = "targetPaneId" in mode ? mode.targetPaneId : undefined;
+    if (targetPaneId) {
+      handleFocusStagePane(targetPaneId);
+    }
+
+    if (result.type === "file") {
+      handleSelectCommandCenterFile(result.item.relativePath);
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (mode.kind === "reveal" && result.type === "session") {
+      setSidebarMode("projects");
+      await handleSelectWorkspaceSession(result.item.id);
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "session") {
+      const ref = resolveSessionRef(result.item.id);
+      setSidebarMode("projects");
+      await handleSelectWorkspaceSession(result.item.id);
+      if (targetPaneId && ref) {
+        handleReplaceStagePaneRefWithTracking(targetPaneId, ref);
+        handleFocusStagePane(targetPaneId);
+      }
+      setCommandCenterMode(null);
+      return;
+    }
+
+    let selectedSessionId: string | null = null;
+
+    if (result.type === "project") {
+      selectedSessionId = handleSelectProject(result.item).id;
+    } else if (result.type === "divergence") {
+      selectedSessionId = handleSelectDivergence(result.item).id;
+    } else if (result.type === "workspace") {
+      selectedSessionId = handleSelectWorkspace(result.item).id;
+    } else if (result.type === "workspace_divergence") {
+      selectedSessionId = handleSelectWorkspaceDivergence(result.item).id;
+    } else if (result.type === "create_action") {
+      if (result.item.sessionKind === "agent") {
+        if (result.item.targetType === "project") {
+          const project = projects.find((item) => item.id === result.item.targetId);
+          if (project && result.item.provider) {
+            const session = await handleCreateAgentSession({
+              provider: result.item.provider,
+              type: "project",
+              item: project,
+            });
+            selectedSessionId = session?.id ?? null;
+          }
+        } else if (result.item.targetType === "divergence") {
+          const divergence = allDivergences.find((item) => item.id === result.item.targetId);
+          if (divergence && result.item.provider) {
+            const session = await handleCreateAgentSession({
+              provider: result.item.provider,
+              type: "divergence",
+              item: divergence,
+            });
+            selectedSessionId = session?.id ?? null;
+          }
+        } else if (result.item.targetType === "workspace") {
+          const workspace = workspaceList.find((item) => item.id === result.item.targetId);
+          if (workspace && result.item.provider) {
+            const session = await handleCreateAgentSession({
+              provider: result.item.provider,
+              type: "workspace",
+              item: workspace,
+            });
+            selectedSessionId = session?.id ?? null;
+          }
+        } else if (result.item.targetType === "workspace_divergence") {
+          const workspaceDivergence = Array.from(workspaceDivergencesByWorkspaceId.values())
+            .flat()
+            .find((item) => item.id === result.item.targetId);
+          if (workspaceDivergence && result.item.provider) {
+            const session = await handleCreateAgentSession({
+              provider: result.item.provider,
+              type: "workspace_divergence",
+              item: workspaceDivergence,
+            });
+            selectedSessionId = session?.id ?? null;
+          }
+        }
+      } else if (result.item.targetType === "project") {
+        const project = projects.find((item) => item.id === result.item.targetId);
+        if (project) {
+          selectedSessionId = handleCreateAdditionalSession("project", project).id;
+        }
+      } else if (result.item.targetType === "divergence") {
+        const divergence = allDivergences.find((item) => item.id === result.item.targetId);
+        if (divergence) {
+          selectedSessionId = handleCreateAdditionalSession("divergence", divergence).id;
+        }
+      } else if (result.item.targetType === "workspace") {
+        const workspace = workspaceList.find((item) => item.id === result.item.targetId);
+        if (workspace) {
+          selectedSessionId = handleSelectWorkspace(workspace).id;
+        }
+      } else if (result.item.targetType === "workspace_divergence") {
+        const workspaceDivergence = Array.from(workspaceDivergencesByWorkspaceId.values())
+          .flat()
+          .find((item) => item.id === result.item.targetId);
+        if (workspaceDivergence) {
+          selectedSessionId = handleSelectWorkspaceDivergence(workspaceDivergence).id;
+        }
+      }
+    }
+
+    if (targetPaneId && selectedSessionId) {
+      const ref = resolveSessionRef(selectedSessionId);
+      if (ref) {
+        handleReplaceStagePaneRefWithTracking(targetPaneId, ref);
+      }
+    }
+
+    setCommandCenterMode(null);
+  }, [
+    allDivergences,
+    commandCenterMode,
+    handleCreateAdditionalSession,
+    handleCreateAgentSession,
+    handleFocusStagePane,
+    handleReplaceStagePaneRefWithTracking,
+    handleSelectCommandCenterFile,
+    handleSelectDivergence,
+    handleSelectProject,
+    handleSelectWorkspace,
+    handleSelectWorkspaceDivergence,
+    handleSelectWorkspaceSession,
+    projects,
+    resolveSessionRef,
+    setSidebarMode,
+    workspaceDivergencesByWorkspaceId,
+    workspaceList,
+  ]);
+
   return (
     <div className="flex h-full w-full">
       <div
@@ -939,7 +1271,7 @@ function App() {
           onRemoveProject={handleRemoveProject}
           onCreateDivergence={handleCreateDivergence}
           onCreateAdditionalSession={handleCreateAdditionalSession}
-          onCreateAgentSession={handleCreateAgentSession}
+          onCreateAgentSession={(input) => handleCreateAgentSession(input).then(() => {})}
           onDeleteDivergence={handleDeleteDivergence}
           agentProviders={agentProviders}
           isCollapsed={!isSidebarOpen}
@@ -1054,7 +1386,7 @@ function App() {
           capabilities={agentRuntimeCapabilities}
           projectsLoading={projectsLoading}
           divergencesLoading={divergencesLoading}
-          showFileQuickSwitcher={showFileQuickSwitcher}
+          requestedFilePath={requestedFilePath}
           isSidebarOpen={isSidebarOpen}
           isRightPanelOpen={isRightPanelOpen}
           onToggleSidebar={toggleSidebar}
@@ -1065,12 +1397,12 @@ function App() {
           onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
-          onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
-          onSplitStage={handleSplitStagePane}
+          onRequestedFilePathConsumed={() => setRequestedFilePath(null)}
+          onSplitStage={handleSplitStageWithCommandCenter}
           onResetToSinglePane={handleResetStageToSinglePane}
           onFocusPane={handleFocusStagePane}
-          onReplacePaneRef={handleReplaceStagePaneRef}
-          onClosePane={handleCloseStagePane}
+          onClosePane={handleCloseStagePaneWithTracking}
+          onOpenPendingPaneCommandCenter={handleOpenPendingPaneCommandCenter}
           onResizeStageAdjacentPanes={handleResizeStageAdjacentPanes}
           onStatusChange={handleSessionStatusChange}
           onRegisterTerminalCommand={handleRegisterTerminalCommand}
@@ -1090,31 +1422,21 @@ function App() {
         />
       )}
 
-      {/* Quick Switcher */}
       <AnimatePresence>
-        {showQuickSwitcher && (
-          <QuickSwitcher
+        {commandCenterMode && (
+          <CommandCenter
+            mode={commandCenterMode}
             projects={projects}
             divergencesByProject={divergencesByProject}
             sessions={workspaceSessions}
             workspaces={workspaceList}
             workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
-            onSelect={(type, item) => {
-              if (type === "project") {
-                handleSelectProject(item as Project);
-              } else if (type === "divergence") {
-                handleSelectDivergence(item as Divergence);
-              } else if (type === "workspace") {
-                handleSelectWorkspace(item as Workspace);
-              } else if (type === "workspace_divergence") {
-                handleSelectWorkspaceDivergence(item as WorkspaceDivergence);
-              } else {
-                setSidebarMode("projects");
-                void handleSelectWorkspaceSession((item as WorkspaceSession).id);
-              }
-              setShowQuickSwitcher(false);
+            agentProviders={agentProviders}
+            sourceSession={commandCenterSourceSession}
+            onSelect={(result) => {
+              void handleCommandCenterSelect(result);
             }}
-            onClose={() => setShowQuickSwitcher(false)}
+            onClose={() => setCommandCenterMode(null)}
           />
         )}
       </AnimatePresence>

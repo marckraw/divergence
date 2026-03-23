@@ -46,9 +46,9 @@ interface UseSessionManagementResult {
   reconnectBySessionId: Map<string, number>;
   createSession: (type: "project" | "divergence", target: Project | Divergence) => TerminalSession;
   createManualSession: (type: "project" | "divergence", target: Project | Divergence) => TerminalSession;
-  handleSelectProject: (project: Project) => void;
-  handleSelectDivergence: (divergence: Divergence) => void;
-  handleCreateAdditionalSession: (type: "project" | "divergence", item: Project | Divergence) => void;
+  handleSelectProject: (project: Project) => TerminalSession;
+  handleSelectDivergence: (divergence: Divergence) => TerminalSession;
+  handleCreateAdditionalSession: (type: "project" | "divergence", item: Project | Divergence) => TerminalSession;
   handleCloseSession: (sessionId: string) => void;
   handleCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   handleRegisterTerminalCommand: (sessionId: string, sendCommand: (command: string) => void) => void;
@@ -179,11 +179,13 @@ export function useSessionManagement({
   const handleSelectProject = useCallback((project: Project) => {
     const session = createSession("project", project);
     setActiveSessionId(session.id);
+    return session;
   }, [createSession]);
 
   const handleSelectDivergence = useCallback((divergence: Divergence) => {
     const session = createSession("divergence", divergence);
     setActiveSessionId(session.id);
+    return session;
   }, [createSession]);
 
   const handleCreateAdditionalSession = useCallback((
@@ -192,6 +194,7 @@ export function useSessionManagement({
   ) => {
     const session = createManualSession(type, item);
     setActiveSessionId(session.id);
+    return session;
   }, [createManualSession]);
 
   const handleCloseSession = useCallback((sessionId: string) => {

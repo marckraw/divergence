@@ -47,7 +47,7 @@ interface UseStageLayoutResult {
   focusedPane: StagePane | null;
   handleSelectSession: (sessionId: string) => boolean;
   handleFocusPane: (paneId: StagePaneId) => void;
-  handleSplitPane: (orientation: StageLayoutOrientation, ref?: StagePaneRef) => void;
+  handleSplitPane: (orientation: StageLayoutOrientation, ref?: StagePaneRef) => StagePaneId | null;
   handleReplacePaneRef: (paneId: StagePaneId, ref: StagePaneRef) => void;
   handleResizePanes: (paneSizes: number[]) => void;
   handleResizeAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
@@ -253,9 +253,12 @@ export function useStageLayout({
   }, [setActiveSessionId]);
 
   const handleSplitPane = useCallback((orientation: StageLayoutOrientation, ref: StagePaneRef = { kind: "pending" }) => {
+    let nextPaneId: StagePaneId | null = null;
     setLayout((previous: StageLayout | null) => {
       if (previous) {
-        return buildSplitLayout(previous, ref, orientation);
+        const nextLayout = buildSplitLayout(previous, ref, orientation);
+        nextPaneId = nextLayout.focusedPaneId;
+        return nextLayout;
       }
 
       const activeRef = buildStagePaneRef(activeSessionId ? workspaceSessions.get(activeSessionId) : null);
@@ -263,12 +266,15 @@ export function useStageLayout({
         return previous;
       }
 
-      return buildSplitLayout(buildSinglePaneLayout(activeRef), ref, orientation);
+      const nextLayout = buildSplitLayout(buildSinglePaneLayout(activeRef), ref, orientation);
+      nextPaneId = nextLayout.focusedPaneId;
+      return nextLayout;
     });
 
     if (ref.kind !== "pending") {
       setActiveSessionId(ref.sessionId);
     }
+    return nextPaneId;
   }, [activeSessionId, setActiveSessionId, workspaceSessions]);
 
   const handleReplacePaneRef = useCallback((paneId: StagePaneId, ref: StagePaneRef) => {

@@ -52,10 +52,10 @@ interface UseEntityOperationsResult {
   handleRemoveProject: (id: number) => Promise<void>;
   handleCreateDivergence: (project: Project, branchName: string, useExistingBranch: boolean) => Promise<void>;
   handleDeleteDivergence: (divergence: Divergence, origin: string) => Promise<void>;
-  handleSelectWorkspace: (workspace: Workspace) => void;
+  handleSelectWorkspace: (workspace: Workspace) => TerminalSession;
   handleCreateWorkspace: (name: string, description: string, selectedProjectIds: number[]) => Promise<void>;
   handleDeleteWorkspace: (workspace: Workspace) => Promise<void>;
-  handleSelectWorkspaceDivergence: (wd: WorkspaceDivergence) => void;
+  handleSelectWorkspaceDivergence: (wd: WorkspaceDivergence) => TerminalSession;
   handleDeleteWorkspaceDivergence: (wd: WorkspaceDivergence) => Promise<void>;
   handleOpenWorkspaceSettings: (workspace: Workspace) => void;
   handleCreateWorkspaceDivergences: (workspace: Workspace, memberProjects: Project[], branchName: string, useExistingBranch: boolean) => Promise<void>;
@@ -125,7 +125,7 @@ export function useEntityOperations({
     const existing = sessionsRef.current.get(id);
     if (existing) {
       setActiveSessionId(existing.id);
-      return;
+      return existing;
     }
 
     const session = buildWorkspaceTerminalSession({
@@ -139,6 +139,7 @@ export function useEntityOperations({
       return next;
     });
     setActiveSessionId(session.id);
+    return session;
   }, [appSettings.tmuxHistoryLimit, sessionsRef, setSessions, setActiveSessionId]);
 
   const handleCreateWorkspace = useCallback(async (
@@ -186,7 +187,7 @@ export function useEntityOperations({
     const existing = sessionsRef.current.get(id);
     if (existing) {
       setActiveSessionId(existing.id);
-      return;
+      return existing;
     }
 
     const portAllocation = portAllocationByEntityKey.get(`workspace_divergence:${wd.id}`) ?? null;
@@ -202,6 +203,7 @@ export function useEntityOperations({
       return next;
     });
     setActiveSessionId(session.id);
+    return session;
   }, [appSettings.tmuxHistoryLimit, portAllocationByEntityKey, sessionsRef, setSessions, setActiveSessionId]);
 
   const handleDeleteWorkspaceDivergence = useCallback(async (

@@ -57,8 +57,6 @@ export interface MainAreaProps {
   divergencesByProject: Map<number, Divergence[]>;
   projectsLoading: boolean;
   divergencesLoading: boolean;
-  showFileQuickSwitcher: boolean;
-  onCloseFileQuickSwitcher: () => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
   isRightPanelOpen: boolean;
