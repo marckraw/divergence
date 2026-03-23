@@ -1,6 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import type { WorkspaceSession } from "../../../entities";
-import { isAgentSession } from "../../../entities";
+import { isAgentSession, isEditorSession } from "../../../entities";
 import { Button, TextInput } from "../../../shared";
 import type {
   PendingStagePaneCreateAction,
@@ -41,10 +41,15 @@ function PendingStagePane({
     }
 
     return sessions.filter((session) => {
+      const kindLabel = isAgentSession(session)
+        ? session.model
+        : isEditorSession(session)
+          ? `editor ${session.filePath}`
+          : session.type;
       const searchable = [
         session.name,
         session.status,
-        isAgentSession(session) ? session.model : session.type,
+        kindLabel,
       ]
         .filter(Boolean)
         .join(" ")
@@ -115,11 +120,17 @@ function PendingStagePane({
                       <div className="mt-1 flex items-center gap-2 text-[11px] text-subtext">
                         <span>{session.status}</span>
                         <span className="text-subtext/60">&middot;</span>
-                        <span>{isAgentSession(session) ? `${session.provider} • ${session.model}` : session.type}</span>
+                        <span>
+                          {isAgentSession(session)
+                            ? `${session.provider} • ${session.model}`
+                            : isEditorSession(session)
+                              ? session.filePath
+                              : session.type}
+                        </span>
                       </div>
                     </div>
                     <span className="shrink-0 rounded-full border border-surface px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-subtext">
-                      {isAgentSession(session) ? "Agent" : "Terminal"}
+                      {isAgentSession(session) ? "Agent" : isEditorSession(session) ? "Editor" : "Terminal"}
                     </span>
                   </Button>
                 ))}

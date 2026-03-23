@@ -25,6 +25,7 @@ import {
   MAX_STAGE_PANES,
   getFocusedPane,
   isAgentSession,
+  isEditorSession,
   isTerminalSession,
   type StagePaneRef,
 } from "../../../entities";
@@ -42,9 +43,14 @@ import StageTabBar from "../../../widgets/stage-tab-bar";
 import WorkspaceSessionTabsPresentational from "../../../widgets/workspace-session-tabs";
 import type { AgentSessionComposerHandle } from "../../../widgets/agent-session-view/ui/AgentSessionView.types";
 import AgentStagePane from "./AgentStagePane.container";
+import EditorStagePane from "./EditorStagePane.container";
 import PendingStagePane from "./PendingStagePane.container";
 import StageSidebar from "./StageSidebar.container";
 import TerminalStagePane from "./TerminalStagePane.container";
+import type {
+  EditorSessionRuntimeState,
+  EditorSessionViewState,
+} from "../../model/useEditorSessionManagement";
 import {
   buildPendingStagePaneCreateContext,
   type PendingStagePaneCreateAction,
@@ -75,6 +81,8 @@ interface StageViewProps {
   projectsLoading: boolean;
   divergencesLoading: boolean;
   showFileQuickSwitcher: boolean;
+  editorRuntimeStateBySessionId: Map<string, EditorSessionRuntimeState>;
+  editorViewStateBySessionId: Map<string, EditorSessionViewState>;
   isSidebarOpen: boolean;
   isRightPanelOpen: boolean;
   onToggleSidebar: () => void;
@@ -96,6 +104,26 @@ interface StageViewProps {
   onCreatePendingSession: (paneId: StagePaneId, action: PendingStagePaneCreateAction) => void | Promise<void>;
   onClosePane: (paneId: StagePaneId) => void;
   onResizeStageAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
+  onOpenOrFocusEditorFile: (filePath: string, sourceSession: WorkspaceSession | null) => void;
+  onOpenOrFocusEditorChange: (
+    entry: import("../../../entities").GitChangeEntry,
+    mode: import("../../../entities").ChangesMode,
+    sourceSession: WorkspaceSession | null,
+  ) => void;
+  onOpenOrFocusEditorSearchMatch: (
+    filePath: string,
+    lineNumber: number,
+    columnStart: number,
+    sourceSession: WorkspaceSession | null,
+  ) => void;
+  onEnsureEditorSessionLoaded: (sessionId: string, options?: { force?: boolean }) => Promise<void>;
+  onApplyEditorSessionViewState: (sessionId: string, viewState: EditorSessionViewState) => Promise<void>;
+  onSetEditorSessionActiveTab: (
+    sessionId: string,
+    activeTab: EditorSessionRuntimeState["activeTab"],
+  ) => void;
+  onChangeEditorSessionContent: (sessionId: string, next: string) => void;
+  onSaveEditorSession: (sessionId: string) => Promise<void>;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
   onRegisterTerminalCommand: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterTerminalCommand: (sessionId: string) => void;
@@ -162,6 +190,8 @@ function StageView({
   projectsLoading,
   divergencesLoading,
   showFileQuickSwitcher,
+  editorRuntimeStateBySessionId,
+  editorViewStateBySessionId,
   isSidebarOpen,
   isRightPanelOpen,
   onToggleSidebar,
@@ -183,6 +213,14 @@ function StageView({
   onCreatePendingSession,
   onClosePane,
   onResizeStageAdjacentPanes,
+  onOpenOrFocusEditorFile,
+  onOpenOrFocusEditorChange,
+  onOpenOrFocusEditorSearchMatch,
+  onEnsureEditorSessionLoaded,
+  onApplyEditorSessionViewState,
+  onSetEditorSessionActiveTab,
+  onChangeEditorSessionContent,
+  onSaveEditorSession,
   onStatusChange,
   onRegisterTerminalCommand,
   onUnregisterTerminalCommand,
@@ -277,9 +315,14 @@ function StageView({
       return;
     }
 
-    onReplacePaneRef(paneId, isAgentSession(session)
-      ? { kind: "agent", sessionId }
-      : { kind: "terminal", sessionId });
+    onReplacePaneRef(
+      paneId,
+      isAgentSession(session)
+        ? { kind: "agent", sessionId }
+        : isEditorSession(session)
+          ? { kind: "editor", sessionId }
+          : { kind: "terminal", sessionId },
+    );
   }, [onReplacePaneRef, workspaceSessions]);
 
   const canSplitStage = Boolean(layout && layout.panes.length < MAX_STAGE_PANES);
@@ -492,6 +535,19 @@ function StageView({
                             onRespondToRequest={onRespondToRequest}
                             onStopSession={onStopSession}
                           />
+                        ) : session && isEditorSession(session) ? (
+                          <EditorStagePane
+                            session={session}
+                            state={editorRuntimeStateBySessionId.get(session.id) ?? null}
+                            viewState={editorViewStateBySessionId.get(session.id) ?? null}
+                            editorTheme={editorTheme}
+                            onEnsureLoaded={onEnsureEditorSessionLoaded}
+                            onApplyViewState={onApplyEditorSessionViewState}
+                            onSetActiveTab={onSetEditorSessionActiveTab}
+                            onChangeContent={onChangeEditorSessionContent}
+                            onSave={onSaveEditorSession}
+                            onCloseSession={onCloseSession}
+                          />
                         ) : (
                           <div className="flex h-full items-center justify-center px-6 text-sm text-subtext">
                             Session is no longer available.
@@ -530,6 +586,9 @@ function StageView({
             projectsLoading={projectsLoading}
             divergencesLoading={divergencesLoading}
             showFileQuickSwitcher={showFileQuickSwitcher}
+            onOpenOrFocusEditorFile={onOpenOrFocusEditorFile}
+            onOpenOrFocusEditorChange={onOpenOrFocusEditorChange}
+            onOpenOrFocusEditorSearchMatch={onOpenOrFocusEditorSearchMatch}
             onCloseFileQuickSwitcher={onCloseFileQuickSwitcher}
             onSendPromptToSession={onSendPromptToSession}
             onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}

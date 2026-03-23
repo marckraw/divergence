@@ -206,6 +206,30 @@ export function useFileEditor({ activeRootPath }: UseFileEditorParams) {
     }
   }, [activeRootPath, isReadOnly, isSavingFile, openDiff, openDiffMode, openFileContent, openFilePath]);
 
+  const handleLoadDiffForCurrentFile = useCallback(async (mode: ChangesMode) => {
+    if (!activeRootPath || !openFilePath) {
+      return;
+    }
+
+    setDrawerTab("diff");
+    setAllowEdit(mode === "working" && !isReadOnly);
+    setOpenDiff(null);
+    setOpenDiffMode(mode);
+    setDiffLoading(true);
+    setDiffError(null);
+
+    try {
+      const diff = mode === "branch"
+        ? await getBranchDiff(activeRootPath, openFilePath)
+        : await getWorkingDiff(activeRootPath, openFilePath);
+      setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
+    } catch (error) {
+      setDiffError(error instanceof Error ? error.message : "Failed to load diff.");
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [activeRootPath, isReadOnly, openFilePath]);
+
   const handleChangeContent = useCallback((next: string) => {
     setOpenFileContent(next);
     if (fileSaveError) {
@@ -253,6 +277,7 @@ export function useFileEditor({ activeRootPath }: UseFileEditorParams) {
     handleOpenChange,
     handleCloseDrawer,
     handleSaveFile,
+    handleLoadDiffForCurrentFile,
     handleChangeContent,
     resetFileEditor,
   };

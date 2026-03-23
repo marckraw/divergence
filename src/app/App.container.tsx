@@ -36,13 +36,16 @@ import {
   ModalShell,
   ProgressBar,
   TextInput,
+  joinPath,
   useAppSettings,
   useUpdater,
 } from "../shared";
 import type {
   AgentProvider,
+  ChangesMode,
   Project,
   Divergence,
+  GitChangeEntry,
   StagePaneId,
   StagePaneRef,
   StageTab,
@@ -55,6 +58,8 @@ import {
   getWorkspaceSessionAttentionKey,
   getWorkspaceSessionAttentionState,
   isAgentSession,
+  isEditorSession,
+  getWorkspaceSessionTargetType,
   suggestAgentSessionTitle,
 } from "../entities";
 import { useSplitPaneManagement } from "./model/useSplitPaneManagement";
@@ -64,6 +69,7 @@ import { useSidebarLayout } from "./model/useSidebarLayout";
 import { useIdleNotification } from "./model/useIdleNotification";
 import { useGlobalErrorTracking } from "./model/useGlobalErrorTracking";
 import { useSessionPersistence } from "./model/useSessionPersistence";
+import { useEditorSessionManagement } from "./model/useEditorSessionManagement";
 import { useSessionManagement, type SessionNotificationCallbacks } from "./model/useSessionManagement";
 import { useAutomationOrchestration } from "./model/useAutomationOrchestration";
 import { useEntityOperations } from "./model/useEntityOperations";
@@ -248,6 +254,24 @@ function App() {
   });
 
   const {
+    editorSessions,
+    setEditorSessions,
+    editorViewStateBySessionId,
+    editorRuntimeStateBySessionId,
+    openOrReuseEditorSession,
+    ensureEditorSessionLoaded,
+    applyEditorSessionViewState,
+    setEditorSessionActiveTab,
+    changeEditorSessionContent,
+    saveEditorSession,
+    closeEditorSession,
+    closeSessionsForProject: closeEditorSessionsForProject,
+    closeSessionsForDivergence: closeEditorSessionsForDivergence,
+    closeSessionsForWorkspace: closeEditorSessionsForWorkspace,
+    closeSessionsForWorkspaceDivergence: closeEditorSessionsForWorkspaceDivergence,
+  } = useEditorSessionManagement();
+
+  const {
     idleAttentionSessionIds,
     setIdleAttentionSessionIds,
     clearNotificationTracking,
@@ -293,6 +317,8 @@ function App() {
   } = useSessionPersistence({
     sessions,
     setSessions,
+    editorSessions,
+    setEditorSessions,
     activeSessionId,
     setActiveSessionId,
     restoreTabsOnRestart: appSettings.restoreTabsOnRestart,
@@ -320,6 +346,7 @@ function App() {
 
   const closeSessionsForProjectAndAgents = (projectId: number) => {
     closeSessionsForProject(projectId);
+    closeEditorSessionsForProject(projectId);
     agentSessions.forEach((session) => {
       if (session.projectId === projectId) {
         void deleteAgentSession(session.id).catch((error) => {
@@ -331,6 +358,7 @@ function App() {
 
   const closeSessionsForDivergenceAndAgents = (divergenceId: number) => {
     closeSessionsForDivergence(divergenceId);
+    closeEditorSessionsForDivergence(divergenceId);
     agentSessions.forEach((session) => {
       if (session.targetType === "divergence" && session.targetId === divergenceId) {
         void deleteAgentSession(session.id).catch((error) => {
@@ -342,10 +370,22 @@ function App() {
 
   const closeSessionsForWorkspaceDivergenceAndAgents = (workspaceDivergenceId: number) => {
     closeSessionsForWorkspaceDivergence(workspaceDivergenceId);
+    closeEditorSessionsForWorkspaceDivergence(workspaceDivergenceId);
     agentSessions.forEach((session) => {
       if (session.targetType === "workspace_divergence" && session.targetId === workspaceDivergenceId) {
         void deleteAgentSession(session.id).catch((error) => {
           console.warn("Failed to delete workspace divergence agent session:", error);
+        });
+      }
+    });
+  };
+
+  const closeSessionsForWorkspaceAndAgents = (workspaceId: number) => {
+    closeEditorSessionsForWorkspace(workspaceId);
+    agentSessions.forEach((session) => {
+      if (session.targetType === "workspace" && session.targetId === workspaceId) {
+        void deleteAgentSession(session.id).catch((error) => {
+          console.warn("Failed to delete workspace agent session:", error);
         });
       }
     });
@@ -464,6 +504,7 @@ function App() {
     refreshPortAllocations,
     closeSessionsForProject: closeSessionsForProjectAndAgents,
     closeSessionsForDivergence: closeSessionsForDivergenceAndAgents,
+    closeSessionsForWorkspace: closeSessionsForWorkspaceAndAgents,
     closeSessionsForWorkspaceDivergence: closeSessionsForWorkspaceDivergenceAndAgents,
     handleCloseSession,
     sessionsRef,
@@ -564,22 +605,28 @@ function App() {
     sessions.forEach((session, sessionId) => {
       next.set(sessionId, session);
     });
+    editorSessions.forEach((session, sessionId) => {
+      next.set(sessionId, session);
+    });
     openAgentSessions.forEach((session, sessionId) => {
       next.set(sessionId, session);
     });
     return next;
-  }, [openAgentSessions, sessions]);
+  }, [editorSessions, openAgentSessions, sessions]);
 
   const sidebarSessions = useMemo(() => {
     const next = new Map<string, WorkspaceSession>();
     sessions.forEach((session, sessionId) => {
       next.set(sessionId, session);
     });
+    editorSessions.forEach((session, sessionId) => {
+      next.set(sessionId, session);
+    });
     agentSessions.forEach((session, sessionId) => {
       next.set(sessionId, session);
     });
     return next;
-  }, [agentSessions, sessions]);
+  }, [agentSessions, editorSessions, sessions]);
 
   const {
     tabGroup,
@@ -614,6 +661,128 @@ function App() {
     () => tabGroup?.tabs.map((tab) => tab.id) ?? [],
     [tabGroup],
   );
+
+  const buildEditorOpenInputFromSession = useCallback((
+    session: WorkspaceSession,
+    filePath: string,
+    options?: {
+      preferredTab?: "edit" | "diff";
+      diffMode?: ChangesMode | null;
+      changeEntry?: GitChangeEntry | null;
+      focusLine?: number | null;
+      focusColumn?: number | null;
+    },
+  ) => ({
+    targetType: getWorkspaceSessionTargetType(session),
+    targetId: session.targetId,
+    projectId: session.projectId,
+    workspaceOwnerId: session.workspaceOwnerId,
+    workspaceKey: session.workspaceKey,
+    path: session.path,
+    filePath,
+    preferredTab: options?.preferredTab,
+    diffMode: options?.diffMode ?? null,
+    changeEntry: options?.changeEntry ?? null,
+    focusLine: options?.focusLine ?? null,
+    focusColumn: options?.focusColumn ?? null,
+  }), []);
+
+  const showEditorSessionInStage = useCallback((sessionId: string, sourceSession: WorkspaceSession | null) => {
+    if (handleRevealStageSession(sessionId)) {
+      setActiveSessionId(sessionId);
+      return;
+    }
+
+    const ref: StagePaneRef = { kind: "editor", sessionId };
+    if (sourceSession && isEditorSession(sourceSession) && stageLayout) {
+      handleReplaceStagePaneRef(stageLayout.focusedPaneId, ref);
+      setActiveSessionId(sessionId);
+      return;
+    }
+
+    handleCreateStageTabWithRef(ref);
+  }, [
+    handleCreateStageTabWithRef,
+    handleRevealStageSession,
+    handleReplaceStagePaneRef,
+    setActiveSessionId,
+    stageLayout,
+  ]);
+
+  const handleOpenOrFocusEditorFile = useCallback((
+    filePath: string,
+    sourceSession: WorkspaceSession | null,
+  ) => {
+    if (!sourceSession) {
+      return;
+    }
+
+    const { session } = openOrReuseEditorSession(
+      buildEditorOpenInputFromSession(sourceSession, filePath, { preferredTab: "edit" }),
+    );
+
+    setSidebarMode("projects");
+    showEditorSessionInStage(session.id, sourceSession);
+  }, [
+    buildEditorOpenInputFromSession,
+    openOrReuseEditorSession,
+    setSidebarMode,
+    showEditorSessionInStage,
+  ]);
+
+  const handleOpenOrFocusEditorChange = useCallback((
+    entry: GitChangeEntry,
+    mode: ChangesMode,
+    sourceSession: WorkspaceSession | null,
+  ) => {
+    if (!sourceSession) {
+      return;
+    }
+
+    const filePath = joinPath(sourceSession.path, entry.path);
+    const { session } = openOrReuseEditorSession(
+      buildEditorOpenInputFromSession(sourceSession, filePath, {
+        preferredTab: "diff",
+        diffMode: mode,
+        changeEntry: entry,
+      }),
+    );
+
+    setSidebarMode("projects");
+    showEditorSessionInStage(session.id, sourceSession);
+  }, [
+    buildEditorOpenInputFromSession,
+    openOrReuseEditorSession,
+    setSidebarMode,
+    showEditorSessionInStage,
+  ]);
+
+  const handleOpenOrFocusEditorSearchMatch = useCallback((
+    filePath: string,
+    lineNumber: number,
+    columnStart: number,
+    sourceSession: WorkspaceSession | null,
+  ) => {
+    if (!sourceSession) {
+      return;
+    }
+
+    const { session } = openOrReuseEditorSession(
+      buildEditorOpenInputFromSession(sourceSession, filePath, {
+        preferredTab: "edit",
+        focusLine: lineNumber,
+        focusColumn: columnStart,
+      }),
+    );
+
+    setSidebarMode("projects");
+    showEditorSessionInStage(session.id, sourceSession);
+  }, [
+    buildEditorOpenInputFromSession,
+    openOrReuseEditorSession,
+    setSidebarMode,
+    showEditorSessionInStage,
+  ]);
 
   const createTargetedAgentSession = useCallback(async (input: {
     provider: AgentProvider;
@@ -768,9 +937,15 @@ function App() {
       }
     }
 
-    return isAgentSession(session)
-      ? { kind: "agent", sessionId: session.id }
-      : { kind: "terminal", sessionId: session.id };
+    if (isAgentSession(session)) {
+      return { kind: "agent", sessionId: session.id };
+    }
+
+    if (isEditorSession(session)) {
+      return { kind: "editor", sessionId: session.id };
+    }
+
+    return { kind: "terminal", sessionId: session.id };
   }, [
     createSession,
     ensureWorkspaceDivergenceSessionId,
@@ -975,6 +1150,14 @@ function App() {
   ]);
 
   const handleCloseWorkspaceSession = (sessionId: string) => {
+    if (editorSessions.has(sessionId)) {
+      const closed = closeEditorSession(sessionId);
+      if (closed) {
+        setActiveSessionId((current) => current === sessionId ? null : current);
+      }
+      return;
+    }
+
     if (sessionsRef.current.has(sessionId)) {
       handleCloseSession(sessionId);
       return;
@@ -1449,6 +1632,8 @@ function App() {
           projectsLoading={projectsLoading}
           divergencesLoading={divergencesLoading}
           showFileQuickSwitcher={showFileQuickSwitcher}
+          editorRuntimeStateBySessionId={editorRuntimeStateBySessionId}
+          editorViewStateBySessionId={editorViewStateBySessionId}
           isSidebarOpen={isSidebarOpen}
           isRightPanelOpen={isRightPanelOpen}
           onToggleSidebar={toggleSidebar}
@@ -1472,6 +1657,14 @@ function App() {
           onCreatePendingSession={handleCreatePendingPaneSession}
           onClosePane={handleCloseStagePane}
           onResizeStageAdjacentPanes={handleResizeStageAdjacentPanes}
+          onOpenOrFocusEditorFile={handleOpenOrFocusEditorFile}
+          onOpenOrFocusEditorChange={handleOpenOrFocusEditorChange}
+          onOpenOrFocusEditorSearchMatch={handleOpenOrFocusEditorSearchMatch}
+          onEnsureEditorSessionLoaded={ensureEditorSessionLoaded}
+          onApplyEditorSessionViewState={applyEditorSessionViewState}
+          onSetEditorSessionActiveTab={setEditorSessionActiveTab}
+          onChangeEditorSessionContent={changeEditorSessionContent}
+          onSaveEditorSession={saveEditorSession}
           onStatusChange={handleSessionStatusChange}
           onRegisterTerminalCommand={handleRegisterTerminalCommand}
           onUnregisterTerminalCommand={handleUnregisterTerminalCommand}

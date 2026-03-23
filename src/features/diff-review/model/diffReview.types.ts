@@ -35,14 +35,6 @@ export interface DiffReviewDraft {
   agent: DiffReviewAgent;
 }
 
-export interface ParsedDiffLine {
-  index: number;
-  text: string;
-  kind: "meta" | "hunk" | "context" | "added" | "removed";
-  oldLine?: number;
-  newLine?: number;
-}
-
 export interface ReviewBriefBuildInput {
   workspacePath: string;
   mode: ChangesMode;

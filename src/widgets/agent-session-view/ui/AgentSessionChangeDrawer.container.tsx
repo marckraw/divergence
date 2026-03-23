@@ -1,9 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
-import { basicSetup } from "codemirror";
+import { useEffect, useId, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
+  CodeEditorCore,
   DEFAULT_EDITOR_THEME,
   EmptyState,
   FAST_EASE_OUT,
@@ -12,12 +10,9 @@ import {
   SOFT_SPRING,
   TabButton,
   ToolbarButton,
+  UnifiedDiffViewer,
   getContentSwapVariants,
-  getDiffLineClass,
-  getLanguageExtension,
   getSlideUpVariants,
-  themeExtensionsById,
-  useImportPathCompletion,
   type ChangesMode,
   type EditorThemeId,
 } from "../../../shared";
@@ -44,192 +39,6 @@ interface AgentSessionChangeDrawerProps {
   onChange: (next: string) => void;
   onSave: () => void;
   onClose: () => void;
-}
-
-const baseTheme = EditorView.theme({
-  "&": {
-    height: "100%",
-    fontSize: "13px",
-    fontFamily:
-      '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
-  },
-  ".cm-scroller": { overflow: "auto" },
-});
-
-function CodeEditor({
-  filePath,
-  content,
-  editorTheme,
-  projectRootPath,
-  isReadOnly,
-  onChange,
-  onSave,
-  onClose,
-}: {
-  filePath: string | null;
-  content: string;
-  editorTheme: EditorThemeId;
-  projectRootPath: string | null;
-  isReadOnly: boolean;
-  onChange: (next: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  const onChangeRef = useRef(onChange);
-  const onSaveRef = useRef(onSave);
-  const onCloseRef = useRef(onClose);
-  const languageExtensions = useMemo(() => getLanguageExtension(filePath), [filePath]);
-  const themeExtensions = useMemo(
-    () => themeExtensionsById[editorTheme] ?? themeExtensionsById[DEFAULT_EDITOR_THEME],
-    [editorTheme],
-  );
-  const { completionExtensions } = useImportPathCompletion({ filePath, projectRootPath });
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  useEffect(() => {
-    onSaveRef.current = onSave;
-  }, [onSave]);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!containerRef.current) {
-      return;
-    }
-
-    if (viewRef.current) {
-      viewRef.current.destroy();
-      viewRef.current = null;
-    }
-
-    const state = EditorState.create({
-      doc: "",
-      extensions: [
-        basicSetup,
-        baseTheme,
-        ...themeExtensions,
-        ...languageExtensions,
-        ...completionExtensions,
-        ...(isReadOnly ? [EditorView.editable.of(false)] : []),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            onChangeRef.current(update.state.doc.toString());
-          }
-        }),
-        keymap.of([
-          {
-            key: "Mod-s",
-            run: () => {
-              onSaveRef.current();
-              return true;
-            },
-          },
-          {
-            key: "Escape",
-            run: () => {
-              onCloseRef.current();
-              return true;
-            },
-          },
-        ]),
-      ],
-    });
-
-    viewRef.current = new EditorView({
-      state,
-      parent: containerRef.current,
-    });
-    const createdView = viewRef.current;
-    const focusFrame = window.requestAnimationFrame(() => {
-      if (viewRef.current === createdView) {
-        createdView.focus();
-      }
-    });
-
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      viewRef.current?.destroy();
-      viewRef.current = null;
-    };
-  }, [completionExtensions, filePath, isReadOnly, languageExtensions, themeExtensions]);
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) {
-      return;
-    }
-    const current = view.state.doc.toString();
-    if (current !== content) {
-      view.dispatch({
-        changes: { from: 0, to: current.length, insert: content },
-      });
-    }
-  }, [content]);
-
-  return <div ref={containerRef} className="h-full w-full" />;
-}
-
-function DiffViewer({
-  diff,
-  isBinary,
-  isLoading,
-  error,
-}: {
-  diff: string | null;
-  isBinary: boolean;
-  isLoading: boolean;
-  error: string | null;
-}) {
-  const lines = useMemo(() => diff?.split("\n") ?? [], [diff]);
-
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <LoadingSpinner>Loading diff...</LoadingSpinner>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-red-300/90">
-        {error}
-      </div>
-    );
-  }
-
-  if (isBinary) {
-    return (
-      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-subtext">
-        Binary file diff is not available.
-      </div>
-    );
-  }
-
-  if (lines.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center px-4">
-        <EmptyState className="text-xs">No diff available.</EmptyState>
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full overflow-auto bg-main/20 font-mono text-[12px] leading-5">
-      {lines.map((line, index) => (
-        <div key={`${index}-${line}`} className={`whitespace-pre px-4 ${getDiffLineClass(line)}`}>
-          {line || " "}
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function AgentSessionChangeDrawer({
@@ -423,11 +232,23 @@ function AgentSessionChangeDrawer({
                   exit="exit"
                   transition={contentTransition}
                 >
-                  <DiffViewer
+                  <UnifiedDiffViewer
                     diff={diff?.text ?? null}
                     isBinary={diff?.isBinary ?? false}
                     isLoading={diffLoading}
                     error={diffError}
+                    className="bg-main/20 text-[12px] leading-5"
+                    plainLineClassName="px-4"
+                    emptyContent={(
+                      <div className="flex h-full items-center justify-center px-4">
+                        <EmptyState className="text-xs">No diff available.</EmptyState>
+                      </div>
+                    )}
+                    errorContent={(message) => (
+                      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-red-300/90">
+                        {message}
+                      </div>
+                    )}
                   />
                 </motion.div>
               ) : isLoading ? (
@@ -458,7 +279,7 @@ function AgentSessionChangeDrawer({
                   exit="exit"
                   transition={contentTransition}
                 >
-                  <CodeEditor
+                  <CodeEditorCore
                     filePath={filePath}
                     content={content}
                     editorTheme={editorTheme}

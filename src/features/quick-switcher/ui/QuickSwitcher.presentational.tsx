@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Divergence, StageTab, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
-import { isAgentSession } from "../../../entities";
+import { isAgentSession, isEditorSession } from "../../../entities";
 import {
   EmptyState,
   FAST_EASE_OUT,
@@ -90,7 +90,11 @@ function QuickSwitcherPresentational({
                 const agentSession = sessionItem && isAgentSession(sessionItem)
                   ? sessionItem
                   : null;
+                const editorSession = sessionItem && isEditorSession(sessionItem)
+                  ? sessionItem
+                  : null;
                 const isAgentItem = Boolean(agentSession);
+                const isEditorItem = Boolean(editorSession);
 
                 return (
                   <motion.div
@@ -136,6 +140,26 @@ function QuickSwitcherPresentational({
                         strokeLinejoin="round"
                         strokeWidth={2}
                         d="M9 3h6m4 4v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7m3 0V5a2 2 0 012-2h4a2 2 0 012 2v2M9 11h6M9 15h4"
+                      />
+                    </svg>
+                  ) : isEditorItem ? (
+                    <svg
+                      className="w-5 h-5 text-blue"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 20h9"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"
                       />
                     </svg>
                   ) : (
@@ -252,6 +276,11 @@ function QuickSwitcherPresentational({
                       {agentSession.provider} • {agentSession.model}
                     </div>
                   )}
+                  {result.type === "session" && editorSession && (
+                    <div className="text-xs text-subtext truncate">
+                      {editorSession.filePath}
+                    </div>
+                  )}
                 </div>
 
                 <span
@@ -261,6 +290,8 @@ function QuickSwitcherPresentational({
                       : result.type === "session"
                         ? isAgentItem
                           ? "bg-surface text-text"
+                          : isEditorItem
+                            ? "bg-blue/20 text-blue"
                           : "bg-yellow/20 text-yellow"
                         : result.type === "workspace"
                           ? "bg-blue/20 text-blue"
@@ -275,6 +306,8 @@ function QuickSwitcherPresentational({
                       ? "tab"
                     : result.type === "session" && agentSession
                       ? `${agentSession.provider} agent`
+                      : result.type === "session" && editorSession
+                        ? "editor"
                       : result.type}
                 </span>
                   </motion.div>
