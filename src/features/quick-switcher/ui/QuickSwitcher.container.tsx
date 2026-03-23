@@ -12,8 +12,10 @@ function QuickSwitcherContainer({
   projects,
   divergencesByProject,
   sessions,
+  stageTabs,
   workspaces,
   workspaceDivergences,
+  mode,
   onSelect,
   onClose,
 }: QuickSwitcherProps) {
@@ -23,8 +25,15 @@ function QuickSwitcherContainer({
   const listRef = useRef<HTMLDivElement>(null);
 
   const allItems = useMemo((): QuickSwitcherSearchResult[] => {
-    return buildQuickSwitcherSearchResults(projects, divergencesByProject, sessions, workspaces, workspaceDivergences);
-  }, [projects, divergencesByProject, sessions, workspaces, workspaceDivergences]);
+    return buildQuickSwitcherSearchResults(
+      projects,
+      divergencesByProject,
+      sessions,
+      workspaces,
+      workspaceDivergences,
+      mode === "reveal" ? stageTabs : undefined,
+    );
+  }, [projects, divergencesByProject, sessions, stageTabs, workspaces, workspaceDivergences, mode]);
 
   const filteredItems = useMemo(() => {
     return filterQuickSwitcherSearchResults(allItems, query);
@@ -82,6 +91,7 @@ function QuickSwitcherContainer({
 
   return (
     <QuickSwitcherPresentational
+      mode={mode}
       query={query}
       selectedIndex={selectedIndex}
       filteredItems={filteredItems}

@@ -6,6 +6,7 @@ import {
   compareWorkspaceSessionAttentionPriority,
   getWorkspaceSessionAttentionState,
   isAgentSession,
+  isEditorSession,
   isWorkspaceSessionNeedsAttention,
 } from "../../../entities";
 
@@ -71,6 +72,10 @@ function getWorkspaceSessionSortTimestamp(session: WorkspaceSession): number {
   if (isAgentSession(session)) {
     return session.updatedAtMs;
   }
+  if (isEditorSession(session)) {
+    return session.createdAtMs;
+  }
+
   return session.lastActivity?.getTime() ?? 0;
 }
 

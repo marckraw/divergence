@@ -13,18 +13,21 @@ const baseContext: AppShortcutContext = {
   isFromEditor: false,
   hasActiveSession: true,
   activeSessionId: "project-1",
-  sessionCount: 3,
-  hasCreateDivergenceModalOpen: false,
-  canResolveProjectForNewDivergence: true,
+  hasOpenStage: true,
+  tabCount: 3,
 };
 
 describe("app shortcuts utils", () => {
   it("ignores prevented/editor events", () => {
     expect(resolveAppShortcut({ ...baseEvent, defaultPrevented: true }, baseContext)).toBeNull();
     expect(resolveAppShortcut(baseEvent, { ...baseContext, isFromEditor: true })).toBeNull();
+    expect(resolveAppShortcut({ ...baseEvent, key: "w" }, { ...baseContext, isFromEditor: true })).toEqual({
+      type: "close_focused_pane",
+    });
   });
 
   it("resolves core shortcuts", () => {
+    expect(resolveAppShortcut({ ...baseEvent, key: "K", shiftKey: true }, baseContext)?.type).toBe("toggle_quick_switcher_reveal");
     expect(resolveAppShortcut({ ...baseEvent, key: "k" }, baseContext)?.type).toBe("toggle_quick_switcher");
     expect(resolveAppShortcut({ ...baseEvent, key: "i" }, baseContext)?.type).toBe("open_work_inbox");
     expect(resolveAppShortcut({ ...baseEvent, key: "," }, baseContext)?.type).toBe("toggle_settings");
@@ -33,7 +36,8 @@ describe("app shortcuts utils", () => {
   });
 
   it("resolves session actions and tab navigation", () => {
-    expect(resolveAppShortcut({ ...baseEvent, key: "w" }, baseContext)?.type).toBe("close_active_session");
+    expect(resolveAppShortcut({ ...baseEvent, key: "w" }, baseContext)?.type).toBe("close_focused_pane");
+    expect(resolveAppShortcut({ ...baseEvent, key: "t" }, baseContext)?.type).toBe("new_tab");
     expect(resolveAppShortcut({ ...baseEvent, key: "d", shiftKey: true }, baseContext)).toEqual({
       type: "split_terminal",
       orientation: "horizontal",
@@ -42,6 +46,19 @@ describe("app shortcuts utils", () => {
       type: "select_tab",
       index: 1,
     });
+    expect(resolveAppShortcut({
+      ...baseEvent,
+      key: "Tab",
+      metaKey: false,
+      ctrlKey: true,
+    }, baseContext)?.type).toBe("focus_next_tab");
+    expect(resolveAppShortcut({
+      ...baseEvent,
+      key: "Tab",
+      metaKey: false,
+      ctrlKey: true,
+      shiftKey: true,
+    }, baseContext)?.type).toBe("focus_previous_tab");
     expect(resolveAppShortcut({ ...baseEvent, key: "[" }, baseContext)?.type).toBe("focus_previous_pane");
     expect(resolveAppShortcut({ ...baseEvent, key: "]" }, baseContext)?.type).toBe("focus_next_pane");
   });
@@ -52,9 +69,9 @@ describe("app shortcuts utils", () => {
       hasActiveSession: false,
     })).toBeNull();
 
-    expect(resolveAppShortcut({ ...baseEvent, key: "t" }, {
+    expect(resolveAppShortcut({ ...baseEvent, key: "1" }, {
       ...baseContext,
-      hasCreateDivergenceModalOpen: true,
+      tabCount: 0,
     })).toBeNull();
 
     expect(resolveAppShortcut({ ...baseEvent, key: "Escape", metaKey: false, ctrlKey: false }, baseContext)).toEqual({

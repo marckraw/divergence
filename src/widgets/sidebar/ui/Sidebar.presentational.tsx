@@ -36,6 +36,7 @@ import type { SidebarPresentationalProps } from "./Sidebar.types";
 import type { WorkSidebarTab } from "../../../features/work-sidebar";
 import {
   isAgentSession,
+  isEditorSession,
   isWorkspaceSessionNeedsAttention,
   type WorkspaceSession,
   type WorkspaceSessionAttentionState,
@@ -71,6 +72,7 @@ function SidebarPresentational({
   onSelectProject,
   onSelectDivergence,
   onSelectSession,
+  onRevealSession,
   onDismissSessionAttention,
   onCloseSession,
   onDeleteAgentSession,
@@ -220,7 +222,7 @@ function SidebarPresentational({
   );
 
   const getSessionTargetLabel = (session: WorkspaceSession): string => {
-    if (isAgentSession(session)) {
+    if (isAgentSession(session) || isEditorSession(session)) {
       switch (session.targetType) {
         case "project":
           return projectById.get(session.projectId)?.name ?? session.name;
@@ -257,6 +259,14 @@ function SidebarPresentational({
     }
 
     return session.name;
+  };
+
+  const getSessionDisplayLabel = (session: WorkspaceSession): string => {
+    if (isAgentSession(session) || isEditorSession(session)) {
+      return session.name;
+    }
+
+    return session.sessionRole !== "default" ? session.name : "default";
   };
 
   const renderSessionContextMenuContent = (
@@ -296,7 +306,7 @@ function SidebarPresentational({
           <ContextMenuItem className="text-red focus:text-red" onSelect={() => onCloseSession(session.id)}>
             Close Session
           </ContextMenuItem>
-          {session.useTmux && (
+          {!isEditorSession(session) && session.useTmux && (
             <ContextMenuItem className="text-red focus:text-red" onSelect={() => { void onCloseSessionAndKillTmux(session.id); }}>
               Close Session + Kill Tmux
             </ContextMenuItem>
@@ -373,7 +383,7 @@ function SidebarPresentational({
                       <Button
                         type="button"
                         className={`w-full justify-start gap-2 rounded-md px-2 py-2 text-left transition-colors ${getAttentionRowClass(attentionState, session.id === activeSessionId)}`}
-                        onClick={() => onSelectSession(session.id)}
+                        onClick={() => onRevealSession(session.id)}
                         variant="ghost"
                         size="sm"
                       >
@@ -386,6 +396,10 @@ function SidebarPresentational({
                             {isAgentSession(session) ? (
                               <span className={`text-[9px] uppercase px-1 py-0.5 rounded shrink-0 ${getAgentProviderBadgeClass(session.provider)}`}>
                                 {getAgentProviderLabel(session.provider)}
+                              </span>
+                            ) : isEditorSession(session) ? (
+                              <span className="text-[9px] uppercase px-1 py-0.5 rounded shrink-0 bg-blue/20 text-blue">
+                                editor
                               </span>
                             ) : (
                               <span className="text-[9px] uppercase px-1 py-0.5 rounded shrink-0 bg-surface text-subtext">
@@ -923,6 +937,11 @@ function SidebarPresentational({
                                                   {session.model}
                                                 </span>
                                               )}
+                                              {isEditorSession(session) && (
+                                                <span className="text-[9px] uppercase px-1 py-0.5 rounded bg-blue/20 text-blue">
+                                                  editor
+                                                </span>
+                                              )}
                                               {sessionAttention && (
                                                 <span className={`text-[9px] uppercase px-1 py-0.5 rounded ${getAttentionBadgeClass(sessionAttention.tone)} ${sessionAttention.pulse ? "animate-pulse" : ""}`}>
                                                   {sessionAttention.label}
@@ -934,9 +953,7 @@ function SidebarPresentational({
                                                 </span>
                                               )}
                                               <span className="truncate">
-                                                {isAgentSession(session) || session.sessionRole !== "default"
-                                                  ? session.name
-                                                  : "default"}
+                                                {getSessionDisplayLabel(session)}
                                               </span>
                                             </Button>
                                           </ContextMenuTrigger>
@@ -983,6 +1000,11 @@ function SidebarPresentational({
                                     {session.model}
                                   </span>
                                 )}
+                                {isEditorSession(session) && (
+                                  <span className="text-[9px] uppercase px-1 py-0.5 rounded bg-blue/20 text-blue">
+                                    editor
+                                  </span>
+                                )}
                                 {sessionAttention && (
                                   <span className={`text-[9px] uppercase px-1 py-0.5 rounded ${getAttentionBadgeClass(sessionAttention.tone)} ${sessionAttention.pulse ? "animate-pulse" : ""}`}>
                                     {sessionAttention.label}
@@ -994,9 +1016,7 @@ function SidebarPresentational({
                                   </span>
                                 )}
                                 <span className="truncate">
-                                  {isAgentSession(session) || session.sessionRole !== "default"
-                                    ? session.name
-                                    : "default"}
+                                  {getSessionDisplayLabel(session)}
                                 </span>
                               </Button>
                             </ContextMenuTrigger>

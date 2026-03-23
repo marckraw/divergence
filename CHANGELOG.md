@@ -1,5 +1,39 @@
 # divergence
 
+## 0.43.0
+
+### Minor Changes
+
+- 7c93157: Add first-class editor sessions, shared code editing and diff primitives, and project-wide search that opens matches directly in editor tabs.
+
+## 0.42.0
+
+### Minor Changes
+
+- 5cb6419: Add timestamp display for all assistant messages in the agent session timeline. Shows compact time (HH:MM for today, "Yesterday HH:MM", or "Mon D, HH:MM" for older) next to each message status badge. Timestamps are provider-agnostic, using the existing `createdAtMs` field already set by the Rust agent runtime.
+
+### Patch Changes
+
+- ac7503d: Improve responsive design of agent session conversation view using CSS container queries. The sidebar now shows/hides based on actual container width instead of viewport width, and header, timeline, and composer layouts gracefully adapt to narrow split panes.
+
+## 0.41.2
+
+### Patch Changes
+
+- ab4681a: Increase the configurable layout tab limit to default to 20, expose the cap in Settings > General, and show a toast when new tab creation is blocked by the configured limit.
+
+## 0.41.1
+
+### Patch Changes
+
+- ec8e299: cmd + b open pane improvements
+
+## 0.41.0
+
+### Minor Changes
+
+- 0120566: Add persistent layout tabs so each tab owns its own pane group and users can switch workspaces without disturbing existing pane arrangements. This also adds a stage tab bar, tab-focused keyboard shortcuts, and quick switcher support for opening selections in a new tab.
+
 ## 0.40.0
 
 ### Minor Changes

@@ -1,30 +1,27 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap } from "@codemirror/view";
-import { basicSetup } from "codemirror";
+import { useEffect, useId, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { DEFAULT_EDITOR_THEME, type EditorThemeId } from "../../../shared";
 import {
+  CodeEditorCore,
+  DEFAULT_EDITOR_THEME,
   FAST_EASE_OUT,
   SOFT_SPRING,
   Button,
   LoadingSpinner,
   Markdown,
+  UnifiedDiffViewer,
   getContentSwapVariants,
   getSlideUpVariants,
+  parseUnifiedDiffLines,
+  type EditorThemeId,
+  type ParsedDiffLine,
 } from "../../../shared";
 import { TabButton, Textarea, ToolbarButton } from "../../../shared";
 import type { ChangesMode } from "../../../entities";
 import {
   buildAnchorLabel,
-  parseUnifiedDiffLines,
   type DiffReviewAnchor,
   type DiffReviewComment,
-  type ParsedDiffLine,
 } from "../../../features/diff-review";
-import { getDiffLineClass } from "../lib/quickEdit.pure";
-import { themeExtensionsById, getLanguageExtension } from "../lib/editorTheme.pure";
-import { useImportPathCompletion } from "../model/useImportPathCompletion";
 import QuickEditDrawerPresentational from "./QuickEditDrawer.presentational";
 
 interface QuickEditDrawerProps {
@@ -51,137 +48,6 @@ interface QuickEditDrawerProps {
   onSave: () => void;
   onClose: () => void;
   onAddDiffComment?: (anchor: DiffReviewAnchor, message: string) => void;
-}
-
-const baseTheme = EditorView.theme({
-  "&": {
-    height: "100%",
-    fontSize: "13px",
-    fontFamily:
-      '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
-  },
-  ".cm-scroller": { overflow: "auto" },
-});
-
-function CodeEditor({
-  filePath,
-  content,
-  editorTheme,
-  projectRootPath,
-  isReadOnly,
-  onChange,
-  onSave,
-  onClose,
-}: {
-  filePath: string | null;
-  content: string;
-  editorTheme: EditorThemeId;
-  projectRootPath: string | null;
-  isReadOnly: boolean;
-  onChange: (next: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const viewRef = useRef<EditorView | null>(null);
-  const onChangeRef = useRef(onChange);
-  const onSaveRef = useRef(onSave);
-  const onCloseRef = useRef(onClose);
-  const languageExtensions = useMemo(() => getLanguageExtension(filePath), [filePath]);
-  const themeExtensions = useMemo(
-    () => themeExtensionsById[editorTheme] ?? themeExtensionsById[DEFAULT_EDITOR_THEME],
-    [editorTheme]
-  );
-  const { completionExtensions } = useImportPathCompletion({ filePath, projectRootPath });
-
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  useEffect(() => {
-    onSaveRef.current = onSave;
-  }, [onSave]);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!containerRef.current) {
-      return;
-    }
-
-    if (viewRef.current) {
-      viewRef.current.destroy();
-      viewRef.current = null;
-    }
-
-    const state = EditorState.create({
-      // Content is synced by the dedicated content effect below.
-      doc: "",
-      extensions: [
-        basicSetup,
-        baseTheme,
-        ...themeExtensions,
-        ...languageExtensions,
-        ...completionExtensions,
-        ...(isReadOnly ? [EditorView.editable.of(false)] : []),
-        EditorView.updateListener.of(update => {
-          if (update.docChanged) {
-            onChangeRef.current(update.state.doc.toString());
-          }
-        }),
-        keymap.of([
-          {
-            key: "Mod-s",
-            run: () => {
-              onSaveRef.current();
-              return true;
-            },
-          },
-          {
-            key: "Escape",
-            run: () => {
-              onCloseRef.current();
-              return true;
-            },
-          },
-        ]),
-      ],
-    });
-
-    viewRef.current = new EditorView({
-      state,
-      parent: containerRef.current,
-    });
-    const createdView = viewRef.current;
-    const focusFrame = window.requestAnimationFrame(() => {
-      if (viewRef.current === createdView) {
-        createdView.focus();
-      }
-    });
-
-    return () => {
-      window.cancelAnimationFrame(focusFrame);
-      viewRef.current?.destroy();
-      viewRef.current = null;
-    };
-  }, [filePath, isReadOnly, languageExtensions, themeExtensions, completionExtensions]);
-
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view) {
-      return;
-    }
-    const current = view.state.doc.toString();
-    if (current !== content) {
-      view.dispatch({
-        changes: { from: 0, to: current.length, insert: content },
-      });
-    }
-  }, [content]);
-
-  return <div ref={containerRef} className="h-full w-full" />;
 }
 
 function DiffViewer({
@@ -274,42 +140,15 @@ function DiffViewer({
     setRangeStartIndex(null);
   };
 
-  if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center text-sm text-subtext">
-        <LoadingSpinner>Loading diff...</LoadingSpinner>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="h-full flex items-center justify-center text-sm text-red">
-        {error}
-      </div>
-    );
-  }
-
-  if (isBinary) {
-    return (
-      <div className="h-full flex items-center justify-center text-sm text-subtext">
-        Binary file diff is not available.
-      </div>
-    );
-  }
-
-  if (!diff) {
-    return (
-      <div className="h-full flex items-center justify-center text-sm text-subtext">
-        No diff available.
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full w-full overflow-auto font-mono text-[11px] leading-5">
-      {rangeStartIndex !== null && (
-        <div className="sticky top-0 z-10 mx-2 mt-2 mb-1 px-2 py-1 rounded border border-accent/30 bg-accent/10 text-[10px] text-subtext flex items-center justify-between gap-2">
+    <UnifiedDiffViewer
+      diff={diff}
+      isBinary={isBinary}
+      isLoading={isLoading}
+      error={error}
+      className="text-[11px] leading-5"
+      header={rangeStartIndex !== null ? (
+        <div className="sticky top-0 z-10 mx-2 mb-1 mt-2 flex items-center justify-between gap-2 rounded border border-accent/30 bg-accent/10 px-2 py-1 text-[10px] text-subtext">
           <span>
             Select range end line, then click <span className="text-text">Range End</span>.
             You can end on the same line for a one-line selection.
@@ -324,105 +163,113 @@ function DiffViewer({
             Cancel
           </Button>
         </div>
-      )}
-      {lines.map((line) => {
-        const lineComments = commentsByLine.get(line.index) ?? [];
-        const canComment = Boolean(filePath && onAddComment && (line.kind === "added" || line.kind === "removed"));
+      ) : null}
+      getLineRowClassName={(line) => {
         const isComposerOpen = composerLineIndex === line.index;
         const isRangeStart = rangeStartIndex === line.index;
-        const rowHighlightClass = isRangeStart
-          ? "bg-accent/15 ring-1 ring-accent/40"
-          : isComposerOpen
-            ? "bg-surface/45 ring-1 ring-surface"
-            : rangeStartIndex !== null
-              ? "hover:bg-accent/10"
-              : "hover:bg-surface/35";
+        if (isRangeStart) {
+          return "bg-accent/15 ring-1 ring-accent/40";
+        }
+        if (isComposerOpen) {
+          return "bg-surface/45 ring-1 ring-surface";
+        }
+        return rangeStartIndex !== null ? "hover:bg-accent/10" : "hover:bg-surface/35";
+      }}
+      renderLineAside={(line) => {
+        const canComment = Boolean(
+          filePath && onAddComment && (line.kind === "added" || line.kind === "removed"),
+        );
+        if (!canComment) {
+          return null;
+        }
 
-        const renderedLineText = line.text === "" ? " " : line.text;
+        const isComposerOpen = composerLineIndex === line.index;
+        const isRangeStart = rangeStartIndex === line.index;
 
         return (
-          <div key={line.index}>
-            <div className={`group/line flex w-full items-start gap-2 px-2 rounded transition-colors ${rowHighlightClass}`}>
-              <div
-                className={`flex-1 px-1 whitespace-pre ${getDiffLineClass(line.text)}`}
+          <div
+            className={`flex shrink-0 items-center gap-1 transition-opacity ${
+              isComposerOpen || isRangeStart ? "opacity-100" : "opacity-0 group-hover/line:opacity-100"
+            }`}
+          >
+            <Button
+              type="button"
+              className="text-[10px] text-subtext hover:text-text"
+              onClick={() => openSingleComposer(line)}
+              variant="ghost"
+              size="xs"
+            >
+              Single
+            </Button>
+            {rangeStartIndex === null ? (
+              <Button
+                type="button"
+                className="text-[10px] text-subtext hover:text-text"
+                onClick={() => setRangeStartIndex(line.index)}
+                variant="ghost"
+                size="xs"
               >
-                {renderedLineText}
-              </div>
-              {canComment && (
-                <div
-                  className={`flex shrink-0 items-center gap-1 transition-opacity ${
-                    isComposerOpen || isRangeStart ? "opacity-100" : "opacity-0 group-hover/line:opacity-100"
-                  }`}
+                Range Start
+              </Button>
+            ) : isRangeStart ? (
+              <>
+                <Button
+                  type="button"
+                  className="text-[10px] text-subtext hover:text-text"
+                  onClick={() => openRangeComposer(rangeStartIndex, line.index)}
+                  variant="ghost"
+                  size="xs"
                 >
-                  <Button
-                    type="button"
-                    className="text-[10px] text-subtext hover:text-text"
-                    onClick={() => openSingleComposer(line)}
-                    variant="ghost"
-                    size="xs"
-                  >
-                    Single
-                  </Button>
-                  {rangeStartIndex === null ? (
-                    <Button
-                      type="button"
-                      className="text-[10px] text-subtext hover:text-text"
-                      onClick={() => setRangeStartIndex(line.index)}
-                      variant="ghost"
-                      size="xs"
-                    >
-                      Range Start
-                    </Button>
-                  ) : isRangeStart ? (
-                    <>
-                      <Button
-                        type="button"
-                        className="text-[10px] text-subtext hover:text-text"
-                        onClick={() => openRangeComposer(rangeStartIndex, line.index)}
-                        variant="ghost"
-                        size="xs"
-                      >
-                        Range End
-                      </Button>
-                      <Button
-                        type="button"
-                        className="text-[10px] text-subtext hover:text-text"
-                        onClick={() => setRangeStartIndex(null)}
-                        variant="ghost"
-                        size="xs"
-                      >
-                        Cancel
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      type="button"
-                      className="text-[10px] text-subtext hover:text-text"
-                      onClick={() => openRangeComposer(rangeStartIndex, line.index)}
-                      variant="ghost"
-                      size="xs"
-                    >
-                      Range End
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
+                  Range End
+                </Button>
+                <Button
+                  type="button"
+                  className="text-[10px] text-subtext hover:text-text"
+                  onClick={() => setRangeStartIndex(null)}
+                  variant="ghost"
+                  size="xs"
+                >
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                className="text-[10px] text-subtext hover:text-text"
+                onClick={() => openRangeComposer(rangeStartIndex, line.index)}
+                variant="ghost"
+                size="xs"
+              >
+                Range End
+              </Button>
+            )}
+          </div>
+        );
+      }}
+      renderLineFooter={(line) => {
+        const lineComments = commentsByLine.get(line.index) ?? [];
+        const canComment = Boolean(
+          filePath && onAddComment && (line.kind === "added" || line.kind === "removed"),
+        );
+        const isComposerOpen = composerLineIndex === line.index;
+
+        return (
+          <>
             {lineComments.length > 0 && (
-              <div className="ml-6 mb-1 space-y-1">
+              <div className="mb-1 ml-6 space-y-1">
                 {lineComments.map((comment) => (
                   <div
                     key={comment.id}
-                    className="px-2 py-1 rounded bg-surface text-[10px] text-subtext break-words"
+                    className="break-words rounded bg-surface px-2 py-1 text-[10px] text-subtext"
                   >
-                    <span className="text-text/80 mr-1">[{buildAnchorLabel(comment.anchor)}]</span>
+                    <span className="mr-1 text-text/80">[{buildAnchorLabel(comment.anchor)}]</span>
                     {comment.message}
                   </div>
                 ))}
               </div>
             )}
             {isComposerOpen && canComment && filePath && composerAnchor && (
-              <div className="ml-6 mb-2 mr-3 border border-surface rounded p-2 bg-main/60">
+              <div className="mb-2 ml-6 mr-3 rounded border border-surface bg-main/60 p-2">
                 <Textarea
                   rows={3}
                   value={composerText}
@@ -448,7 +295,7 @@ function DiffViewer({
                   </Button>
                   <Button
                     type="button"
-                    className="px-2 py-1 text-[10px] bg-primary text-primary-foreground rounded disabled:opacity-50"
+                    className="rounded bg-primary px-2 py-1 text-[10px] text-primary-foreground disabled:opacity-50"
                     disabled={!composerText.trim()}
                     onClick={() => {
                       if (!onAddComment || !composerText.trim() || !composerAnchor) {
@@ -467,10 +314,10 @@ function DiffViewer({
                 </div>
               </div>
             )}
-          </div>
+          </>
         );
-      })}
-    </div>
+      }}
+    />
   );
 }
 
@@ -710,7 +557,7 @@ function QuickEditDrawer({
                     exit="exit"
                     transition={contentTransition}
                   >
-                    <CodeEditor
+                    <CodeEditorCore
                       filePath={filePath}
                       content={content}
                       editorTheme={editorTheme}

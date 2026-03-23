@@ -129,6 +129,7 @@ pub fn run() {
             commands::get_tmux_diagnostics,
             commands::kill_all_tmux_sessions,
             commands::list_project_files,
+            commands::search_project_files,
             commands::list_branch_changes,
             commands::get_branch_diff,
             commands::write_review_brief_file,

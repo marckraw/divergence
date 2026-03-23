@@ -1,4 +1,4 @@
-import type { StageLayout } from "../../entities";
+import type { StageTabGroup } from "../../entities";
 import {
   buildPersistedStageLayoutSnapshot,
   normalizePersistedStageLayoutState,
@@ -6,7 +6,7 @@ import {
 
 export const STAGE_LAYOUT_STORAGE_KEY = "divergence-stage-layout";
 
-export function loadPersistedStageLayoutState(): StageLayout | null {
+export function loadPersistedStageTabGroup(): StageTabGroup | null {
   try {
     const raw = localStorage.getItem(STAGE_LAYOUT_STORAGE_KEY);
     if (!raw) {
@@ -19,8 +19,8 @@ export function loadPersistedStageLayoutState(): StageLayout | null {
   }
 }
 
-export function savePersistedStageLayoutState(layout: StageLayout | null): void {
-  const snapshot = buildPersistedStageLayoutSnapshot(layout);
+export function savePersistedStageTabGroup(group: StageTabGroup | null): void {
+  const snapshot = buildPersistedStageLayoutSnapshot(group);
   if (!snapshot) {
     localStorage.removeItem(STAGE_LAYOUT_STORAGE_KEY);
     return;
@@ -29,6 +29,6 @@ export function savePersistedStageLayoutState(layout: StageLayout | null): void 
   localStorage.setItem(STAGE_LAYOUT_STORAGE_KEY, JSON.stringify(snapshot));
 }
 
-export function clearPersistedStageLayoutState(): void {
+export function clearPersistedStageTabGroup(): void {
   localStorage.removeItem(STAGE_LAYOUT_STORAGE_KEY);
 }

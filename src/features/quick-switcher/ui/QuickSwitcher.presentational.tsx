@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { Divergence, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
-import { isAgentSession } from "../../../entities";
+import type { Divergence, StageTab, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import { isAgentSession, isEditorSession } from "../../../entities";
 import {
   EmptyState,
   FAST_EASE_OUT,
@@ -11,6 +11,7 @@ import {
 import type { QuickSwitcherPresentationalProps } from "./QuickSwitcher.types";
 
 function QuickSwitcherPresentational({
+  mode,
   query,
   selectedIndex,
   filteredItems,
@@ -37,6 +38,16 @@ function QuickSwitcherPresentational({
       panelClassName="w-[500px] max-h-[400px] flex flex-col"
     >
       <div className="p-3 border-b border-surface">
+        <div className="mb-2 flex items-center justify-between gap-2 px-1 text-xs text-subtext">
+          <span>{mode === "reveal" ? "Focus the selected session in its existing tab, or open it in a new tab" : "Replace the focused pane in the current tab"}</span>
+          <span className={`rounded-full px-2 py-0.5 uppercase tracking-[0.16em] ${
+            mode === "reveal"
+              ? "bg-accent/20 text-accent"
+              : "bg-surface text-subtext"
+          }`}>
+            {mode === "reveal" ? "Reveal" : "Replace"}
+          </span>
+        </div>
         <div className="flex items-center gap-2 bg-main px-3 py-2 rounded">
           <svg
             className="w-4 h-4 text-subtext"
@@ -57,7 +68,9 @@ function QuickSwitcherPresentational({
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="Search projects, divergences, sessions, and workspaces..."
+            placeholder={mode === "reveal"
+              ? "Jump to an existing session or open it in a new tab..."
+              : "Search projects, divergences, sessions, and workspaces..."}
             className="flex-1 bg-transparent text-text placeholder-subtext focus:outline-none"
           />
           <Kbd className="text-subtext">esc</Kbd>
@@ -77,7 +90,11 @@ function QuickSwitcherPresentational({
                 const agentSession = sessionItem && isAgentSession(sessionItem)
                   ? sessionItem
                   : null;
+                const editorSession = sessionItem && isEditorSession(sessionItem)
+                  ? sessionItem
+                  : null;
                 const isAgentItem = Boolean(agentSession);
+                const isEditorItem = Boolean(editorSession);
 
                 return (
                   <motion.div
@@ -125,6 +142,26 @@ function QuickSwitcherPresentational({
                         d="M9 3h6m4 4v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7m3 0V5a2 2 0 012-2h4a2 2 0 012 2v2M9 11h6M9 15h4"
                       />
                     </svg>
+                  ) : isEditorItem ? (
+                    <svg
+                      className="w-5 h-5 text-blue"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 20h9"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"
+                      />
+                    </svg>
                   ) : (
                     <svg
                       className="w-5 h-5 text-yellow"
@@ -168,6 +205,20 @@ function QuickSwitcherPresentational({
                       d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                     />
                   </svg>
+                ) : result.type === "stage_tab" ? (
+                  <svg
+                    className="w-5 h-5 text-subtext"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 7a2 2 0 012-2h14a2 2 0 012 2v3H3V7zm0 5h18v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5z"
+                    />
+                  </svg>
                 ) : (
                   <svg
                     className="w-5 h-5 text-text"
@@ -188,11 +239,15 @@ function QuickSwitcherPresentational({
                   <div className="text-text truncate">
                     {result.type === "divergence"
                       ? (result.item as Divergence).branch
+                      : result.type === "stage_tab"
+                        ? (result.item as StageTab).label
                       : result.type === "session"
                         ? sessionItem?.name
                         : result.type === "workspace_divergence"
                           ? (result.item as WorkspaceDivergence).branch
-                          : result.item.name}
+                          : "name" in result.item
+                            ? result.item.name
+                            : ""}
                   </div>
                   {result.type === "workspace" && (
                     <div className="text-xs text-subtext truncate">
@@ -202,6 +257,11 @@ function QuickSwitcherPresentational({
                   {result.type === "workspace_divergence" && result.workspaceName && (
                     <div className="text-xs text-subtext truncate">
                       {result.workspaceName}
+                    </div>
+                  )}
+                  {result.type === "stage_tab" && result.detail && (
+                    <div className="text-xs text-subtext truncate">
+                      {result.detail}
                     </div>
                   )}
                   {(result.type === "divergence" || result.type === "session") && result.projectName && (
@@ -216,6 +276,11 @@ function QuickSwitcherPresentational({
                       {agentSession.provider} • {agentSession.model}
                     </div>
                   )}
+                  {result.type === "session" && editorSession && (
+                    <div className="text-xs text-subtext truncate">
+                      {editorSession.filePath}
+                    </div>
+                  )}
                 </div>
 
                 <span
@@ -225,6 +290,8 @@ function QuickSwitcherPresentational({
                       : result.type === "session"
                         ? isAgentItem
                           ? "bg-surface text-text"
+                          : isEditorItem
+                            ? "bg-blue/20 text-blue"
                           : "bg-yellow/20 text-yellow"
                         : result.type === "workspace"
                           ? "bg-blue/20 text-blue"
@@ -235,8 +302,12 @@ function QuickSwitcherPresentational({
                 >
                   {result.type === "workspace_divergence"
                     ? "ws divergence"
+                    : result.type === "stage_tab"
+                      ? "tab"
                     : result.type === "session" && agentSession
                       ? `${agentSession.provider} agent`
+                      : result.type === "session" && editorSession
+                        ? "editor"
                       : result.type}
                 </span>
                   </motion.div>
@@ -252,7 +323,7 @@ function QuickSwitcherPresentational({
           <Kbd className="px-1">up/down</Kbd> navigate
         </span>
         <span>
-          <Kbd className="px-1">enter</Kbd> select
+          <Kbd className="px-1">enter</Kbd> {mode === "reveal" ? "reveal or open" : "select"}
         </span>
         <span>
           <Kbd className="px-1">esc</Kbd> close

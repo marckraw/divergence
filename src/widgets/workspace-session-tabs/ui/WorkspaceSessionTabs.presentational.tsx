@@ -3,6 +3,7 @@ import type { WorkspaceSession } from "../../../entities";
 import {
   getWorkspaceSessionAttentionState,
   isAgentSession,
+  isEditorSession,
 } from "../../../entities";
 import {
   FAST_EASE_OUT,
@@ -60,6 +61,7 @@ function WorkspaceSessionTabsPresentational({
       {sessionList.map((session, index) => {
         const isActive = session.id === activeSessionId;
         const isAgent = isAgentSession(session);
+        const isEditor = isEditorSession(session);
         const attentionState = getWorkspaceSessionAttentionState(session, {
           isActive,
           hasIdleAttention: idleAttentionSessionIds.has(session.id),
@@ -110,6 +112,26 @@ function WorkspaceSessionTabsPresentational({
                   d="M9 3h6m4 4v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7m3 0V5a2 2 0 012-2h4a2 2 0 012 2v2M9 11h6M9 15h4"
                 />
               </svg>
+            ) : isEditor ? (
+              <svg
+                className="w-3 h-3 text-blue"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 20h9"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z"
+                />
+              </svg>
             ) : session.type === "divergence" || session.type === "workspace_divergence" ? (
               <svg
                 className="w-3 h-3 text-accent"
@@ -144,6 +166,10 @@ function WorkspaceSessionTabsPresentational({
             {isAgent ? (
               <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded ${getAgentProviderBadgeClass(session.provider)}`}>
                 {getAgentProviderLabel(session.provider)}
+              </span>
+            ) : isEditor ? (
+              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-blue/20 text-blue">
+                edit
               </span>
             ) : session.useTmux ? (
               <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface text-subtext">

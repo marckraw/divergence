@@ -87,72 +87,32 @@ function AgentSessionHeaderContainer({
   }, [session.runtimeEvents.length, session.runtimeStatus]);
 
   return (
-    <div className="border-b border-surface bg-sidebar/70 px-5 py-4">
-      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-text">{session.name}</h2>
-            <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-subtext">
-              {providerLabel}
-            </span>
+    <div className="border-b border-surface bg-sidebar/70 px-3 py-3 sm:px-5 sm:py-4">
+      <div className="mx-auto w-full max-w-5xl space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold text-text">{session.name}</h2>
+          <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-subtext">
+            {providerLabel}
+          </span>
+          <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
+            {selectedModelLabel}
+          </span>
+          {selectedEffortLabel ? (
             <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
-              {selectedModelLabel}
+              {selectedEffortLabel}
             </span>
-            {selectedEffortLabel ? (
-              <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
-                {selectedEffortLabel}
-              </span>
-            ) : null}
-            {providerVersion ? (
-              <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
-                {providerVersion}
-              </span>
-            ) : null}
+          ) : null}
+          {providerVersion ? (
+            <span className="rounded-full border border-surface bg-main/70 px-2 py-0.5 text-[10px] text-subtext">
+              {providerVersion}
+            </span>
+          ) : null}
+          <div className="rounded-full border border-surface bg-main/60 px-2.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-subtext">
+            {session.runtimeStatus}
           </div>
-          <p className="mt-1 text-xs text-subtext truncate">{session.path}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <TooltipProvider delayDuration={150}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-surface bg-main/50 px-2.5 py-1 text-[11px] text-subtext">
-                    <span className="uppercase tracking-[0.16em]">Context</span>
-                    {conversationContext.isAvailable && conversationContext.fractionUsed !== null ? (
-                      <ProgressBar
-                        value={conversationContext.fractionUsed * 100}
-                        max={100}
-                        className="h-1.5 w-12 bg-surface/90"
-                        barClassName={
-                          conversationContext.tone === "danger"
-                            ? "bg-red"
-                            : conversationContext.tone === "warning"
-                              ? "bg-yellow"
-                              : "bg-emerald-300"
-                        }
-                      />
-                    ) : null}
-                    <span>{conversationContext.label}</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {conversationContext.detail}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          {(session.runtimeStatus === "running"
-            || session.runtimeStatus === "waiting"
-            || hasRuntimeTelemetry) && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-subtext">
-              <span className="rounded-full border border-surface bg-main/50 px-2 py-0.5 uppercase tracking-[0.16em]">
-                {telemetry.phaseLabel}
-              </span>
-              {telemetry.elapsedLabel && <span>Elapsed {telemetry.elapsedLabel}</span>}
-              {telemetry.lastEventLabel && <span>Last event {telemetry.lastEventLabel} ago</span>}
-              {telemetry.latestEventMessage && <span>{telemetry.latestEventMessage}</span>}
-            </div>
-          )}
         </div>
-        <div className="flex items-center gap-2">
+        <p className="text-xs text-subtext truncate">{session.path}</p>
+        <div className="flex flex-wrap items-center gap-2">
           {modelOptions.length > 0 ? (
             <Select
               value={session.model}
@@ -165,7 +125,7 @@ function AgentSessionHeaderContainer({
                 || session.runtimeStatus === "waiting"
               }
             >
-              <SelectTrigger className="h-8 min-w-[11rem] bg-main/60 text-xs">
+              <SelectTrigger className="h-7 w-auto min-w-0 bg-main/60 text-xs">
                 <SelectValue placeholder="Select model" />
               </SelectTrigger>
               <SelectContent>
@@ -189,7 +149,7 @@ function AgentSessionHeaderContainer({
                 || session.runtimeStatus === "waiting"
               }
             >
-              <SelectTrigger className="h-8 min-w-[9rem] bg-main/60 text-xs">
+              <SelectTrigger className="h-7 w-auto min-w-0 bg-main/60 text-xs">
                 <SelectValue placeholder="Select effort" />
               </SelectTrigger>
               <SelectContent>
@@ -201,9 +161,33 @@ function AgentSessionHeaderContainer({
               </SelectContent>
             </Select>
           ) : null}
-          <div className="rounded-full border border-surface bg-main/60 px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] text-subtext">
-            {session.runtimeStatus}
-          </div>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="inline-flex items-center gap-2 rounded-full border border-surface bg-main/50 px-2.5 py-1 text-[11px] text-subtext">
+                  <span className="uppercase tracking-[0.16em]">Context</span>
+                  {conversationContext.isAvailable && conversationContext.fractionUsed !== null ? (
+                    <ProgressBar
+                      value={conversationContext.fractionUsed * 100}
+                      max={100}
+                      className="h-1.5 w-12 bg-surface/90"
+                      barClassName={
+                        conversationContext.tone === "danger"
+                          ? "bg-red"
+                          : conversationContext.tone === "warning"
+                            ? "bg-yellow"
+                            : "bg-emerald-300"
+                      }
+                    />
+                  ) : null}
+                  <span>{conversationContext.label}</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {conversationContext.detail}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button
             type="button"
             variant="ghost"
@@ -214,6 +198,18 @@ function AgentSessionHeaderContainer({
             Stop
           </Button>
         </div>
+        {(session.runtimeStatus === "running"
+          || session.runtimeStatus === "waiting"
+          || hasRuntimeTelemetry) && (
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-subtext">
+            <span className="rounded-full border border-surface bg-main/50 px-2 py-0.5 uppercase tracking-[0.16em]">
+              {telemetry.phaseLabel}
+            </span>
+            {telemetry.elapsedLabel && <span>Elapsed {telemetry.elapsedLabel}</span>}
+            {telemetry.lastEventLabel && <span>Last event {telemetry.lastEventLabel} ago</span>}
+            {telemetry.latestEventMessage && <span>{telemetry.latestEventMessage}</span>}
+          </div>
+        )}
       </div>
       {session.errorMessage && (
         <div className="mx-auto mt-3 w-full max-w-5xl rounded-xl border border-red/30 bg-red/10 px-3 py-2">

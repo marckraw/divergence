@@ -37,6 +37,12 @@ export {
   getAgentSessionTimestamp,
   suggestAgentSessionTitle,
 } from "./agent-session";
+export type { EditorSession } from "./editor-session";
+export {
+  buildEditorSession,
+  findEditorSessionByFilePath,
+  getEditorSessionDisplayName,
+} from "./editor-session";
 export type {
   WorkspaceSession,
   WorkspaceSessionAttentionOptions,
@@ -55,6 +61,7 @@ export {
   getWorkspaceSessionTargetType,
   isWorkspaceSessionNeedsAttention,
   isAgentSession,
+  isEditorSession,
   isTerminalSession,
 } from "./workspace-session";
 export type {
@@ -64,20 +71,42 @@ export type {
   StagePane,
   StagePaneId,
   StagePaneRef,
+  StageTab,
+  StageTabGroup,
 } from "./stage-layout";
 export {
+  addTab,
+  addTabWithRef,
+  buildSingleTabGroup,
+  closeOtherTabs,
   buildSinglePaneLayout,
   buildSplitLayout,
+  findTabBySessionId,
+  focusNextTab,
   focusPane,
+  focusPreviousTab,
+  focusTab,
+  getActiveTab,
+  getDefaultStageTabLabel,
   getFocusedPane,
   getPaneBySessionId,
+  getStageTabOrdinal,
+  isStageTabId,
   isSinglePane,
+  MAX_STAGE_TABS,
   MAX_STAGE_PANES,
+  removeTab,
+  removeTabIfEmpty,
   removePaneFromLayout,
+  revealSessionInTabGroup,
+  renameTab,
   replacePaneRef,
   resizeAdjacentPanes,
   resizePanes,
+  STAGE_TAB_IDS,
   STAGE_PANE_IDS,
+  updateTabLayout,
+  type StageTabId,
 } from "./stage-layout";
 export {
   areSplitPaneSizesEqual,
