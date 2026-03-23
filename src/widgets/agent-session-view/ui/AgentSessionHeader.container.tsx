@@ -19,8 +19,8 @@ import {
   TooltipTrigger,
   useAppSettings,
 } from "../../../shared";
+import { useChangesTree } from "../../../features/changes-tree";
 import { buildAgentConversationContextSummary } from "../lib/agentConversationContext.pure";
-import { collectSessionChangedFiles } from "../lib/agentSessionChangedFiles.pure";
 import {
   buildAgentRuntimeTelemetrySummary,
   formatRuntimeEventOffset,
@@ -60,10 +60,12 @@ function AgentSessionHeaderContainer({
     () => buildAgentRuntimeTelemetrySummary(session, nowMs),
     [session, nowMs],
   );
-  const changedFiles = useMemo(
-    () => collectSessionChangedFiles(session.activities),
-    [session.activities],
-  );
+  const isRunning = session.runtimeStatus === "running" || session.runtimeStatus === "waiting";
+  const { treeNodes: changesTreeNodes, loading: changesLoading } = useChangesTree({
+    rootPath: session.path,
+    initialMode: "branch",
+    pollWhileActive: isRunning,
+  });
   const hasRuntimeTelemetry = session.runtimeEvents.length > 0;
 
   useEffect(() => {
@@ -264,7 +266,7 @@ function AgentSessionHeaderContainer({
           </details>
         </div>
       )}
-      <AgentSessionChangedFilesPresentational changedFiles={changedFiles} />
+      <AgentSessionChangedFilesPresentational treeNodes={changesTreeNodes} loading={changesLoading} />
       {session.pendingRequest && (
         <div className="mx-auto mt-4 w-full max-w-5xl rounded-2xl border border-accent/30 bg-accent/10 px-4 py-4 shadow-[0_18px_60px_-42px_rgba(99,102,241,0.65)]">
           <div className="flex items-center justify-between gap-3">
