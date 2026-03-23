@@ -20,7 +20,7 @@ describe("stageLayoutPersistence", () => {
               },
               {
                 id: "stage-pane-2",
-                ref: { kind: "pending" },
+                ref: { kind: "pending", sourceSessionId: "terminal-1" },
               },
             ],
             paneSizes: [3, 1],
@@ -44,7 +44,7 @@ describe("stageLayoutPersistence", () => {
               },
               {
                 id: "stage-pane-2",
-                ref: { kind: "pending" },
+                ref: { kind: "pending", sourceSessionId: "terminal-1" },
               },
             ],
             paneSizes: [0.75, 0.25],
@@ -115,7 +115,7 @@ describe("stageLayoutPersistence", () => {
             panes: [
               {
                 id: "stage-pane-1",
-                ref: { kind: "pending" },
+                ref: { kind: "pending", sourceSessionId: "terminal-1" },
               },
             ],
           },
@@ -131,7 +131,7 @@ describe("stageLayoutPersistence", () => {
             panes: [
               {
                 id: "stage-pane-1",
-                ref: { kind: "pending" },
+                ref: { kind: "pending", sourceSessionId: "terminal-1" },
               },
             ],
             paneSizes: [1],
@@ -212,7 +212,7 @@ describe("stageLayoutPersistence", () => {
               },
               {
                 id: "stage-pane-2",
-                ref: { kind: "pending" },
+                ref: { kind: "pending", sourceSessionId: "agent-1" },
               },
             ],
             paneSizes: [2, 1],
@@ -253,7 +253,7 @@ describe("stageLayoutPersistence", () => {
               },
               {
                 id: "stage-pane-2",
-                ref: { kind: "pending" },
+                ref: { kind: "pending", sourceSessionId: "agent-1" },
               },
             ],
             paneSizes: [2 / 3, 1 / 3],
@@ -293,7 +293,7 @@ describe("stageLayoutPersistence", () => {
               },
               {
                 id: "stage-pane-2",
-                ref: { kind: "pending" },
+                ref: { kind: "pending", sourceSessionId: "agent-1" },
               },
             ],
             paneSizes: [2 / 3, 1 / 3],

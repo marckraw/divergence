@@ -73,7 +73,12 @@ function parsePaneRef(value: unknown, allowPending: boolean): StagePaneRef | nul
   }
 
   if (allowPending && value.kind === "pending") {
-    return { kind: "pending" };
+    const sourceSessionId = typeof value.sourceSessionId === "string" && value.sourceSessionId.trim()
+      ? value.sourceSessionId
+      : undefined;
+    return sourceSessionId
+      ? { kind: "pending", sourceSessionId }
+      : { kind: "pending" };
   }
 
   const sessionId = typeof value.sessionId === "string" && value.sessionId.trim()

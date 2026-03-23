@@ -106,6 +106,21 @@ function getFocusedSessionIdFromLayout(layout: StageLayout): string | null {
   return getSessionIdFromPane(getFocusedPane(layout));
 }
 
+function resolvePendingRef(
+  ref: StagePaneRef,
+  sourceSessionId: string | null,
+): StagePaneRef {
+  if (ref.kind !== "pending") {
+    return ref;
+  }
+
+  const nextSourceSessionId = ref.sourceSessionId ?? sourceSessionId ?? undefined;
+
+  return nextSourceSessionId
+    ? { kind: "pending", sourceSessionId: nextSourceSessionId }
+    : { kind: "pending" };
+}
+
 function pruneTabGroupSessions(
   group: StageTabGroup | null,
   workspaceSessions: Map<string, WorkspaceSession>,
@@ -479,11 +494,12 @@ export function useStageTabGroup({
     if (!currentGroup) {
       const activeRef = buildStagePaneRef(activeSessionId ? workspaceSessions.get(activeSessionId) : null);
       if (activeRef) {
+        const nextRef = resolvePendingRef(ref, activeSessionId);
         const singleTabGroup = buildSingleTabGroup(activeRef);
         const singleTab = getActiveTab(singleTabGroup);
         commitTabGroup(
-          updateTabLayout(singleTabGroup, singleTab.id, buildSplitLayout(singleTab.layout, ref, orientation)),
-          ref.kind === "pending" ? null : ref.sessionId,
+          updateTabLayout(singleTabGroup, singleTab.id, buildSplitLayout(singleTab.layout, nextRef, orientation)),
+          nextRef.kind === "pending" ? null : nextRef.sessionId,
         );
         return;
       }
@@ -495,7 +511,12 @@ export function useStageTabGroup({
     }
 
     const currentTab = getActiveTab(currentGroup);
-    const nextLayout = buildSplitLayout(currentTab.layout, ref, orientation);
+    const currentFocusedPane = getFocusedPane(currentTab.layout);
+    const sourceSessionId = currentFocusedPane.ref.kind === "pending"
+      ? currentFocusedPane.ref.sourceSessionId ?? null
+      : currentFocusedPane.ref.sessionId;
+    const nextRef = resolvePendingRef(ref, sourceSessionId);
+    const nextLayout = buildSplitLayout(currentTab.layout, nextRef, orientation);
     if (nextLayout === currentTab.layout) {
       setActiveSessionId(getFocusedSessionIdFromLayout(currentTab.layout));
       return;
