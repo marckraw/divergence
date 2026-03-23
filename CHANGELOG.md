@@ -1,5 +1,11 @@
 # divergence
 
+## 0.43.1
+
+### Patch Changes
+
+- 83ad321: Use real git changes in agent session header instead of parsing model activities
+
 ## 0.43.0
 
 ### Minor Changes
