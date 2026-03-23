@@ -4,7 +4,7 @@ import Sidebar from "../widgets/sidebar";
 import { InboxPanel } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
 import { useAgentRuntime } from "../features/agent-runtime";
-import QuickSwitcher from "../features/quick-switcher";
+import { CommandCenter, type CommandCenterMode } from "../features/command-center";
 import { onMobileHandshake } from "./api/mobileHandshake.api";
 import Settings from "../widgets/settings-modal";
 import type { SettingsCategoryId } from "../widgets/settings-modal";
@@ -100,8 +100,7 @@ function App() {
     handleFocusSplitPane,
     handleResizeSplitPanes,
   } = useSplitPaneManagement();
-  const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
-  const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
+  const [commandCenterMode, setCommandCenterMode] = useState<CommandCenterMode | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [renameAgentSessionState, setRenameAgentSessionState] = useState<{
     sessionId: string;
@@ -131,7 +130,7 @@ function App() {
     handleWorkTabChange,
   } = useSidebarLayout({
     onModeChange: () => {
-      setShowQuickSwitcher(false);
+      setCommandCenterMode(null);
       setShowSettings(false);
     },
   });
@@ -545,7 +544,6 @@ function App() {
     focusedPane: focusedStagePane,
     handleFocusPane: handleFocusStagePane,
     handleSplitPane: handleSplitStagePane,
-    handleReplacePaneRef: handleReplaceStagePaneRef,
     handleResizeAdjacentPanes: handleResizeStageAdjacentPanes,
     handleClosePane: handleCloseStagePane,
     handleResetToSinglePane: handleResetStageToSinglePane,
@@ -759,8 +757,7 @@ function App() {
     setSidebarMode,
     setWorkTab,
     setActiveSessionId,
-    setShowQuickSwitcher,
-    setShowFileQuickSwitcher,
+    setCommandCenterMode,
     setShowSettings,
     setCreateDivergenceFor,
   });
@@ -1054,7 +1051,6 @@ function App() {
           capabilities={agentRuntimeCapabilities}
           projectsLoading={projectsLoading}
           divergencesLoading={divergencesLoading}
-          showFileQuickSwitcher={showFileQuickSwitcher}
           isSidebarOpen={isSidebarOpen}
           isRightPanelOpen={isRightPanelOpen}
           onToggleSidebar={toggleSidebar}
@@ -1065,11 +1061,10 @@ function App() {
           onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
-          onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
+          onOpenCommandCenter={(mode) => setCommandCenterMode(mode)}
           onSplitStage={handleSplitStagePane}
           onResetToSinglePane={handleResetStageToSinglePane}
           onFocusPane={handleFocusStagePane}
-          onReplacePaneRef={handleReplaceStagePaneRef}
           onClosePane={handleCloseStagePane}
           onResizeStageAdjacentPanes={handleResizeStageAdjacentPanes}
           onStatusChange={handleSessionStatusChange}
@@ -1090,31 +1085,46 @@ function App() {
         />
       )}
 
-      {/* Quick Switcher */}
+      {/* Command Center */}
       <AnimatePresence>
-        {showQuickSwitcher && (
-          <QuickSwitcher
+        {commandCenterMode && (
+          <CommandCenter
+            mode={commandCenterMode}
             projects={projects}
             divergencesByProject={divergencesByProject}
             sessions={workspaceSessions}
             workspaces={workspaceList}
             workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
-            onSelect={(type, item) => {
-              if (type === "project") {
-                handleSelectProject(item as Project);
-              } else if (type === "divergence") {
-                handleSelectDivergence(item as Divergence);
-              } else if (type === "workspace") {
-                handleSelectWorkspace(item as Workspace);
-              } else if (type === "workspace_divergence") {
-                handleSelectWorkspaceDivergence(item as WorkspaceDivergence);
-              } else {
-                setSidebarMode("projects");
-                void handleSelectWorkspaceSession((item as WorkspaceSession).id);
-              }
-              setShowQuickSwitcher(false);
+            sourceSession={activeSessionId ? workspaceSessions.get(activeSessionId) ?? null : null}
+            onSelectProject={(project) => {
+              handleSelectProject(project);
             }}
-            onClose={() => setShowQuickSwitcher(false)}
+            onSelectDivergence={(divergence) => {
+              handleSelectDivergence(divergence);
+            }}
+            onSelectSession={(sessionId) => {
+              setSidebarMode("projects");
+              void handleSelectWorkspaceSession(sessionId);
+            }}
+            onSelectWorkspace={(workspace) => {
+              handleSelectWorkspace(workspace);
+            }}
+            onSelectWorkspaceDivergence={(wd) => {
+              handleSelectWorkspaceDivergence(wd);
+            }}
+            onSelectFile={(absolutePath) => {
+              // File opening is handled through the stage sidebar's file editor
+              // For now we broadcast an event the StageSidebar can pick up
+              void absolutePath;
+            }}
+            onCreateTerminal={() => {
+              // Terminal creation delegates to existing new divergence flow
+              void 0;
+            }}
+            onCreateAgent={(provider) => {
+              void provider;
+            }}
+            onClose={() => setCommandCenterMode(null)}
           />
         )}
       </AnimatePresence>

@@ -23,7 +23,6 @@ import {
   getFocusedPane,
   isAgentSession,
   isTerminalSession,
-  type StagePaneRef,
 } from "../../../entities";
 import type {
   AgentRuntimeAttachment,
@@ -37,6 +36,7 @@ import { ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
 import WorkspaceSessionTabsPresentational from "../../../widgets/workspace-session-tabs";
 import type { AgentSessionComposerHandle } from "../../../widgets/agent-session-view/ui/AgentSessionView.types";
+import type { CommandCenterMode } from "../../../features/command-center";
 import AgentStagePane from "./AgentStagePane.container";
 import PendingStagePane from "./PendingStagePane.container";
 import StageSidebar from "./StageSidebar.container";
@@ -62,7 +62,6 @@ interface StageViewProps {
   capabilities: AgentRuntimeCapabilities | null;
   projectsLoading: boolean;
   divergencesLoading: boolean;
-  showFileQuickSwitcher: boolean;
   isSidebarOpen: boolean;
   isRightPanelOpen: boolean;
   onToggleSidebar: () => void;
@@ -71,11 +70,10 @@ interface StageViewProps {
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
-  onCloseFileQuickSwitcher: () => void;
+  onOpenCommandCenter: (mode: CommandCenterMode) => void;
   onSplitStage: (orientation: StageLayoutOrientation) => void;
   onResetToSinglePane: (sessionId?: string | null) => void;
   onFocusPane: (paneId: StagePaneId) => void;
-  onReplacePaneRef: (paneId: StagePaneId, ref: StagePaneRef) => void;
   onClosePane: (paneId: StagePaneId) => void;
   onResizeStageAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
@@ -139,7 +137,6 @@ function StageView({
   capabilities,
   projectsLoading,
   divergencesLoading,
-  showFileQuickSwitcher,
   isSidebarOpen,
   isRightPanelOpen,
   onToggleSidebar,
@@ -148,11 +145,10 @@ function StageView({
   onDismissSessionAttention,
   onCloseSession,
   onCloseSessionAndKillTmux,
-  onCloseFileQuickSwitcher,
+  onOpenCommandCenter,
   onSplitStage,
   onResetToSinglePane,
   onFocusPane,
-  onReplacePaneRef,
   onClosePane,
   onResizeStageAdjacentPanes,
   onStatusChange,
@@ -243,16 +239,12 @@ function StageView({
     document.addEventListener("mouseup", handleMouseUp);
   }, [onResizeStageAdjacentPanes]);
 
-  const handleSelectPendingSession = useCallback((paneId: StagePaneId, sessionId: string) => {
-    const session = workspaceSessions.get(sessionId);
-    if (!session) {
-      return;
-    }
-
-    onReplacePaneRef(paneId, isAgentSession(session)
-      ? { kind: "agent", sessionId }
-      : { kind: "terminal", sessionId });
-  }, [onReplacePaneRef, workspaceSessions]);
+  const handleOpenCommandCenterForPane = useCallback((paneId: StagePaneId) => {
+    onOpenCommandCenter({
+      kind: "open-in-pane",
+      targetPaneId: paneId,
+    });
+  }, [onOpenCommandCenter]);
 
   const canSplitStage = Boolean(layout && layout.panes.length < MAX_STAGE_PANES);
   const layoutOrientationClass = layout?.orientation === "horizontal" ? "flex-col" : "flex-row";
@@ -376,8 +368,7 @@ function StageView({
                       >
                         {pane.ref.kind === "pending" ? (
                           <PendingStagePane
-                            sessions={sessionList}
-                            onSelectExistingSession={(sessionId) => handleSelectPendingSession(pane.id, sessionId)}
+                            onOpenCommandCenter={() => handleOpenCommandCenterForPane(pane.id)}
                             onClose={() => onClosePane(pane.id)}
                           />
                         ) : session && isTerminalSession(session) ? (
@@ -443,8 +434,6 @@ function StageView({
             focusedAgentComposerRef={focusedAgentComposerRef}
             projectsLoading={projectsLoading}
             divergencesLoading={divergencesLoading}
-            showFileQuickSwitcher={showFileQuickSwitcher}
-            onCloseFileQuickSwitcher={onCloseFileQuickSwitcher}
             onSendPromptToSession={onSendPromptToSession}
             onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
             onProjectSettingsSaved={onProjectSettingsSaved}

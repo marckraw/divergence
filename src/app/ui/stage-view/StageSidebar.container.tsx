@@ -11,7 +11,6 @@ import {
   isTerminalSession,
 } from "../../../entities";
 import { DEFAULT_EDITOR_THEME_DARK, DEFAULT_EDITOR_THEME_LIGHT, TabButton, useFileEditor, type AppSettings, type ChangesMode, type EditorThemeId, type GitChangeEntry, type LinearWorkflowState } from "../../../shared";
-import FileQuickSwitcher from "../../../features/file-quick-switcher";
 import { ChangesTree } from "../../../features/changes-tree";
 import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
 import type {
@@ -86,8 +85,6 @@ interface StageSidebarProps {
   focusedAgentComposerRef: RefObject<AgentSessionComposerHandle> | null;
   projectsLoading: boolean;
   divergencesLoading: boolean;
-  showFileQuickSwitcher: boolean;
-  onCloseFileQuickSwitcher: () => void;
   onSendPromptToSession: (sessionId: string, prompt: string) => Promise<void>;
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
   onProjectSettingsSaved: (settings: import("../../../entities/project").ProjectSettings) => void;
@@ -137,8 +134,6 @@ function StageSidebar({
   focusedAgentComposerRef,
   projectsLoading,
   divergencesLoading,
-  showFileQuickSwitcher,
-  onCloseFileQuickSwitcher,
   onSendPromptToSession,
   onCloseSessionAndKillTmux,
   onProjectSettingsSaved,
@@ -714,16 +709,6 @@ function StageSidebar({
             onAddDiffComment={handleAddDiffComment}
           />
 
-          {showFileQuickSwitcher && activeRootPath && (
-            <FileQuickSwitcher
-              rootPath={activeRootPath}
-              onSelect={(path) => {
-                void handleOpenFile(path);
-                onCloseFileQuickSwitcher();
-              }}
-              onClose={onCloseFileQuickSwitcher}
-            />
-          )}
         </>
       )}
 
