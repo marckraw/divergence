@@ -1,5 +1,11 @@
 # divergence
 
+## 0.41.1
+
+### Patch Changes
+
+- ec8e299: cmd + b open pane improvements
+
 ## 0.41.0
 
 ### Minor Changes
