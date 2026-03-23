@@ -1,4 +1,40 @@
 /**
+ * Format a millisecond timestamp as a compact time string for display in chat bubbles.
+ *
+ * Shows "HH:MM" for today, "Yesterday HH:MM" for yesterday, or "MMM D, HH:MM" for older.
+ */
+export function formatMessageTime(ms: number | null | undefined): string {
+  if (!ms) {
+    return "";
+  }
+
+  const date = new Date(ms);
+  const now = new Date();
+  const time = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+  const isToday =
+    date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth()
+    && date.getDate() === now.getDate();
+  if (isToday) {
+    return time;
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday =
+    date.getFullYear() === yesterday.getFullYear()
+    && date.getMonth() === yesterday.getMonth()
+    && date.getDate() === yesterday.getDate();
+  if (isYesterday) {
+    return `Yesterday ${time}`;
+  }
+
+  const monthDay = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${monthDay}, ${time}`;
+}
+
+/**
  * Format a millisecond timestamp as a locale string, or return a fallback.
  */
 export function formatTimestamp(ms: number | null | undefined, fallback: string): string {

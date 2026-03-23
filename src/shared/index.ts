@@ -144,6 +144,7 @@ export {
   resolvePath,
   trimTrailingSlash,
 } from "./lib/quickEdit.pure";
+export { formatMessageTime, formatRelativeAge, formatTimestamp } from "./lib/dateTime.pure";
 export { getErrorMessage } from "./lib/errors.pure";
 export { renderTemplateCommand } from "./lib/templateRendering.pure";
 export { notifyCommandFinished } from "./service/notifications.service";
