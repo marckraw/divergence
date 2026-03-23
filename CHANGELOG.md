@@ -1,5 +1,11 @@
 # divergence
 
+## 0.43.0
+
+### Minor Changes
+
+- 7c93157: Add first-class editor sessions, shared code editing and diff primitives, and project-wide search that opens matches directly in editor tabs.
+
 ## 0.42.0
 
 ### Minor Changes
