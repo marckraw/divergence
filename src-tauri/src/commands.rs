@@ -2079,11 +2079,8 @@ pub struct FileListResult {
     pub truncated: bool,
 }
 
-#[tauri::command]
-pub async fn list_project_files(root_path: String) -> Result<FileListResult, String> {
-    const MAX_FILES: usize = 10_000;
-
-    let ignore_dirs: HashSet<&str> = [
+fn project_ignore_dirs() -> HashSet<&'static str> {
+    [
         "node_modules",
         ".git",
         "target",
@@ -2105,8 +2102,14 @@ pub async fn list_project_files(root_path: String) -> Result<FileListResult, Str
         "vendor",
     ]
     .into_iter()
-    .collect();
+    .collect()
+}
 
+#[tauri::command]
+pub async fn list_project_files(root_path: String) -> Result<FileListResult, String> {
+    const MAX_FILES: usize = 10_000;
+
+    let ignore_dirs = project_ignore_dirs();
     let root = PathBuf::from(&root_path);
     if !root.is_dir() {
         return Err(format!("Path is not a directory: {}", root_path));
@@ -2162,6 +2165,197 @@ pub async fn list_project_files(root_path: String) -> Result<FileListResult, Str
     files.sort();
 
     Ok(FileListResult { files, truncated })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSearchMatch {
+    pub line_number: usize,
+    pub column_start: usize,
+    pub column_end: usize,
+    pub preview: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSearchFileResult {
+    pub file_path: String,
+    pub absolute_path: String,
+    pub matches: Vec<ProjectSearchMatch>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSearchResult {
+    pub query: String,
+    pub files: Vec<ProjectSearchFileResult>,
+    pub truncated: bool,
+}
+
+fn trim_search_preview(line: &str) -> String {
+    const MAX_PREVIEW_CHARS: usize = 240;
+
+    let trimmed = line.trim_end_matches(['\r', '\n']);
+    let mut preview = trimmed.chars().take(MAX_PREVIEW_CHARS).collect::<String>();
+    if trimmed.chars().count() > MAX_PREVIEW_CHARS {
+        preview.push_str("...");
+    }
+    preview
+}
+
+#[tauri::command]
+pub async fn search_project_files(
+    root_path: String,
+    query: String,
+    case_sensitive: Option<bool>,
+    max_results: Option<usize>,
+) -> Result<ProjectSearchResult, String> {
+    const DEFAULT_MAX_RESULTS: usize = 200;
+    const MAX_ALLOWED_RESULTS: usize = 500;
+    const MAX_MATCHES_PER_FILE: usize = 20;
+    const MAX_FILE_BYTES: u64 = 2_000_000;
+
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        return Err("Search query is required.".to_string());
+    }
+
+    let root = PathBuf::from(&root_path);
+    if !root.is_dir() {
+        return Err(format!("Path is not a directory: {}", root_path));
+    }
+
+    let case_sensitive = case_sensitive.unwrap_or(false);
+    let normalized_query = if case_sensitive {
+        query.clone()
+    } else {
+        query.to_lowercase()
+    };
+    let ignore_dirs = project_ignore_dirs();
+    let max_results = max_results
+        .unwrap_or(DEFAULT_MAX_RESULTS)
+        .clamp(1, MAX_ALLOWED_RESULTS);
+
+    let mut files: Vec<ProjectSearchFileResult> = Vec::new();
+    let mut stack: Vec<PathBuf> = vec![root.clone()];
+    let mut total_matches = 0usize;
+    let mut truncated = false;
+
+    while let Some(dir) = stack.pop() {
+        if total_matches >= max_results {
+            truncated = true;
+            break;
+        }
+
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(item) => item,
+                Err(_) => continue,
+            };
+
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
+            if ignore_dirs.contains(name_str.as_ref()) {
+                continue;
+            }
+
+            let path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(_) => continue,
+            };
+
+            if file_type.is_dir() {
+                stack.push(path);
+                continue;
+            }
+
+            if !file_type.is_file() {
+                continue;
+            }
+
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            };
+            if metadata.len() > MAX_FILE_BYTES {
+                continue;
+            }
+
+            let bytes = match fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(_) => continue,
+            };
+            if bytes.contains(&0) {
+                continue;
+            }
+
+            let content = match String::from_utf8(bytes) {
+                Ok(content) => content,
+                Err(_) => continue,
+            };
+
+            let mut matches: Vec<ProjectSearchMatch> = Vec::new();
+            for (line_index, line) in content.lines().enumerate() {
+                if total_matches >= max_results {
+                    truncated = true;
+                    break;
+                }
+                if matches.len() >= MAX_MATCHES_PER_FILE {
+                    break;
+                }
+
+                let search_line = if case_sensitive {
+                    line.to_string()
+                } else {
+                    line.to_lowercase()
+                };
+
+                let Some(byte_index) = search_line.find(&normalized_query) else {
+                    continue;
+                };
+
+                let column_start = search_line[..byte_index].chars().count() + 1;
+                let query_char_count = normalized_query.chars().count();
+                let column_end = column_start + query_char_count.saturating_sub(1);
+
+                matches.push(ProjectSearchMatch {
+                    line_number: line_index + 1,
+                    column_start,
+                    column_end,
+                    preview: trim_search_preview(line),
+                });
+                total_matches += 1;
+            }
+
+            if !matches.is_empty() {
+                let relative_path = path
+                    .strip_prefix(&root)
+                    .unwrap_or(path.as_path())
+                    .to_string_lossy()
+                    .replace('\\', "/");
+
+                files.push(ProjectSearchFileResult {
+                    file_path: relative_path,
+                    absolute_path: path_to_string(&path),
+                    matches,
+                });
+            }
+        }
+    }
+
+    files.sort_by(|left, right| left.file_path.cmp(&right.file_path));
+
+    Ok(ProjectSearchResult {
+        query,
+        files,
+        truncated,
+    })
 }
 
 #[tauri::command]

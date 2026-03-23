@@ -3,6 +3,7 @@ import {
   getWorkspaceSessionTargetId,
   getWorkspaceSessionTargetType,
   isAgentSession,
+  isEditorSession,
 } from "../../../entities";
 
 export type SessionType = "project" | "divergence" | "workspace" | "workspace_divergence";
@@ -82,10 +83,23 @@ export function getSessionsForWorkspace(
         }
         return b.createdAtMs - a.createdAtMs;
       }
-      if (isAgentSession(a) !== isAgentSession(b)) {
-        return isAgentSession(a) ? 1 : -1;
+      if (isEditorSession(a) && isEditorSession(b)) {
+        return b.createdAtMs - a.createdAtMs;
       }
-      if (a.sessionRole !== b.sessionRole) {
+      const rank = (session: WorkspaceSession) => {
+        if (isAgentSession(session)) {
+          return 2;
+        }
+        if (isEditorSession(session)) {
+          return 1;
+        }
+        return 0;
+      };
+      const rankDelta = rank(a) - rank(b);
+      if (rankDelta !== 0) {
+        return rankDelta;
+      }
+      if (!isEditorSession(a) && !isEditorSession(b) && a.sessionRole !== b.sessionRole) {
         return a.sessionRole === "default" ? -1 : 1;
       }
       return a.id.localeCompare(b.id);

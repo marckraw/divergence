@@ -17,5 +17,5 @@ export type {
   DiffReviewAnchor,
   DiffReviewComment,
   DiffReviewDraft,
-  ParsedDiffLine,
 } from "./model/diffReview.types";
+export type { ParsedDiffLine } from "../../shared";

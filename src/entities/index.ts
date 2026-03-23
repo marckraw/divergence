@@ -37,6 +37,12 @@ export {
   getAgentSessionTimestamp,
   suggestAgentSessionTitle,
 } from "./agent-session";
+export type { EditorSession } from "./editor-session";
+export {
+  buildEditorSession,
+  findEditorSessionByFilePath,
+  getEditorSessionDisplayName,
+} from "./editor-session";
 export type {
   WorkspaceSession,
   WorkspaceSessionAttentionOptions,
@@ -55,6 +61,7 @@ export {
   getWorkspaceSessionTargetType,
   isWorkspaceSessionNeedsAttention,
   isAgentSession,
+  isEditorSession,
   isTerminalSession,
 } from "./workspace-session";
 export type {

@@ -14,6 +14,7 @@ import {
   getFocusedPane,
   getPaneBySessionId,
   isAgentSession,
+  isEditorSession,
   removePaneFromLayout,
   revealSessionInTabGroup,
   removeTab,
@@ -84,7 +85,9 @@ function buildStagePaneRef(session: WorkspaceSession | null | undefined): StageP
 
   return isAgentSession(session)
     ? { kind: "agent", sessionId: session.id }
-    : { kind: "terminal", sessionId: session.id };
+    : isEditorSession(session)
+      ? { kind: "editor", sessionId: session.id }
+      : { kind: "terminal", sessionId: session.id };
 }
 
 function getSessionIdFromPane(pane: StagePane | null): string | null {

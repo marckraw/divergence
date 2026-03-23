@@ -40,6 +40,7 @@ interface UseEntityOperationsParams {
   refreshPortAllocations: () => Promise<void>;
   closeSessionsForProject: (projectId: number) => void;
   closeSessionsForDivergence: (divergenceId: number) => void;
+  closeSessionsForWorkspace: (workspaceId: number) => void;
   closeSessionsForWorkspaceDivergence: (wdId: number) => void;
   handleCloseSession: (sessionId: string) => void;
   sessionsRef: React.MutableRefObject<Map<string, TerminalSession>>;
@@ -77,6 +78,7 @@ export function useEntityOperations({
   refreshPortAllocations,
   closeSessionsForProject,
   closeSessionsForDivergence,
+  closeSessionsForWorkspace,
   closeSessionsForWorkspaceDivergence,
   handleCloseSession,
   sessionsRef,
@@ -163,6 +165,8 @@ export function useEntityOperations({
       workspace,
       runTask,
       closeSessionsForWorkspace: () => {
+        closeSessionsForWorkspace(workspace.id);
+
         const sessionsToClose = Array.from(sessionsRef.current.entries())
           .filter(([, s]) => s.type === "workspace" && s.targetId === workspace.id)
           .map(([sessionId]) => sessionId);
@@ -173,6 +177,7 @@ export function useEntityOperations({
       refreshPortAllocations,
     });
   }, [
+    closeSessionsForWorkspace,
     closeSessionsForWorkspaceDivergence,
     handleCloseSession,
     refreshPortAllocations,

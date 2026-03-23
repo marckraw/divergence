@@ -25,6 +25,7 @@ import FileExplorerPresentational from "./FileExplorer.presentational";
 interface FileExplorerProps {
   rootPath: string | null;
   activeFilePath?: string | null;
+  allowRemove?: boolean;
   onOpenFile: (path: string) => void;
   onRemoveFile: (path: string) => void;
 }
@@ -67,7 +68,13 @@ const FolderIcon = () => (
   </svg>
 );
 
-function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: FileExplorerProps) {
+function FileExplorer({
+  rootPath,
+  activeFilePath,
+  allowRemove = true,
+  onOpenFile,
+  onRemoveFile,
+}: FileExplorerProps) {
   const [entriesByPath, setEntriesByPath] = useState<Map<string, FileEntry[]>>(new Map());
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
   const [loadingDirs, setLoadingDirs] = useState<Set<string>>(new Set());
@@ -236,7 +243,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
                   layout="position"
                   transition={layoutTransition}
                 >
-                  {entry.isDir ? (
+                  {entry.isDir || !allowRemove ? (
                     fileButton
                   ) : (
                     <ContextMenu>
@@ -310,7 +317,7 @@ function FileExplorer({ rootPath, activeFilePath, onOpenFile, onRemoveFile }: Fi
             );
             return (
               <div key={entry.path}>
-                {entry.isDir ? (
+                {entry.isDir || !allowRemove ? (
                   fileButton
                 ) : (
                   <ContextMenu>

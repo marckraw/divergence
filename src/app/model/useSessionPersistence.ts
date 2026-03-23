@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { TerminalSession } from "../../entities";
+import type { EditorSession, TerminalSession } from "../../entities";
 import {
-  clearPersistedTerminalTabsState,
-  loadPersistedTerminalTabsState,
-  savePersistedTerminalTabsState,
+  clearPersistedWorkspaceTabsState,
+  loadPersistedWorkspaceTabsState,
+  savePersistedWorkspaceTabsState,
 } from "../api/sessionPersistence.api";
 import { createDebouncedTask } from "../../shared";
 
@@ -13,6 +13,8 @@ const SESSION_PERSISTENCE_DEBOUNCE_MS = 250;
 interface UseSessionPersistenceParams {
   sessions: Map<string, TerminalSession>;
   setSessions: React.Dispatch<React.SetStateAction<Map<string, TerminalSession>>>;
+  editorSessions: Map<string, EditorSession>;
+  setEditorSessions: React.Dispatch<React.SetStateAction<Map<string, EditorSession>>>;
   activeSessionId: string | null;
   setActiveSessionId: React.Dispatch<React.SetStateAction<string | null>>;
   restoreTabsOnRestart: boolean;
@@ -27,6 +29,8 @@ interface UseSessionPersistenceResult {
 export function useSessionPersistence({
   sessions,
   setSessions,
+  editorSessions,
+  setEditorSessions,
   activeSessionId,
   setActiveSessionId,
   restoreTabsOnRestart,
@@ -37,24 +41,27 @@ export function useSessionPersistence({
   const restoredTabsToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPersistRef = useRef({
     sessions,
+    editorSessions,
     activeSessionId,
     restoreTabsOnRestart,
   });
   const persistTaskRef = useRef(createDebouncedTask(() => {
     const pending = pendingPersistRef.current;
     if (!pending.restoreTabsOnRestart) {
-      clearPersistedTerminalTabsState();
+      clearPersistedWorkspaceTabsState();
       return;
     }
 
-    savePersistedTerminalTabsState({
+    savePersistedWorkspaceTabsState({
       sessions: pending.sessions,
+      editorSessions: pending.editorSessions,
       activeSessionId: pending.activeSessionId,
     });
   }, SESSION_PERSISTENCE_DEBOUNCE_MS));
 
   pendingPersistRef.current = {
     sessions,
+    editorSessions,
     activeSessionId,
     restoreTabsOnRestart,
   };
@@ -77,21 +84,24 @@ export function useSessionPersistence({
     hasRestoredTabsRef.current = true;
 
     if (!restoreTabsOnRestart) {
-      clearPersistedTerminalTabsState();
+      clearPersistedWorkspaceTabsState();
       setHasRestoredTabs(true);
       return;
     }
 
-    const restored = loadPersistedTerminalTabsState();
-    if (restored.sessions.size === 0) {
+    const restored = loadPersistedWorkspaceTabsState();
+    if (restored.sessions.size === 0 && restored.editorSessions.size === 0) {
       setHasRestoredTabs(true);
       return;
     }
 
     setSessions(restored.sessions);
+    setEditorSessions(restored.editorSessions);
     setActiveSessionId(restored.activeSessionId);
     setRestoredTabsToastMessage(
-      `Restored ${restored.sessions.size} tab${restored.sessions.size === 1 ? "" : "s"} from your previous session.`
+      `Restored ${restored.sessions.size + restored.editorSessions.size} tab${
+        restored.sessions.size + restored.editorSessions.size === 1 ? "" : "s"
+      } from your previous session.`
     );
     if (restoredTabsToastTimerRef.current) {
       clearTimeout(restoredTabsToastTimerRef.current);
@@ -101,7 +111,7 @@ export function useSessionPersistence({
       restoredTabsToastTimerRef.current = null;
     }, RESTORE_TABS_TOAST_TTL_MS);
     setHasRestoredTabs(true);
-  }, [restoreTabsOnRestart, setSessions, setActiveSessionId]);
+  }, [restoreTabsOnRestart, setEditorSessions, setSessions, setActiveSessionId]);
 
   useEffect(() => {
     if (!hasRestoredTabsRef.current) {
@@ -110,12 +120,12 @@ export function useSessionPersistence({
 
     if (!restoreTabsOnRestart) {
       persistTaskRef.current.cancel();
-      clearPersistedTerminalTabsState();
+      clearPersistedWorkspaceTabsState();
       return;
     }
 
     persistTaskRef.current.schedule();
-  }, [sessions, activeSessionId, restoreTabsOnRestart]);
+  }, [sessions, editorSessions, activeSessionId, restoreTabsOnRestart]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {

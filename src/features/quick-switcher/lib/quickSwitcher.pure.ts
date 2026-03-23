@@ -11,6 +11,7 @@ import {
   getWorkspaceSessionTargetId,
   getWorkspaceSessionTargetType,
   isAgentSession,
+  isEditorSession,
 } from "../../../entities";
 
 export interface QuickSwitcherSearchResult {
@@ -79,6 +80,7 @@ export function buildQuickSwitcherSearchResults(
       item: session,
       projectName,
       workspaceName,
+      detail: isEditorSession(session) ? session.filePath : undefined,
     });
   }
 
@@ -126,7 +128,11 @@ export function filterQuickSwitcherSearchResults(
       return (
         name.includes(lowerQuery)
         || session.path.toLowerCase().includes(lowerQuery)
-        || session.sessionRole.toLowerCase().includes(lowerQuery)
+        || (isEditorSession(session)
+          ? session.filePath.toLowerCase().includes(lowerQuery)
+          : "sessionRole" in session
+            ? session.sessionRole.toLowerCase().includes(lowerQuery)
+            : false)
         || (isAgentSession(session)
           ? (
             session.provider.toLowerCase().includes(lowerQuery)

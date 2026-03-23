@@ -39,12 +39,18 @@ export function resolveAppShortcut(
   event: AppShortcutEvent,
   context: AppShortcutContext
 ): AppShortcutAction | null {
-  if (event.defaultPrevented || context.isFromEditor) {
+  if (event.defaultPrevented) {
     return null;
   }
 
   const isMeta = event.metaKey || event.ctrlKey;
   const keyLower = event.key.toLowerCase();
+
+  if (context.isFromEditor) {
+    if (!(isMeta && keyLower === "w")) {
+      return null;
+    }
+  }
 
   if (isMeta && event.shiftKey && keyLower === "k") {
     return { type: "toggle_quick_switcher_reveal" };

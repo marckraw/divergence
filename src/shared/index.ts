@@ -76,6 +76,8 @@ export type {
 } from "./ui";
 
 export { cn } from "./lib/cn.pure";
+export { CodeEditorCore } from "./code-editor";
+export { UnifiedDiffViewer } from "./unified-diff-viewer";
 export {
   buildChangesTree,
   collectChangesTreeFolderPaths,
@@ -144,6 +146,8 @@ export {
   resolvePath,
   trimTrailingSlash,
 } from "./lib/quickEdit.pure";
+export { parseUnifiedDiffLines } from "./lib/unifiedDiff.pure";
+export type { ParsedDiffLine } from "./lib/unifiedDiff.pure";
 export { formatMessageTime, formatRelativeAge, formatTimestamp } from "./lib/dateTime.pure";
 export { getErrorMessage } from "./lib/errors.pure";
 export { renderTemplateCommand } from "./lib/templateRendering.pure";

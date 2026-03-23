@@ -5,7 +5,7 @@ import {
 } from "./stageLayoutPersistence.pure";
 
 describe("stageLayoutPersistence", () => {
-  it("builds a v2 snapshot and keeps pending panes", () => {
+  it("builds a v3 snapshot and keeps pending panes", () => {
     expect(buildPersistedStageLayoutSnapshot({
       tabs: [
         {
@@ -30,7 +30,7 @@ describe("stageLayoutPersistence", () => {
       ],
       activeTabId: "stage-tab-1",
     })).toEqual({
-      version: 2,
+      version: 3,
       tabs: [
         {
           id: "stage-tab-1",
@@ -56,9 +56,9 @@ describe("stageLayoutPersistence", () => {
     });
   });
 
-  it("normalizes v2 snapshots and rejects invalid payloads", () => {
+  it("normalizes v2/v3 snapshots and rejects invalid payloads", () => {
     expect(normalizePersistedStageLayoutState({
-      version: 2,
+      version: 3,
       tabs: [
         {
           id: "stage-tab-2",
@@ -74,9 +74,13 @@ describe("stageLayoutPersistence", () => {
                 id: "stage-pane-2",
                 ref: { kind: "agent", sessionId: "agent-1" },
               },
+              {
+                id: "stage-pane-3",
+                ref: { kind: "editor", sessionId: "editor-1" },
+              },
             ],
-            paneSizes: [3, 1],
-            focusedPaneId: "stage-pane-2",
+            paneSizes: [3, 1, 2],
+            focusedPaneId: "stage-pane-3",
           },
         },
       ],
@@ -97,9 +101,13 @@ describe("stageLayoutPersistence", () => {
                 id: "stage-pane-2",
                 ref: { kind: "agent", sessionId: "agent-1" },
               },
+              {
+                id: "stage-pane-3",
+                ref: { kind: "editor", sessionId: "editor-1" },
+              },
             ],
-            paneSizes: [0.75, 0.25],
-            focusedPaneId: "stage-pane-2",
+            paneSizes: [0.5, 1 / 6, 1 / 3],
+            focusedPaneId: "stage-pane-3",
           },
         },
       ],
@@ -107,7 +115,7 @@ describe("stageLayoutPersistence", () => {
     });
 
     expect(normalizePersistedStageLayoutState({
-      version: 2,
+      version: 3,
       tabs: [
         {
           id: "stage-tab-1",
@@ -143,7 +151,7 @@ describe("stageLayoutPersistence", () => {
     });
 
     expect(normalizePersistedStageLayoutState({
-      version: 2,
+      version: 3,
       tabs: [],
     })).toBeNull();
   });
@@ -224,7 +232,7 @@ describe("stageLayoutPersistence", () => {
     });
 
     expect(snapshot).toEqual({
-      version: 2,
+      version: 3,
       tabs: [
         {
           id: "stage-tab-1",
@@ -302,6 +310,49 @@ describe("stageLayoutPersistence", () => {
         },
       ],
       activeTabId: "stage-tab-2",
+    });
+  });
+
+  it("migrates v2 snapshots with editor pane refs", () => {
+    expect(normalizePersistedStageLayoutState({
+      version: 2,
+      tabs: [
+        {
+          id: "stage-tab-1",
+          label: "Tab 1",
+          layout: {
+            orientation: "vertical",
+            panes: [
+              {
+                id: "stage-pane-1",
+                ref: { kind: "editor", sessionId: "editor-1" },
+              },
+            ],
+            paneSizes: [1],
+            focusedPaneId: "stage-pane-1",
+          },
+        },
+      ],
+      activeTabId: "stage-tab-1",
+    })).toEqual({
+      tabs: [
+        {
+          id: "stage-tab-1",
+          label: "Tab 1",
+          layout: {
+            orientation: "vertical",
+            panes: [
+              {
+                id: "stage-pane-1",
+                ref: { kind: "editor", sessionId: "editor-1" },
+              },
+            ],
+            paneSizes: [1],
+            focusedPaneId: "stage-pane-1",
+          },
+        },
+      ],
+      activeTabId: "stage-tab-1",
     });
   });
 });

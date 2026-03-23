@@ -8,10 +8,12 @@ import type {
 } from "../../../entities";
 import {
   isAgentSession,
+  isEditorSession,
   isTerminalSession,
 } from "../../../entities";
 import { DEFAULT_EDITOR_THEME_DARK, DEFAULT_EDITOR_THEME_LIGHT, TabButton, useFileEditor, type AppSettings, type ChangesMode, type EditorThemeId, type GitChangeEntry, type LinearWorkflowState } from "../../../shared";
 import FileQuickSwitcher from "../../../features/file-quick-switcher";
+import { ProjectSearchPanel } from "../../../features/project-search";
 import { ChangesTree } from "../../../features/changes-tree";
 import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
 import type {
@@ -41,8 +43,9 @@ import { resolvePromptQueueScope } from "../../../widgets/main-area/lib/promptQu
 import { useLinearTaskQueue } from "../../../widgets/main-area/model/useLinearTaskQueue";
 import { usePromptQueue } from "../../../widgets/main-area/model/usePromptQueue";
 
-type TerminalSidebarTab = "settings" | "files" | "changes" | "queue" | "linear" | "review" | "tmux";
-type AgentSidebarTab = "changes" | "linear" | "queue";
+type TerminalSidebarTab = "settings" | "files" | "changes" | "search" | "queue" | "linear" | "review" | "tmux";
+type EditorSidebarTab = "files" | "changes" | "search";
+type AgentSidebarTab = "files" | "changes" | "linear" | "queue";
 const EMPTY_REVIEW_COMMENTS: DiffReviewComment[] = [];
 
 function resolveAgentQueueScope(
@@ -87,6 +90,18 @@ interface StageSidebarProps {
   projectsLoading: boolean;
   divergencesLoading: boolean;
   showFileQuickSwitcher: boolean;
+  onOpenOrFocusEditorFile: (filePath: string, sourceSession: WorkspaceSession | null) => void;
+  onOpenOrFocusEditorChange: (
+    entry: GitChangeEntry,
+    mode: ChangesMode,
+    sourceSession: WorkspaceSession | null,
+  ) => void;
+  onOpenOrFocusEditorSearchMatch: (
+    filePath: string,
+    lineNumber: number,
+    columnStart: number,
+    sourceSession: WorkspaceSession | null,
+  ) => void;
   onCloseFileQuickSwitcher: () => void;
   onSendPromptToSession: (sessionId: string, prompt: string) => Promise<void>;
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
@@ -138,6 +153,9 @@ function StageSidebar({
   projectsLoading,
   divergencesLoading,
   showFileQuickSwitcher,
+  onOpenOrFocusEditorFile,
+  onOpenOrFocusEditorChange,
+  onOpenOrFocusEditorSearchMatch,
   onCloseFileQuickSwitcher,
   onSendPromptToSession,
   onCloseSessionAndKillTmux,
@@ -145,12 +163,14 @@ function StageSidebar({
   onRunReviewAgentRequest,
 }: StageSidebarProps) {
   const [terminalTab, setTerminalTab] = useState<TerminalSidebarTab>("settings");
-  const [agentTab, setAgentTab] = useState<AgentSidebarTab>("changes");
+  const [editorTab, setEditorTab] = useState<EditorSidebarTab>("files");
+  const [agentTab, setAgentTab] = useState<AgentSidebarTab>("files");
   const [changesMode, setChangesMode] = useState<ChangesMode>("working");
   const [reviewRunError, setReviewRunError] = useState<string | null>(null);
   const [reviewRunning, setReviewRunning] = useState(false);
   const [editorThemeForAgent, setEditorThemeForAgent] = useState(editorTheme);
   const activeTerminalSession = focusedSession && isTerminalSession(focusedSession) ? focusedSession : null;
+  const activeEditorSession = focusedSession && isEditorSession(focusedSession) ? focusedSession : null;
   const activeAgentSession = focusedSession && isAgentSession(focusedSession) ? focusedSession : null;
   const activeRootPath = focusedSession?.path ?? null;
   const queueScope = useMemo(
@@ -181,7 +201,6 @@ function StageSidebar({
     fileLoadError,
     fileSaveError,
     largeFileWarning,
-    handleOpenFile,
     handleRemoveFile,
     handleOpenChange,
     handleCloseDrawer,
@@ -258,7 +277,7 @@ function StageSidebar({
     appSettings,
     projects,
     workspaceMembersByWorkspaceId,
-    rightPanelTab: terminalTab,
+    rightPanelTab: terminalTab === "search" ? "files" : terminalTab,
     activePaneSessionIdRef,
     onSendPromptToSession,
   });
@@ -316,7 +335,7 @@ function StageSidebar({
     appSettings,
     projects,
     workspaceMembersByWorkspaceId,
-    sidebarTab: agentTab,
+    sidebarTab: agentTab === "files" ? "changes" : agentTab,
     onSetComposerText: handleSetComposerText,
   });
 
@@ -340,6 +359,10 @@ function StageSidebar({
     resetFileEditor();
     resetAgentLinearState();
   }, [activeAgentSession?.id, resetAgentLinearState, resetFileEditor]);
+
+  useEffect(() => {
+    resetFileEditor();
+  }, [activeEditorSession?.id, resetFileEditor]);
 
   const handleAddDiffComment = useCallback((anchor: DiffReviewAnchor, message: string) => {
     addComment(anchor, message);
@@ -367,10 +390,6 @@ function StageSidebar({
       setReviewRunning(false);
     }
   }, [activeDraft, activeRootPath, activeTerminalSession, clearActiveDraft, onRunReviewAgentRequest]);
-
-  const handleOpenPanelChange = useCallback(async (entry: GitChangeEntry) => {
-    await handleOpenChange(entry, changesMode);
-  }, [changesMode, handleOpenChange]);
 
   const renderTerminalTab = useCallback((
     tab: TerminalSidebarTab,
@@ -401,8 +420,8 @@ function StageSidebar({
         return (
           <FileExplorer
             rootPath={activeRootPath}
-            activeFilePath={openFilePath}
-            onOpenFile={handleOpenFile}
+            activeFilePath={null}
+            onOpenFile={(path) => onOpenOrFocusEditorFile(path, activeTerminalSession)}
             onRemoveFile={handleRemoveFile}
           />
         );
@@ -410,10 +429,19 @@ function StageSidebar({
         return (
           <ChangesPanel
             rootPath={activeRootPath}
-            activeFilePath={openFilePath}
+            activeFilePath={null}
             mode={changesMode}
             onModeChange={setChangesMode}
-            onOpenChange={(entry) => { void handleOpenPanelChange(entry); }}
+            onOpenChange={(entry) => onOpenOrFocusEditorChange(entry, changesMode, activeTerminalSession)}
+          />
+        );
+      case "search":
+        return (
+          <ProjectSearchPanel
+            rootPath={activeRootPath}
+            onOpenMatch={(filePath, lineNumber, columnStart) => {
+              onOpenOrFocusEditorSearchMatch(filePath, lineNumber, columnStart, activeTerminalSession);
+            }}
           />
         );
       case "queue":
@@ -494,8 +522,6 @@ function StageSidebar({
     clearActiveDraft,
     divergencesByProject,
     globalTmuxHistoryLimit,
-    handleOpenFile,
-    handleOpenPanelChange,
     handleQueueClear,
     handleQueuePrompt,
     handleQueueRemoveItem,
@@ -518,7 +544,6 @@ function StageSidebar({
     linearUpdatingIssueId,
     linearWorkflowStates,
     onCloseSessionAndKillTmux,
-    openFilePath,
     onProjectSettingsSaved,
     projects,
     projectsLoading,
@@ -537,13 +562,63 @@ function StageSidebar({
     reviewRunning,
     setAgent,
     setFinalComment,
+    setChangesMode,
     setQueueDraft,
     setLinearSearchQuery,
     setLinearStatePickerOpenIssueId,
     setLinearStatusFilter,
     terminalSessions,
     divergencesLoading,
+    onOpenOrFocusEditorChange,
+    onOpenOrFocusEditorFile,
+    onOpenOrFocusEditorSearchMatch,
     visibleLinearIssues,
+  ]);
+
+  const renderEditorTab = useCallback((tab: EditorSidebarTab) => {
+    if (!activeEditorSession) {
+      return null;
+    }
+
+    switch (tab) {
+      case "files":
+        return (
+          <FileExplorer
+            rootPath={activeEditorSession.path}
+            activeFilePath={activeEditorSession.filePath}
+            onOpenFile={(path) => onOpenOrFocusEditorFile(path, activeEditorSession)}
+            onRemoveFile={handleRemoveFile}
+          />
+        );
+      case "changes":
+        return (
+          <ChangesPanel
+            rootPath={activeEditorSession.path}
+            activeFilePath={activeEditorSession.filePath}
+            mode={changesMode}
+            onModeChange={setChangesMode}
+            onOpenChange={(entry) => onOpenOrFocusEditorChange(entry, changesMode, activeEditorSession)}
+          />
+        );
+      case "search":
+        return (
+          <ProjectSearchPanel
+            rootPath={activeEditorSession.path}
+            onOpenMatch={(filePath, lineNumber, columnStart) => {
+              onOpenOrFocusEditorSearchMatch(filePath, lineNumber, columnStart, activeEditorSession);
+            }}
+          />
+        );
+      default:
+        return null;
+    }
+  }, [
+    activeEditorSession,
+    changesMode,
+    handleRemoveFile,
+    onOpenOrFocusEditorChange,
+    onOpenOrFocusEditorFile,
+    onOpenOrFocusEditorSearchMatch,
   ]);
 
   const renderAgentTab = useCallback((tab: AgentSidebarTab) => {
@@ -552,6 +627,15 @@ function StageSidebar({
     }
 
     switch (tab) {
+      case "files":
+        return (
+          <FileExplorer
+            rootPath={activeAgentSession.path}
+            activeFilePath={null}
+            onOpenFile={(path) => onOpenOrFocusEditorFile(path, activeAgentSession)}
+            onRemoveFile={handleRemoveFile}
+          />
+        );
       case "changes":
         return (
           <ChangesTree
@@ -607,6 +691,7 @@ function StageSidebar({
     }
   }, [
     activeAgentSession,
+    handleRemoveFile,
     agentLinearError,
     agentLinearInfoMessage,
     agentLinearLoading,
@@ -635,6 +720,7 @@ function StageSidebar({
     handleAgentQueueRemoveItem,
     handleAgentQueueSendItem,
     handleOpenChange,
+    onOpenOrFocusEditorFile,
     openFilePath,
     setAgentLinearSearchQuery,
     setAgentLinearStatePickerOpenIssueId,
@@ -659,21 +745,29 @@ function StageSidebar({
             <p className="truncate text-sm text-text">{focusedSession.name}</p>
           </div>
           <span className="rounded-full border border-surface px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-subtext">
-            {isAgentSession(focusedSession) ? "Agent" : "Terminal"}
+            {isAgentSession(focusedSession) ? "Agent" : isEditorSession(focusedSession) ? "Editor" : "Terminal"}
           </span>
         </div>
 
         {activeTerminalSession ? (
           <div className="flex items-center border-b border-surface">
-            {(["settings", "files", "changes", "queue", "linear", "tmux", "review"] as const).map((tab) => (
+            {(["settings", "files", "changes", "search", "queue", "linear", "tmux", "review"] as const).map((tab) => (
               <TabButton key={tab} active={terminalTab === tab} onClick={() => setTerminalTab(tab)}>
                 {tab === "tmux" ? "Tmux" : tab[0].toUpperCase() + tab.slice(1)}
               </TabButton>
             ))}
           </div>
+        ) : activeEditorSession ? (
+          <div className="flex items-center border-b border-surface">
+            {(["files", "changes", "search"] as const).map((tab) => (
+              <TabButton key={tab} active={editorTab === tab} onClick={() => setEditorTab(tab)}>
+                {tab[0].toUpperCase() + tab.slice(1)}
+              </TabButton>
+            ))}
+          </div>
         ) : (
           <div className="flex items-center border-b border-surface">
-            {(["changes", "linear", "queue"] as const).map((tab) => (
+            {(["files", "changes", "linear", "queue"] as const).map((tab) => (
               <TabButton key={tab} active={agentTab === tab} onClick={() => setAgentTab(tab)}>
                 {tab[0].toUpperCase() + tab.slice(1)}
               </TabButton>
@@ -682,7 +776,11 @@ function StageSidebar({
         )}
 
         <div className="flex-1 min-h-0 overflow-hidden">
-          {activeTerminalSession ? renderTerminalTab(terminalTab) : renderAgentTab(agentTab)}
+          {activeTerminalSession
+            ? renderTerminalTab(terminalTab)
+            : activeEditorSession
+              ? renderEditorTab(editorTab)
+              : renderAgentTab(agentTab)}
         </div>
       </aside>
 
@@ -714,11 +812,11 @@ function StageSidebar({
             onAddDiffComment={handleAddDiffComment}
           />
 
-          {showFileQuickSwitcher && activeRootPath && (
+          {showFileQuickSwitcher && (activeTerminalSession || activeEditorSession) && activeRootPath && (
             <FileQuickSwitcher
               rootPath={activeRootPath}
               onSelect={(path) => {
-                void handleOpenFile(path);
+                onOpenOrFocusEditorFile(path, activeEditorSession ?? activeTerminalSession);
                 onCloseFileQuickSwitcher();
               }}
               onClose={onCloseFileQuickSwitcher}

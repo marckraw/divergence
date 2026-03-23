@@ -8,6 +8,7 @@ export {
   getWorkspaceSessionTargetId,
   getWorkspaceSessionTargetType,
   isAgentSession,
+  isEditorSession,
   isTerminalSession,
 } from "./lib/workspaceSession.pure";
 export type {

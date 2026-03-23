@@ -12,7 +12,7 @@ import {
   isStageTabId,
 } from "../../entities";
 
-export const STAGE_LAYOUT_PERSISTENCE_VERSION = 2;
+export const STAGE_LAYOUT_PERSISTENCE_VERSION = 3;
 
 interface PersistedStagePane {
   id: StagePaneId;
@@ -88,7 +88,7 @@ function parsePaneRef(value: unknown, allowPending: boolean): StagePaneRef | nul
     return null;
   }
 
-  if (value.kind === "terminal" || value.kind === "agent") {
+  if (value.kind === "terminal" || value.kind === "agent" || value.kind === "editor") {
     return {
       kind: value.kind,
       sessionId,
@@ -236,7 +236,7 @@ export function normalizePersistedStageLayoutState(input: unknown): StageTabGrou
     return null;
   }
 
-  if (input.version === 2 || Array.isArray(input.tabs)) {
+  if (input.version === 3 || input.version === 2 || Array.isArray(input.tabs)) {
     const seenIds = new Set<StageTabId>();
     const tabs = (Array.isArray(input.tabs) ? input.tabs : [])
       .map((tab) => parseTab(tab, seenIds))
