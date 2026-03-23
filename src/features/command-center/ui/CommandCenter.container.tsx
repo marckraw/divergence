@@ -75,6 +75,8 @@ function CommandCenterContainer({
     inputRef.current?.focus();
   }, []);
 
+  const showCategoryTabs = mode.kind === "replace" || mode.kind === "open-in-pane";
+
   // Build and filter search results
   const allItems = useMemo(() => {
     return buildCommandCenterSearchResults(mode, {
@@ -90,9 +92,14 @@ function CommandCenterContainer({
     });
   }, [mode, projects, divergencesByProject, sessions, workspaces, workspaceDivergences, stageTabs, files, agentProviders, sourceSession, needsFiles]);
 
+  // Reset category when mode changes (e.g. replace → reveal)
+  useEffect(() => {
+    setActiveCategory("all");
+  }, [mode.kind]);
+
   const filteredItems = useMemo(() => {
-    return filterCommandCenterSearchResults(allItems, query, activeCategory);
-  }, [allItems, query, activeCategory]);
+    return filterCommandCenterSearchResults(allItems, query, showCategoryTabs ? activeCategory : undefined);
+  }, [allItems, query, activeCategory, showCategoryTabs]);
 
   // Reset selection when items change
   useEffect(() => {
@@ -110,7 +117,6 @@ function CommandCenterContainer({
     selected?.scrollIntoView({ block: "nearest" });
   }, [selectedIndex, filteredItems.length]);
 
-  const showCategoryTabs = mode.kind === "replace" || mode.kind === "open-in-pane";
   const contextLabel = getCommandCenterContextLabel(mode, sourceSession);
 
   const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
