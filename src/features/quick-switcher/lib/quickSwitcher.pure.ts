@@ -1,15 +1,24 @@
-import type { Divergence, Project, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import type {
+  Divergence,
+  Project,
+  StageTab,
+  WorkspaceSession,
+  Workspace,
+  WorkspaceDivergence,
+} from "../../../entities";
 import {
+  getFocusedPane,
   getWorkspaceSessionTargetId,
   getWorkspaceSessionTargetType,
   isAgentSession,
 } from "../../../entities";
 
 export interface QuickSwitcherSearchResult {
-  type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence";
-  item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence;
+  type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence" | "stage_tab";
+  item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence | StageTab;
   projectName?: string;
   workspaceName?: string;
+  detail?: string;
 }
 
 export function buildQuickSwitcherSearchResults(
@@ -18,6 +27,7 @@ export function buildQuickSwitcherSearchResults(
   sessions: Map<string, WorkspaceSession>,
   workspaces?: Workspace[],
   workspaceDivergences?: WorkspaceDivergence[],
+  stageTabs?: StageTab[],
 ): QuickSwitcherSearchResult[] {
   const items: QuickSwitcherSearchResult[] = [];
   const projectById = new Map<number, Project>();
@@ -72,6 +82,21 @@ export function buildQuickSwitcherSearchResults(
     });
   }
 
+  if (stageTabs) {
+    const sortedTabs = [...stageTabs].sort((a, b) => a.label.localeCompare(b.label));
+    for (const tab of sortedTabs) {
+      const focusedPane = getFocusedPane(tab.layout);
+      const focusedLabel = focusedPane.ref.kind === "pending"
+        ? "Empty pane"
+        : sessions.get(focusedPane.ref.sessionId)?.name ?? focusedPane.ref.sessionId;
+      items.push({
+        type: "stage_tab",
+        item: tab,
+        detail: `${tab.layout.panes.length} pane${tab.layout.panes.length === 1 ? "" : "s"} • Focused: ${focusedLabel}`,
+      });
+    }
+  }
+
   return items;
 }
 
@@ -85,7 +110,9 @@ export function filterQuickSwitcherSearchResults(
 
   const lowerQuery = query.toLowerCase();
   return items.filter((result) => {
-    const name = result.item.name.toLowerCase();
+    const name = "name" in result.item
+      ? result.item.name.toLowerCase()
+      : result.item.label.toLowerCase();
     if (result.type === "divergence") {
       const divergence = result.item as Divergence;
       return (
@@ -123,6 +150,12 @@ export function filterQuickSwitcherSearchResults(
         name.includes(lowerQuery)
         || wd.branch.toLowerCase().includes(lowerQuery)
         || result.workspaceName?.toLowerCase().includes(lowerQuery)
+      );
+    }
+    if (result.type === "stage_tab") {
+      return (
+        name.includes(lowerQuery)
+        || result.detail?.toLowerCase().includes(lowerQuery)
       );
     }
     return name.includes(lowerQuery);

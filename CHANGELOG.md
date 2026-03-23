@@ -1,5 +1,23 @@
 # divergence
 
+## 0.41.2
+
+### Patch Changes
+
+- ab4681a: Increase the configurable layout tab limit to default to 20, expose the cap in Settings > General, and show a toast when new tab creation is blocked by the configured limit.
+
+## 0.41.1
+
+### Patch Changes
+
+- ec8e299: cmd + b open pane improvements
+
+## 0.41.0
+
+### Minor Changes
+
+- 0120566: Add persistent layout tabs so each tab owns its own pane group and users can switch workspaces without disturbing existing pane arrangements. This also adds a stage tab bar, tab-focused keyboard shortcuts, and quick switcher support for opening selections in a new tab.
+
 ## 0.40.0
 
 ### Minor Changes

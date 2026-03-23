@@ -20,6 +20,7 @@ export interface SidebarProps {
   onSelectProject: (project: Project) => void;
   onSelectDivergence: (divergence: Divergence) => void;
   onSelectSession: (sessionId: string) => void;
+  onRevealSession: (sessionId: string) => void;
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onDeleteAgentSession: (sessionId: string) => void;

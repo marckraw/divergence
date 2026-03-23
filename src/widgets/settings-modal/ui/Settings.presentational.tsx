@@ -253,6 +253,19 @@ function SettingsPresentational({
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-text mb-2">Maximum Layout Tabs</label>
+                    <TextInput
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={settings.maxStageTabs}
+                      onChange={(event) => onUpdateSetting("maxStageTabs", Number(event.target.value))}
+                      className="focus:ring-0"
+                    />
+                    <p className="text-xs text-subtext mt-1">Maximum number of top-level layout tabs. Allowed range: 1 to 20.</p>
+                  </div>
+
+                  <div>
                     <label className="inline-flex items-center gap-2 text-sm text-text">
                       <input
                         type="checkbox"

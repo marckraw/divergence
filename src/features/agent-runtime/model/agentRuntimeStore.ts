@@ -26,6 +26,7 @@ import {
 
 interface AgentRuntimeStoreState {
   capabilities: AgentRuntimeCapabilities | null;
+  hasLoadedInitialData: boolean;
   sessions: Map<string, AgentSessionSnapshot>;
   orderedSessions: AgentSessionSnapshot[];
   orderedOpenSessions: AgentSessionSnapshot[];
@@ -33,6 +34,7 @@ interface AgentRuntimeStoreState {
 
 const INITIAL_STATE: AgentRuntimeStoreState = {
   capabilities: null,
+  hasLoadedInitialData: false,
   sessions: new Map(),
   orderedSessions: [],
   orderedOpenSessions: [],
@@ -172,6 +174,7 @@ async function initializeAgentRuntimeStore(): Promise<void> {
   replaceState({
     ...state,
     capabilities: nextCapabilities,
+    hasLoadedInitialData: true,
     sessions: nextSessions,
     orderedSessions,
     orderedOpenSessions: deriveOrderedOpenSessions(orderedSessions),
@@ -205,6 +208,10 @@ function getCapabilitiesSnapshot(): AgentRuntimeCapabilities | null {
   return state.capabilities;
 }
 
+function getHasLoadedInitialDataSnapshot(): boolean {
+  return state.hasLoadedInitialData;
+}
+
 function getSessionsSnapshot(): Map<string, AgentSessionSnapshot> {
   return state.sessions;
 }
@@ -234,6 +241,15 @@ export function useInitializeAgentRuntimeStore(): void {
 export function useAgentRuntimeCapabilitiesState(): AgentRuntimeCapabilities | null {
   useInitializeAgentRuntimeStore();
   return useSyncExternalStore(subscribe, getCapabilitiesSnapshot, getCapabilitiesSnapshot);
+}
+
+export function useAgentRuntimeReadyState(): boolean {
+  useInitializeAgentRuntimeStore();
+  return useSyncExternalStore(
+    subscribe,
+    getHasLoadedInitialDataSnapshot,
+    getHasLoadedInitialDataSnapshot,
+  );
 }
 
 export function useAgentRuntimeSessionsState(): Map<string, AgentSessionSnapshot> {

@@ -8,12 +8,15 @@ import {
   type RefObject,
 } from "react";
 import type {
+  AgentProvider,
   Divergence,
   Project,
   SplitSessionState,
   StageLayout,
   StageLayoutOrientation,
   StagePaneId,
+  StageTab,
+  StageTabId,
   TerminalSession,
   WorkspaceMember,
   WorkspaceSession,
@@ -35,14 +38,23 @@ import type {
 } from "../../../shared";
 import { ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
+import StageTabBar from "../../../widgets/stage-tab-bar";
 import WorkspaceSessionTabsPresentational from "../../../widgets/workspace-session-tabs";
 import type { AgentSessionComposerHandle } from "../../../widgets/agent-session-view/ui/AgentSessionView.types";
 import AgentStagePane from "./AgentStagePane.container";
 import PendingStagePane from "./PendingStagePane.container";
 import StageSidebar from "./StageSidebar.container";
 import TerminalStagePane from "./TerminalStagePane.container";
+import {
+  buildPendingStagePaneCreateContext,
+  type PendingStagePaneCreateAction,
+} from "./lib/pendingStagePane.pure";
 
 interface StageViewProps {
+  tabs: StageTab[];
+  activeTabId: StageTabId | null;
+  attentionTabIds: Set<StageTabId>;
+  maxStageTabs: number;
   layout: StageLayout | null;
   workspaceSessions: Map<string, WorkspaceSession>;
   sessionList: WorkspaceSession[];
@@ -51,6 +63,7 @@ interface StageViewProps {
   lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
   dismissedAttentionKeyBySessionId: Map<string, string>;
   projects: Project[];
+  agentProviders: AgentProvider[];
   terminalSessions: TerminalSession[];
   divergencesByProject: Map<number, Divergence[]>;
   workspaceMembersByWorkspaceId: Map<number, WorkspaceMember[]>;
@@ -67,6 +80,11 @@ interface StageViewProps {
   isRightPanelOpen: boolean;
   onToggleSidebar: () => void;
   onToggleRightPanel: () => void;
+  onCreateTab: () => void;
+  onCloseTab: (tabId: StageTabId) => void;
+  onCloseOtherTabs: (tabId: StageTabId) => void;
+  onFocusTab: (tabId: StageTabId) => void;
+  onRenameTab: (tabId: StageTabId, label: string) => void;
   onSelectSession: (sessionId: string) => void | Promise<void>;
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
@@ -76,6 +94,7 @@ interface StageViewProps {
   onResetToSinglePane: (sessionId?: string | null) => void;
   onFocusPane: (paneId: StagePaneId) => void;
   onReplacePaneRef: (paneId: StagePaneId, ref: StagePaneRef) => void;
+  onCreatePendingSession: (paneId: StagePaneId, action: PendingStagePaneCreateAction) => void | Promise<void>;
   onClosePane: (paneId: StagePaneId) => void;
   onResizeStageAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
@@ -120,6 +139,10 @@ interface StageViewProps {
 }
 
 function StageView({
+  tabs,
+  activeTabId,
+  attentionTabIds,
+  maxStageTabs,
   layout,
   workspaceSessions,
   sessionList,
@@ -128,6 +151,7 @@ function StageView({
   lastViewedRuntimeEventAtMsBySessionId,
   dismissedAttentionKeyBySessionId,
   projects,
+  agentProviders,
   terminalSessions,
   divergencesByProject,
   workspaceMembersByWorkspaceId,
@@ -144,6 +168,11 @@ function StageView({
   isRightPanelOpen,
   onToggleSidebar,
   onToggleRightPanel,
+  onCreateTab,
+  onCloseTab,
+  onCloseOtherTabs,
+  onFocusTab,
+  onRenameTab,
   onSelectSession,
   onDismissSessionAttention,
   onCloseSession,
@@ -153,6 +182,7 @@ function StageView({
   onResetToSinglePane,
   onFocusPane,
   onReplacePaneRef,
+  onCreatePendingSession,
   onClosePane,
   onResizeStageAdjacentPanes,
   onStatusChange,
@@ -256,9 +286,64 @@ function StageView({
 
   const canSplitStage = Boolean(layout && layout.panes.length < MAX_STAGE_PANES);
   const layoutOrientationClass = layout?.orientation === "horizontal" ? "flex-col" : "flex-row";
+  const visibleSessionList = useMemo(() => {
+    if (!layout) {
+      return [];
+    }
+
+    const seenIds = new Set<string>();
+    const next: WorkspaceSession[] = [];
+
+    for (const pane of layout.panes) {
+      if (pane.ref.kind === "pending" || seenIds.has(pane.ref.sessionId)) {
+        continue;
+      }
+
+      const session = workspaceSessions.get(pane.ref.sessionId);
+      if (!session) {
+        continue;
+      }
+
+      seenIds.add(session.id);
+      next.push(session);
+    }
+
+    return next;
+  }, [layout, workspaceSessions]);
+
+  const pendingPaneCreateContextByPaneId = useMemo(() => {
+    const next = new Map<StagePaneId, ReturnType<typeof buildPendingStagePaneCreateContext>>();
+    if (!layout) {
+      return next;
+    }
+
+    for (const pane of layout.panes) {
+      if (pane.ref.kind !== "pending") {
+        continue;
+      }
+
+      const sourceSession = pane.ref.sourceSessionId
+        ? workspaceSessions.get(pane.ref.sourceSessionId) ?? null
+        : null;
+      next.set(pane.id, buildPendingStagePaneCreateContext(sourceSession, agentProviders));
+    }
+
+    return next;
+  }, [agentProviders, layout, workspaceSessions]);
 
   return (
     <main className="flex flex-1 min-w-0 h-full bg-main flex-col">
+      <StageTabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        attentionTabIds={attentionTabIds}
+        maxStageTabs={maxStageTabs}
+        onSelectTab={onFocusTab}
+        onCreateTab={onCreateTab}
+        onCloseTab={onCloseTab}
+        onCloseOtherTabs={onCloseOtherTabs}
+        onRenameTab={onRenameTab}
+      />
       <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
         <ToolbarButton
           iconOnly
@@ -275,7 +360,7 @@ function StageView({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
             <WorkspaceSessionTabsPresentational
-              sessionList={sessionList}
+              sessionList={visibleSessionList}
               activeSessionId={activeSessionId}
               idleAttentionSessionIds={idleAttentionSessionIds}
               lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
@@ -377,7 +462,11 @@ function StageView({
                         {pane.ref.kind === "pending" ? (
                           <PendingStagePane
                             sessions={sessionList}
+                            createContext={pendingPaneCreateContextByPaneId.get(pane.id) ?? null}
                             onSelectExistingSession={(sessionId) => handleSelectPendingSession(pane.id, sessionId)}
+                            onCreateSession={(action) => {
+                              void onCreatePendingSession(pane.id, action);
+                            }}
                             onClose={() => onClosePane(pane.id)}
                           />
                         ) : session && isTerminalSession(session) ? (

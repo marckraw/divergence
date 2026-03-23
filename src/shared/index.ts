@@ -36,6 +36,7 @@ export {
   TabButton,
   Textarea,
   TextInput,
+  Toaster,
   SecretTokenField,
   ToolbarButton,
   Tooltip,
@@ -172,11 +173,15 @@ export {
 
 export {
   DEFAULT_APP_SETTINGS,
+  DEFAULT_MAX_STAGE_TABS,
   DEFAULT_TMUX_HISTORY_LIMIT,
+  MAX_MAX_STAGE_TABS,
+  MIN_MAX_STAGE_TABS,
   SETTINGS_STORAGE_KEY,
   SETTINGS_UPDATED_EVENT,
   normalizeAppSettings,
   normalizeCustomAgentModels,
+  normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
   type AppSettings,
   type CustomAgentModels,

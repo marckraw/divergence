@@ -1,7 +1,7 @@
 {
   "name": "divergence",
   "private": true,
-  "version": "0.40.0",
+  "version": "0.41.2",
   "type": "module",
   "engines": {
     "node": ">=24.14.0 <25"

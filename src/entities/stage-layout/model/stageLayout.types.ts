@@ -5,7 +5,7 @@ export type StageLayoutOrientation = "horizontal" | "vertical";
 export type StagePaneRef =
   | { kind: "terminal"; sessionId: string }
   | { kind: "agent"; sessionId: string }
-  | { kind: "pending" };
+  | { kind: "pending"; sourceSessionId?: string };
 
 export interface StagePane {
   id: StagePaneId;

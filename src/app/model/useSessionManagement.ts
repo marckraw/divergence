@@ -218,13 +218,7 @@ export function useSessionManagement({
       return next;
     });
     commandBySessionIdRef.current.delete(sessionId);
-    setActiveSessionId(prev => {
-      if (prev !== sessionId) {
-        return prev;
-      }
-      const remaining = Array.from(sessionsRef.current.keys()).filter(id => id !== sessionId);
-      return remaining[0] || null;
-    });
+    setActiveSessionId(prev => (prev === sessionId ? null : prev));
   }, [notificationCallbacksRef, setSplitBySessionId]);
 
   const handleCloseSessionAndKillTmux = useCallback(async (sessionId: string) => {
