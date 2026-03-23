@@ -112,6 +112,9 @@ function EditorSessionView({
     ? FAST_EASE_OUT
     : { type: "spring", stiffness: 240, damping: 30, mass: 0.8 };
   const contentVariantKey = `${session.id}-${resolvedState.activeTab}`;
+  const shouldShowLoadingState = !resolvedState.isLoaded
+    && resolvedState.fileLoadError === null
+    && !resolvedState.isDeleted;
 
   useEffect(() => {
     lastAppliedRequestKeyRef.current = null;
@@ -254,7 +257,7 @@ function EditorSessionView({
                 className="text-[11px] leading-5"
               />
             </motion.div>
-          ) : !resolvedState.isLoaded && resolvedState.isLoadingFile ? (
+          ) : shouldShowLoadingState ? (
             <motion.div
               key="loading"
               className="flex h-full items-center justify-center text-sm text-subtext"

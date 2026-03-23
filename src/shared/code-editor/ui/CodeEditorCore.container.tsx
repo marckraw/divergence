@@ -108,7 +108,7 @@ function CodeEditorCore({
     lastRevealRequestKeyRef.current = null;
 
     const state = EditorState.create({
-      doc: "",
+      doc: content,
       extensions: [
         basicSetup,
         baseTheme,
@@ -153,6 +153,7 @@ function CodeEditorCore({
     additionalExtensions,
     autoFocus,
     completionExtensions,
+    content,
     isReadOnly,
     keyBindings,
     languageExtensions,
