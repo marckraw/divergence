@@ -27,6 +27,8 @@ function CommandCenterPresentational({
   onSelectResult,
   onHoverResult,
   onCategoryChange,
+  onAfterPanelEnter,
+  onAfterOverlayExit,
 }: CommandCenterPresentationalProps) {
   const modeLabel = getModeBadgeLabel(mode);
   const groups = groupResultsByCategory(visibleItems);
@@ -49,6 +51,9 @@ function CommandCenterPresentational({
       surface="sidebar"
       overlayClassName="items-start justify-center pt-[20vh] z-50"
       panelClassName="w-[600px] max-h-[60vh] flex flex-col"
+      dataCommandCenterRoot
+      onPanelAnimationComplete={onAfterPanelEnter}
+      onOverlayExitComplete={onAfterOverlayExit}
     >
       {/* Search input */}
       <div className="p-3 border-b border-surface">

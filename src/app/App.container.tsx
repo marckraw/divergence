@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Sidebar from "../widgets/sidebar";
@@ -94,6 +94,23 @@ import {
 } from "./lib/sessionBuilder.pure";
 import StageView from "./ui/stage-view/StageView.container";
 
+function isInsideCommandCenterOverlay(element: Element | null): boolean {
+  return element !== null && Boolean(element.closest("[data-command-center-root]"));
+}
+
+function captureFocusBeforeCommandCenterMount(previousRef: { current: Element | null }): void {
+  const active = document.activeElement;
+  if (
+    active instanceof HTMLElement
+    && active !== document.body
+    && !isInsideCommandCenterOverlay(active)
+  ) {
+    previousRef.current = active;
+  } else {
+    previousRef.current = null;
+  }
+}
+
 function App() {
   const updater = useUpdater(true);
   const { projects, addProject, removeProject, loading: projectsLoading } = useProjects();
@@ -119,6 +136,7 @@ function App() {
   } = useSplitPaneManagement();
   const [commandCenterMode, setCommandCenterMode] = useState<CommandCenterMode | null>(null);
   const showCommandCenter = commandCenterMode !== null;
+  const commandCenterPreviousFocusRef = useRef<Element | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [renameAgentSessionState, setRenameAgentSessionState] = useState<{
     sessionId: string;
@@ -662,6 +680,39 @@ function App() {
     () => tabGroup?.tabs.map((tab) => tab.id) ?? [],
     [tabGroup],
   );
+
+  useLayoutEffect(() => {
+    if (showCommandCenter) {
+      captureFocusBeforeCommandCenterMount(commandCenterPreviousFocusRef);
+    }
+  }, [showCommandCenter]);
+
+  const restoreFocusAfterCommandCenterExit = useCallback(() => {
+    const previous = commandCenterPreviousFocusRef.current;
+    commandCenterPreviousFocusRef.current = null;
+
+    const tryRestore = () => {
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLElement
+        && active !== document.body
+        && active.isConnected
+      ) {
+        return;
+      }
+      if (previous instanceof HTMLElement && document.contains(previous)) {
+        previous.focus({ preventScroll: true });
+        return;
+      }
+      const paneId = stageLayout?.focusedPaneId;
+      if (paneId) {
+        handleFocusStagePane(paneId);
+      }
+    };
+
+    window.setTimeout(tryRestore, 0);
+  }, [handleFocusStagePane, stageLayout?.focusedPaneId]);
+
   const notifyMaxStageTabsReached = useCallback(() => {
     toast.info(`Layout tabs are limited to ${appSettings.maxStageTabs}. Adjust the limit in Settings > General.`);
   }, [appSettings.maxStageTabs]);
@@ -1851,6 +1902,7 @@ function App() {
               void handleCommandCenterSelect(result);
             }}
             onClose={() => setCommandCenterMode(null)}
+            onAfterOverlayExit={restoreFocusAfterCommandCenterExit}
           />
         )}
       </AnimatePresence>

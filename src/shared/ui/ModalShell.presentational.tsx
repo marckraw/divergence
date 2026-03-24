@@ -12,6 +12,10 @@ export interface ModalShellProps {
   size?: ModalSize;
   surface?: ModalSurface;
   onPanelClick?: (event: MouseEvent<HTMLDivElement>) => void;
+  onPanelAnimationComplete?: () => void;
+  onOverlayExitComplete?: () => void;
+  /** Marks the overlay root for queries (e.g. excluding modal content from “previously focused” capture). */
+  dataCommandCenterRoot?: boolean;
 }
 
 function ModalShell({
@@ -23,10 +27,15 @@ function ModalShell({
   size = "md",
   surface = "sidebar",
   onPanelClick,
+  onPanelAnimationComplete,
+  onOverlayExitComplete,
+  dataCommandCenterRoot,
 }: ModalShellProps) {
   return (
     <ModalOverlay
       className={overlayClassName}
+      {...(dataCommandCenterRoot ? { "data-command-center-root": "" } : {})}
+      onExitComplete={onOverlayExitComplete}
       onClick={() => {
         if (closeOnOverlayClick) {
           onRequestClose?.();
@@ -37,6 +46,7 @@ function ModalShell({
         size={size}
         surface={surface}
         className={panelClassName}
+        onAnimationComplete={onPanelAnimationComplete}
         onClick={(event) => {
           event.stopPropagation();
           onPanelClick?.(event);

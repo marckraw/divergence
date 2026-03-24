@@ -31,6 +31,8 @@ function CommandCenterContainer({
   sourceSession,
   onSelect,
   onClose,
+  onAfterPanelEnter,
+  onAfterOverlayExit,
 }: CommandCenterProps) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -77,10 +79,17 @@ function CommandCenterContainer({
     return () => { cancelled = true; };
   }, [excludePatterns, needsFiles, respectGitignore, rootPath]);
 
-  // Focus input on mount
-  useEffect(() => {
-    inputRef.current?.focus();
+  const focusSearchInput = useCallback(() => {
+    inputRef.current?.focus({ preventScroll: true });
   }, []);
+
+  // Focus as soon as the input exists; panel animation completion retries so focus wins over framer-motion.
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => {
+      focusSearchInput();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [focusSearchInput]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -205,6 +214,11 @@ function CommandCenterContainer({
       onSelectResult={handleSelectResult}
       onHoverResult={handleHoverResult}
       onCategoryChange={setActiveCategory}
+      onAfterPanelEnter={() => {
+        focusSearchInput();
+        onAfterPanelEnter?.();
+      }}
+      onAfterOverlayExit={onAfterOverlayExit}
     />
   );
 }

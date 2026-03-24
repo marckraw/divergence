@@ -72,6 +72,10 @@ export interface CommandCenterProps {
   sourceSession: WorkspaceSession | null;
   onSelect: (result: CommandCenterSearchResult) => void;
   onClose: () => void;
+  /** Called after the panel entrance animation completes; use to focus the search field reliably. */
+  onAfterPanelEnter?: () => void;
+  /** Called after the overlay exit animation completes; use to restore focus behind the modal. */
+  onAfterOverlayExit?: () => void;
 }
 
 export interface CommandCenterPresentationalProps {
@@ -93,4 +97,6 @@ export interface CommandCenterPresentationalProps {
   onSelectResult: (result: CommandCenterSearchResult) => void;
   onHoverResult: (index: number) => void;
   onCategoryChange: (category: CommandCenterCategory) => void;
+  onAfterPanelEnter?: () => void;
+  onAfterOverlayExit?: () => void;
 }
