@@ -1,5 +1,11 @@
 # divergence
 
+## 0.45.3
+
+### Patch Changes
+
+- 68c6f3e: Collapse folders by default in the agent session changed-files tree and cap the panel with internal scrolling for long file lists.
+
 ## 0.45.2
 
 ### Patch Changes
