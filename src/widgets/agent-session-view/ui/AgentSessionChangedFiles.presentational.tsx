@@ -1,5 +1,6 @@
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import {
+  Button,
   getFileBadgeInfo,
   type ChangesTreeNode,
   type GitChangeEntry,
@@ -76,28 +77,46 @@ function countTreeFiles(nodes: ChangesTreeNode<GitChangeEntry>[]): number {
 function ChangedFileNode({
   node,
   depth,
+  expandedPaths,
+  onToggleFolder,
 }: {
   node: ChangesTreeNode<GitChangeEntry>;
   depth: number;
+  expandedPaths: Set<string>;
+  onToggleFolder: (path: string) => void;
 }) {
   const paddingStyle: CSSProperties = { paddingLeft: `${depth * 12 + 8}px` };
 
   if (node.kind === "folder") {
+    const isExpanded = expandedPaths.has(node.path);
+
     return (
       <div>
-        <div
-          className="flex items-center gap-2 rounded px-2 py-1 text-xs text-subtext"
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="w-full !justify-start gap-2 rounded px-2 py-1 text-left text-xs text-subtext hover:bg-surface/50 hover:text-text"
           style={paddingStyle}
+          onClick={() => onToggleFolder(node.path)}
         >
-          <FolderChevron expanded />
+          <FolderChevron expanded={isExpanded} />
           <FolderIcon />
           <span className="truncate">{node.name}</span>
-        </div>
-        <div className="space-y-0.5">
-          {node.children.map((child) => (
-            <ChangedFileNode key={child.path} node={child} depth={depth + 1} />
-          ))}
-        </div>
+        </Button>
+        {isExpanded && (
+          <div className="space-y-0.5">
+            {node.children.map((child) => (
+              <ChangedFileNode
+                key={child.path}
+                node={child}
+                depth={depth + 1}
+                expandedPaths={expandedPaths}
+                onToggleFolder={onToggleFolder}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -133,7 +152,20 @@ function AgentSessionChangedFilesPresentational({
   treeNodes,
   loading,
 }: AgentSessionChangedFilesProps) {
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => new Set());
   const fileCount = countTreeFiles(treeNodes);
+
+  const handleToggleFolder = (path: string) => {
+    setExpandedPaths((previous) => {
+      const next = new Set(previous);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
 
   if (fileCount === 0 && !loading) {
     return null;
@@ -155,9 +187,19 @@ function AgentSessionChangedFilesPresentational({
           </span>
         </summary>
         <div className="mt-3 space-y-0.5">
-          {treeNodes.map((node) => (
-            <ChangedFileNode key={node.path} node={node} depth={0} />
-          ))}
+          <div className="max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-0.5">
+              {treeNodes.map((node) => (
+                <ChangedFileNode
+                  key={node.path}
+                  node={node}
+                  depth={0}
+                  expandedPaths={expandedPaths}
+                  onToggleFolder={handleToggleFolder}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </details>
     </div>
