@@ -1166,10 +1166,8 @@ function App() {
   ]);
 
   const sourceSessionForCommandCenter = useMemo(() => {
-    if (!commandCenterMode) return null;
-
     // Explicit source for open-in-pane
-    if (commandCenterMode.kind === "open-in-pane" && commandCenterMode.sourceSessionId) {
+    if (commandCenterMode?.kind === "open-in-pane" && commandCenterMode.sourceSessionId) {
       return workspaceSessions.get(commandCenterMode.sourceSessionId) ?? null;
     }
 
@@ -1180,7 +1178,7 @@ function App() {
     }
 
     // Target pane's session (e.g. replace mode when focused pane is pending)
-    if ("targetPaneId" in commandCenterMode && stageLayout) {
+    if (commandCenterMode && "targetPaneId" in commandCenterMode && stageLayout) {
       const targetPane = stageLayout.panes.find((p) => p.id === commandCenterMode.targetPaneId);
       if (targetPane && targetPane.ref.kind !== "pending") {
         const session = workspaceSessions.get(targetPane.ref.sessionId);
