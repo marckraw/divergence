@@ -6,9 +6,9 @@ use crate::agent_runtime::{
 };
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
+use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -1811,6 +1811,9 @@ mod tests {
     use super::{
         build_pull_request_conflict_resolution_branch_name,
         build_pull_request_review_branch_name,
+        matches_exclude_pattern,
+        should_skip_project_dir_name,
+        should_skip_project_file_name,
     };
 
     #[test]
@@ -1836,6 +1839,29 @@ mod tests {
             build_pull_request_conflict_resolution_branch_name(42, "", "release/1.2"),
             "pr/42/resolve/release/1.2"
         );
+    }
+
+    #[test]
+    fn matches_exclude_patterns_for_exact_prefix_suffix_and_infix_globs() {
+        assert!(matches_exclude_pattern(".env", ".env"));
+        assert!(matches_exclude_pattern("server.log", "*.log"));
+        assert!(matches_exclude_pattern(".env.local", ".env.*"));
+        assert!(matches_exclude_pattern("bundle.min.js", "*.min.js"));
+        assert!(!matches_exclude_pattern("src/main.ts", "*.log"));
+        assert!(!matches_exclude_pattern("env.local", ".env.*"));
+    }
+
+    #[test]
+    fn skips_default_directory_and_file_noise_for_project_listing() {
+        let no_patterns: Vec<String> = Vec::new();
+
+        assert!(should_skip_project_dir_name("node_modules", &no_patterns));
+        assert!(should_skip_project_dir_name("github.com-example.git", &no_patterns));
+        assert!(should_skip_project_file_name(".DS_Store", &no_patterns));
+        assert!(should_skip_project_file_name("Thumbs.db", &no_patterns));
+        assert!(should_skip_project_file_name("debug.log", &no_patterns));
+        assert!(should_skip_project_file_name("bun.lockb", &no_patterns));
+        assert!(!should_skip_project_file_name("main.ts", &no_patterns));
     }
 }
 
@@ -2079,8 +2105,8 @@ pub struct FileListResult {
     pub truncated: bool,
 }
 
-fn project_ignore_dirs() -> HashSet<&'static str> {
-    [
+fn project_ignore_dirs() -> &'static [&'static str] {
+    &[
         "node_modules",
         ".git",
         "target",
@@ -2088,7 +2114,6 @@ fn project_ignore_dirs() -> HashSet<&'static str> {
         "build",
         ".next",
         "__pycache__",
-        ".DS_Store",
         ".cache",
         ".turbo",
         ".vercel",
@@ -2100,24 +2125,92 @@ fn project_ignore_dirs() -> HashSet<&'static str> {
         ".nuxt",
         ".expo",
         "vendor",
+        ".docker",
+        ".gradle",
+        ".idea",
+        ".vscode",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".tox",
+        ".eggs",
+        ".terraform",
+        ".serverless",
     ]
-    .into_iter()
-    .collect()
 }
 
-#[tauri::command]
-pub async fn list_project_files(root_path: String) -> Result<FileListResult, String> {
-    const MAX_FILES: usize = 10_000;
+fn project_ignore_file_names() -> &'static [&'static str] {
+    &[".DS_Store", "Thumbs.db"]
+}
 
-    let ignore_dirs = project_ignore_dirs();
-    let root = PathBuf::from(&root_path);
-    if !root.is_dir() {
-        return Err(format!("Path is not a directory: {}", root_path));
+fn project_ignore_file_patterns() -> &'static [&'static str] {
+    &["*.lockb", "*.log"]
+}
+
+fn matches_exclude_pattern(file_name: &str, pattern: &str) -> bool {
+    let pattern = pattern.trim();
+    if pattern.is_empty() {
+        return false;
     }
+    if pattern == "*" {
+        return true;
+    }
+
+    match pattern.split_once('*') {
+        Some(("", suffix)) => file_name.ends_with(suffix),
+        Some((prefix, "")) => file_name.starts_with(prefix),
+        Some((prefix, suffix)) => {
+            file_name.starts_with(prefix)
+                && file_name.ends_with(suffix)
+                && file_name.len() >= prefix.len() + suffix.len()
+        }
+        None => file_name == pattern,
+    }
+}
+
+fn normalize_exclude_patterns(patterns: Vec<String>) -> Vec<String> {
+    let mut normalized: Vec<String> = Vec::new();
+
+    for pattern in patterns {
+        let trimmed = pattern.trim();
+        if trimmed.is_empty() || normalized.iter().any(|existing| existing == trimmed) {
+            continue;
+        }
+        normalized.push(trimmed.to_string());
+    }
+
+    normalized
+}
+
+fn matches_any_exclude_pattern(file_name: &str, patterns: &[String]) -> bool {
+    patterns
+        .iter()
+        .any(|pattern| matches_exclude_pattern(file_name, pattern))
+}
+
+fn should_skip_project_dir_name(file_name: &str, exclude_patterns: &[String]) -> bool {
+    project_ignore_dirs().contains(&file_name)
+        || file_name.ends_with(".git")
+        || matches_any_exclude_pattern(file_name, exclude_patterns)
+}
+
+fn should_skip_project_file_name(file_name: &str, exclude_patterns: &[String]) -> bool {
+    project_ignore_file_names().contains(&file_name)
+        || project_ignore_file_patterns()
+            .iter()
+            .any(|pattern| matches_exclude_pattern(file_name, pattern))
+        || matches_any_exclude_pattern(file_name, exclude_patterns)
+}
+
+fn collect_project_files_with_manual_walk(
+    root: &Path,
+    exclude_patterns: &[String],
+) -> (Vec<String>, bool) {
+    const MAX_FILES: usize = 10_000;
 
     let mut files: Vec<String> = Vec::new();
     let mut truncated = false;
-    let mut stack: Vec<PathBuf> = vec![root.clone()];
+    let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
 
     while let Some(dir) = stack.pop() {
         let entries = match fs::read_dir(&dir) {
@@ -2127,33 +2220,37 @@ pub async fn list_project_files(root_path: String) -> Result<FileListResult, Str
 
         for entry in entries {
             let entry = match entry {
-                Ok(e) => e,
+                Ok(entry) => entry,
                 Err(_) => continue,
             };
-
-            let file_name = entry.file_name();
-            let name_str = file_name.to_string_lossy();
-
-            if ignore_dirs.contains(name_str.as_ref()) {
-                continue;
-            }
 
             let path = entry.path();
             let file_type = match entry.file_type() {
-                Ok(ft) => ft,
+                Ok(file_type) => file_type,
                 Err(_) => continue,
             };
+            let file_name = entry.file_name();
+            let name_str = file_name.to_string_lossy();
 
             if file_type.is_dir() {
+                if should_skip_project_dir_name(name_str.as_ref(), exclude_patterns) {
+                    continue;
+                }
                 stack.push(path);
-            } else if file_type.is_file() {
-                if files.len() >= MAX_FILES {
-                    truncated = true;
-                    break;
-                }
-                if let Ok(relative) = path.strip_prefix(&root) {
-                    files.push(path_to_string(relative));
-                }
+                continue;
+            }
+
+            if !file_type.is_file() || should_skip_project_file_name(name_str.as_ref(), exclude_patterns) {
+                continue;
+            }
+
+            if files.len() >= MAX_FILES {
+                truncated = true;
+                break;
+            }
+
+            if let Ok(relative) = path.strip_prefix(root) {
+                files.push(path_to_string(relative));
             }
         }
 
@@ -2161,6 +2258,87 @@ pub async fn list_project_files(root_path: String) -> Result<FileListResult, Str
             break;
         }
     }
+
+    (files, truncated)
+}
+
+fn collect_project_files_with_gitignore(
+    root: &Path,
+    exclude_patterns: &[String],
+) -> (Vec<String>, bool) {
+    const MAX_FILES: usize = 10_000;
+
+    let filter_patterns = exclude_patterns.to_vec();
+    let mut builder = WalkBuilder::new(root);
+    builder.hidden(false);
+    builder.ignore(false);
+    builder.parents(true);
+    builder.git_ignore(true);
+    builder.git_global(true);
+    builder.git_exclude(true);
+    builder.require_git(false);
+    builder.filter_entry(move |entry| {
+        if entry.depth() == 0 {
+            return true;
+        }
+
+        let file_name = entry.file_name().to_string_lossy();
+        let is_dir = entry.file_type().map(|file_type| file_type.is_dir()).unwrap_or(false);
+
+        if is_dir {
+            !should_skip_project_dir_name(file_name.as_ref(), &filter_patterns)
+        } else {
+            !should_skip_project_file_name(file_name.as_ref(), &filter_patterns)
+        }
+    });
+
+    let mut files: Vec<String> = Vec::new();
+    let mut truncated = false;
+
+    for entry in builder.build() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
+
+        let Some(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_file() {
+            continue;
+        }
+
+        if files.len() >= MAX_FILES {
+            truncated = true;
+            break;
+        }
+
+        let path = entry.path();
+        if let Ok(relative) = path.strip_prefix(root) {
+            files.push(path_to_string(relative));
+        }
+    }
+
+    (files, truncated)
+}
+
+#[tauri::command]
+pub async fn list_project_files(
+    root_path: String,
+    exclude_patterns: Vec<String>,
+    respect_gitignore: bool,
+) -> Result<FileListResult, String> {
+    let root = PathBuf::from(&root_path);
+    if !root.is_dir() {
+        return Err(format!("Path is not a directory: {}", root_path));
+    }
+
+    let exclude_patterns = normalize_exclude_patterns(exclude_patterns);
+    let (mut files, truncated) = if respect_gitignore {
+        collect_project_files_with_gitignore(&root, &exclude_patterns)
+    } else {
+        collect_project_files_with_manual_walk(&root, &exclude_patterns)
+    };
 
     files.sort();
 
@@ -2231,7 +2409,6 @@ pub async fn search_project_files(
     } else {
         query.to_lowercase()
     };
-    let ignore_dirs = project_ignore_dirs();
     let max_results = max_results
         .unwrap_or(DEFAULT_MAX_RESULTS)
         .clamp(1, MAX_ALLOWED_RESULTS);
@@ -2260,10 +2437,6 @@ pub async fn search_project_files(
 
             let file_name = entry.file_name();
             let name_str = file_name.to_string_lossy();
-            if ignore_dirs.contains(name_str.as_ref()) {
-                continue;
-            }
-
             let path = entry.path();
             let file_type = match entry.file_type() {
                 Ok(file_type) => file_type,
@@ -2271,6 +2444,9 @@ pub async fn search_project_files(
             };
 
             if file_type.is_dir() {
+                if should_skip_project_dir_name(name_str.as_ref(), &[]) {
+                    continue;
+                }
                 stack.push(path);
                 continue;
             }

@@ -1,5 +1,6 @@
 import {
   Button,
+  DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS,
   Kbd,
   ModalFooter,
   ModalShell,
@@ -86,6 +87,28 @@ function parseCustomModelList(value: string): string[] {
 
   value
     .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .forEach((entry) => {
+      if (!entry || seen.has(entry)) {
+        return;
+      }
+      seen.add(entry);
+      next.push(entry);
+    });
+
+  return next;
+}
+
+function formatPatternList(patterns: string[]): string {
+  return patterns.join("\n");
+}
+
+function parsePatternList(value: string): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+
+  value
+    .split("\n")
     .map((entry) => entry.trim())
     .forEach((entry) => {
       if (!entry || seen.has(entry)) {
@@ -276,6 +299,54 @@ function SettingsPresentational({
                       Restore open terminal tabs on restart
                     </label>
                     <p className="text-xs text-subtext mt-1">Reopen currently open tabs when Divergence launches.</p>
+                  </div>
+
+                  <div className="rounded-xl border border-surface bg-main/40 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-text mb-2">
+                          Command Center Exclude Patterns
+                        </label>
+                        <p className="text-xs text-subtext">
+                          Files matching these patterns will be hidden from the command center file search. One pattern per line. Supports wildcards: <span className="font-mono">*.log</span>, <span className="font-mono">.env.*</span>
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => onUpdateSetting(
+                          "commandCenterExcludePatterns",
+                          [...DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS],
+                        )}
+                      >
+                        Reset to Defaults
+                      </Button>
+                    </div>
+
+                    <Textarea
+                      rows={8}
+                      value={formatPatternList(settings.commandCenterExcludePatterns)}
+                      onChange={(event) => onUpdateSetting(
+                        "commandCenterExcludePatterns",
+                        parsePatternList(event.target.value),
+                      )}
+                      spellCheck={false}
+                      className="font-mono text-sm"
+                    />
+
+                    <label className="inline-flex items-center gap-2 text-sm text-text">
+                      <input
+                        type="checkbox"
+                        checked={settings.commandCenterRespectGitignore}
+                        onChange={(event) => onUpdateSetting("commandCenterRespectGitignore", event.target.checked)}
+                        className="accent-primary"
+                      />
+                      Respect .gitignore in file search
+                    </label>
+                    <p className="text-xs text-subtext">
+                      When enabled, the command center also hides files ignored by the project&apos;s <span className="font-mono">.gitignore</span>, nested ignore files, and Git exclude rules.
+                    </p>
                   </div>
                 </>
               )}

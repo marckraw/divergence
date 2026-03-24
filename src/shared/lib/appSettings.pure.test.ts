@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_APP_SETTINGS,
+  DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS,
   DEFAULT_MAX_STAGE_TABS,
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeAppSettings,
+  normalizeCommandCenterExcludePatterns,
   normalizeCustomAgentModels,
   normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
@@ -36,6 +38,16 @@ describe("normalizeMaxStageTabs", () => {
 });
 
 describe("normalizeAppSettings", () => {
+  it("normalizes command center exclude patterns directly", () => {
+    expect(normalizeCommandCenterExcludePatterns([
+      " *.log ",
+      ".env",
+      ".env",
+      "",
+      4,
+    ])).toEqual(["*.log", ".env"]);
+  });
+
   it("normalizes custom agent models directly", () => {
     expect(normalizeCustomAgentModels({
       codex: ["gpt-5.1", "gpt-5.1", "o3"],
@@ -243,5 +255,44 @@ describe("normalizeAppSettings", () => {
     expect(normalized.customAgentModels).toEqual({
       cursor: ["gpt-5"],
     });
+  });
+
+  it("defaults command center exclusions and gitignore behavior", () => {
+    const normalized = normalizeAppSettings();
+
+    expect(normalized.commandCenterExcludePatterns).toEqual(DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS);
+    expect(normalized.commandCenterRespectGitignore).toBe(true);
+  });
+
+  it("normalizes command center exclude patterns from settings", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterExcludePatterns: [" *.log ", ".env", ".env", ""],
+    });
+
+    expect(normalized.commandCenterExcludePatterns).toEqual(["*.log", ".env"]);
+  });
+
+  it("allows clearing command center exclude patterns", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterExcludePatterns: [],
+    });
+
+    expect(normalized.commandCenterExcludePatterns).toEqual([]);
+  });
+
+  it("falls back to default command center exclude patterns for invalid values", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterExcludePatterns: "not-an-array" as never,
+    });
+
+    expect(normalized.commandCenterExcludePatterns).toEqual(DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS);
+  });
+
+  it("preserves explicit command center gitignore preference", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterRespectGitignore: false,
+    });
+
+    expect(normalized.commandCenterRespectGitignore).toBe(false);
   });
 });

@@ -1836,6 +1836,8 @@ function App() {
             workspaces={workspaceList}
             workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
             agentProviders={agentProviders}
+            excludePatterns={appSettings.commandCenterExcludePatterns}
+            respectGitignore={appSettings.commandCenterRespectGitignore}
             sourceSession={sourceSessionForCommandCenter}
             onSelect={(result) => {
               void handleCommandCenterSelect(result);

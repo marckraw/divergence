@@ -21,6 +21,7 @@ import type {
 
 const defaultSettings: SettingsState = {
   ...DEFAULT_APP_SETTINGS,
+  commandCenterExcludePatterns: [...DEFAULT_APP_SETTINGS.commandCenterExcludePatterns],
   divergenceBasePath: "",
   claudeOAuthToken: "",
   githubToken: "",
