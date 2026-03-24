@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionSnapshot, TerminalSession } from "../../../../entities";
-import { buildPendingStagePaneCreateContext } from "./pendingStagePane.pure";
+import type { AgentSessionSnapshot, TerminalSession } from "../../../entities";
+import { buildCommandCenterCreateActions } from "./commandCenterActions.pure";
 
 function makeTerminalSession(partial: Partial<TerminalSession> = {}): TerminalSession {
   return {
@@ -59,76 +59,59 @@ function makeAgentSession(partial: Partial<AgentSessionSnapshot> = {}): AgentSes
   };
 }
 
-describe("pendingStagePane.pure", () => {
-  it("builds project create actions with manual terminal and provider agents", () => {
-    const context = buildPendingStagePaneCreateContext(
-      makeTerminalSession({
-        type: "project",
-        targetId: 7,
-      }),
+describe("commandCenterActions.pure", () => {
+  it("builds project create actions with terminal and agent options", () => {
+    const actions = buildCommandCenterCreateActions(
+      makeTerminalSession({ type: "project", targetId: 7 }),
       ["claude", "codex"],
     );
 
-    expect(context).toEqual({
-      title: "Create from this project",
-      description: "Open another session for the same project in this pane.",
-      actions: [
-        expect.objectContaining({
-          label: "New Session",
-          targetType: "project",
-          targetId: 7,
-          sessionKind: "terminal",
-        }),
-        expect.objectContaining({
-          label: "Open Claude Agent",
-          targetType: "project",
-          targetId: 7,
-          sessionKind: "agent",
-          provider: "claude",
-        }),
-        expect.objectContaining({
-          label: "Open Codex Agent",
-          targetType: "project",
-          targetId: 7,
-          sessionKind: "agent",
-          provider: "codex",
-        }),
-      ],
-    });
+    expect(actions).toHaveLength(3);
+    expect(actions[0]).toEqual(expect.objectContaining({
+      label: "New Session",
+      targetType: "project",
+      targetId: 7,
+      sessionKind: "terminal",
+    }));
+    expect(actions[1]).toEqual(expect.objectContaining({
+      label: "Open Claude Agent",
+      targetType: "project",
+      targetId: 7,
+      sessionKind: "agent",
+      provider: "claude",
+    }));
+    expect(actions[2]).toEqual(expect.objectContaining({
+      label: "Open Codex Agent",
+      targetType: "project",
+      targetId: 7,
+      sessionKind: "agent",
+      provider: "codex",
+    }));
   });
 
   it("uses open-terminal copy for workspace contexts", () => {
-    const context = buildPendingStagePaneCreateContext(
-      makeAgentSession({
-        targetType: "workspace",
-        targetId: 12,
-        workspaceOwnerId: 12,
-      }),
+    const actions = buildCommandCenterCreateActions(
+      makeAgentSession({ targetType: "workspace", targetId: 12, workspaceOwnerId: 12 }),
       ["claude"],
     );
 
-    expect(context).toEqual({
-      title: "Create from this workspace",
-      description: "Open another session for the same workspace in this pane.",
-      actions: [
-        expect.objectContaining({
-          label: "Open Terminal",
-          targetType: "workspace",
-          targetId: 12,
-          sessionKind: "terminal",
-        }),
-        expect.objectContaining({
-          label: "Open Claude Agent",
-          targetType: "workspace",
-          targetId: 12,
-          sessionKind: "agent",
-          provider: "claude",
-        }),
-      ],
-    });
+    expect(actions).toHaveLength(2);
+    expect(actions[0]).toEqual(expect.objectContaining({
+      label: "Open Terminal",
+      targetType: "workspace",
+      targetId: 12,
+      sessionKind: "terminal",
+    }));
+    expect(actions[1]).toEqual(expect.objectContaining({
+      label: "Open Claude Agent",
+      targetType: "workspace",
+      targetId: 12,
+      sessionKind: "agent",
+      provider: "claude",
+    }));
   });
 
-  it("returns null without a source session", () => {
-    expect(buildPendingStagePaneCreateContext(null, ["claude"])).toBeNull();
+  it("returns empty array without source session", () => {
+    expect(buildCommandCenterCreateActions(null, ["claude"])).toEqual([]);
   });
 });

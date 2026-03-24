@@ -27,7 +27,6 @@ import {
   isAgentSession,
   isEditorSession,
   isTerminalSession,
-  type StagePaneRef,
 } from "../../../entities";
 import type {
   AgentRuntimeAttachment,
@@ -51,10 +50,6 @@ import type {
   EditorSessionRuntimeState,
   EditorSessionViewState,
 } from "../../model/useEditorSessionManagement";
-import {
-  buildPendingStagePaneCreateContext,
-  type PendingStagePaneCreateAction,
-} from "./lib/pendingStagePane.pure";
 
 interface StageViewProps {
   tabs: StageTab[];
@@ -81,7 +76,6 @@ interface StageViewProps {
   capabilities: AgentRuntimeCapabilities | null;
   projectsLoading: boolean;
   divergencesLoading: boolean;
-  showFileQuickSwitcher: boolean;
   editorRuntimeStateBySessionId: Map<string, EditorSessionRuntimeState>;
   editorViewStateBySessionId: Map<string, EditorSessionViewState>;
   isSidebarOpen: boolean;
@@ -97,12 +91,10 @@ interface StageViewProps {
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
   onCloseSessionAndKillTmux: (sessionId: string) => Promise<void>;
-  onCloseFileQuickSwitcher: () => void;
-  onSplitStage: (orientation: StageLayoutOrientation) => void;
+  onSplitStage: (orientation: StageLayoutOrientation) => StagePaneId | null;
   onResetToSinglePane: (sessionId?: string | null) => void;
   onFocusPane: (paneId: StagePaneId) => void;
-  onReplacePaneRef: (paneId: StagePaneId, ref: StagePaneRef) => void;
-  onCreatePendingSession: (paneId: StagePaneId, action: PendingStagePaneCreateAction) => void | Promise<void>;
+  onOpenCommandCenter: (paneId: StagePaneId, sourceSessionId?: string) => void;
   onClosePane: (paneId: StagePaneId) => void;
   onResizeStageAdjacentPanes: (dividerIndex: number, deltaRatio: number) => void;
   onOpenOrFocusEditorFile: (
@@ -177,13 +169,11 @@ function StageView({
   maxStageTabs,
   layout,
   workspaceSessions,
-  sessionList,
   activeSessionId,
   idleAttentionSessionIds,
   lastViewedRuntimeEventAtMsBySessionId,
   dismissedAttentionKeyBySessionId,
   projects,
-  agentProviders,
   terminalSessions,
   divergencesByProject,
   workspaceMembersByWorkspaceId,
@@ -195,7 +185,6 @@ function StageView({
   capabilities,
   projectsLoading,
   divergencesLoading,
-  showFileQuickSwitcher,
   editorRuntimeStateBySessionId,
   editorViewStateBySessionId,
   isSidebarOpen,
@@ -211,12 +200,10 @@ function StageView({
   onDismissSessionAttention,
   onCloseSession,
   onCloseSessionAndKillTmux,
-  onCloseFileQuickSwitcher,
   onSplitStage,
   onResetToSinglePane,
   onFocusPane,
-  onReplacePaneRef,
-  onCreatePendingSession,
+  onOpenCommandCenter,
   onClosePane,
   onResizeStageAdjacentPanes,
   onOpenOrFocusEditorFile,
@@ -315,22 +302,6 @@ function StageView({
     document.addEventListener("mouseup", handleMouseUp);
   }, [onResizeStageAdjacentPanes]);
 
-  const handleSelectPendingSession = useCallback((paneId: StagePaneId, sessionId: string) => {
-    const session = workspaceSessions.get(sessionId);
-    if (!session) {
-      return;
-    }
-
-    onReplacePaneRef(
-      paneId,
-      isAgentSession(session)
-        ? { kind: "agent", sessionId }
-        : isEditorSession(session)
-          ? { kind: "editor", sessionId }
-          : { kind: "terminal", sessionId },
-    );
-  }, [onReplacePaneRef, workspaceSessions]);
-
   const canSplitStage = Boolean(layout && layout.panes.length < MAX_STAGE_PANES);
   const layoutOrientationClass = layout?.orientation === "horizontal" ? "flex-col" : "flex-row";
   const visibleSessionList = useMemo(() => {
@@ -358,25 +329,6 @@ function StageView({
     return next;
   }, [layout, workspaceSessions]);
 
-  const pendingPaneCreateContextByPaneId = useMemo(() => {
-    const next = new Map<StagePaneId, ReturnType<typeof buildPendingStagePaneCreateContext>>();
-    if (!layout) {
-      return next;
-    }
-
-    for (const pane of layout.panes) {
-      if (pane.ref.kind !== "pending") {
-        continue;
-      }
-
-      const sourceSession = pane.ref.sourceSessionId
-        ? workspaceSessions.get(pane.ref.sourceSessionId) ?? null
-        : null;
-      next.set(pane.id, buildPendingStagePaneCreateContext(sourceSession, agentProviders));
-    }
-
-    return next;
-  }, [agentProviders, layout, workspaceSessions]);
   const pendingPaneSourceSessionByPaneId = useMemo(() => {
     const next = new Map<StagePaneId, WorkspaceSession | null>();
     if (!layout) {
@@ -527,15 +479,9 @@ function StageView({
                       >
                         {pane.ref.kind === "pending" ? (
                           <PendingStagePane
-                            sessions={sessionList}
-                            sourceSession={pendingPaneSourceSessionByPaneId.get(pane.id) ?? null}
-                            createContext={pendingPaneCreateContextByPaneId.get(pane.id) ?? null}
-                            onSelectExistingSession={(sessionId) => handleSelectPendingSession(pane.id, sessionId)}
-                            onOpenFile={(filePath, sourceSession) => {
-                              onOpenOrFocusEditorFile(filePath, sourceSession, { targetPaneId: pane.id });
-                            }}
-                            onCreateSession={(action) => {
-                              void onCreatePendingSession(pane.id, action);
+                            onOpenCommandCenter={() => {
+                              const sourceSession = pendingPaneSourceSessionByPaneId.get(pane.id) ?? null;
+                              onOpenCommandCenter(pane.id, sourceSession?.id);
                             }}
                             onClose={() => onClosePane(pane.id)}
                           />
@@ -615,11 +561,9 @@ function StageView({
             focusedAgentComposerRef={focusedAgentComposerRef}
             projectsLoading={projectsLoading}
             divergencesLoading={divergencesLoading}
-            showFileQuickSwitcher={showFileQuickSwitcher}
             onOpenOrFocusEditorFile={onOpenOrFocusEditorFile}
             onOpenOrFocusEditorChange={onOpenOrFocusEditorChange}
             onOpenOrFocusEditorSearchMatch={onOpenOrFocusEditorSearchMatch}
-            onCloseFileQuickSwitcher={onCloseFileQuickSwitcher}
             onSendPromptToSession={onSendPromptToSession}
             onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
             onProjectSettingsSaved={onProjectSettingsSaved}

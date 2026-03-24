@@ -5,7 +5,7 @@ import Sidebar from "../widgets/sidebar";
 import { InboxPanel } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
 import { useAgentRuntime } from "../features/agent-runtime";
-import QuickSwitcher from "../features/quick-switcher";
+import CommandCenter, { type CommandCenterMode, type CommandCenterSearchResult, type CreateAction, getFileAbsolutePath } from "../features/command-center";
 import { onMobileHandshake } from "./api/mobileHandshake.api";
 import Settings from "../widgets/settings-modal";
 import type { SettingsCategoryId } from "../widgets/settings-modal";
@@ -93,7 +93,6 @@ import {
   buildWorkspaceTerminalSession,
 } from "./lib/sessionBuilder.pure";
 import StageView from "./ui/stage-view/StageView.container";
-import type { PendingStagePaneCreateAction } from "./ui/stage-view/lib/pendingStagePane.pure";
 
 function App() {
   const updater = useUpdater(true);
@@ -118,9 +117,8 @@ function App() {
     handleFocusSplitPane,
     handleResizeSplitPanes,
   } = useSplitPaneManagement();
-  const [showQuickSwitcher, setShowQuickSwitcher] = useState(false);
-  const [quickSwitcherMode, setQuickSwitcherMode] = useState<"replace" | "reveal">("replace");
-  const [showFileQuickSwitcher, setShowFileQuickSwitcher] = useState(false);
+  const [commandCenterMode, setCommandCenterMode] = useState<CommandCenterMode | null>(null);
+  const showCommandCenter = commandCenterMode !== null;
   const [showSettings, setShowSettings] = useState(false);
   const [renameAgentSessionState, setRenameAgentSessionState] = useState<{
     sessionId: string;
@@ -150,7 +148,7 @@ function App() {
     handleWorkTabChange,
   } = useSidebarLayout({
     onModeChange: () => {
-      setShowQuickSwitcher(false);
+      setCommandCenterMode(null);
       setShowSettings(false);
     },
   });
@@ -979,7 +977,7 @@ function App() {
       notifyMaxStageTabsReached();
       return;
     }
-    setShowQuickSwitcher(false);
+    setCommandCenterMode(null);
   }, [
     handleCreateStageTabWithRef,
     notifyMaxStageTabsReached,
@@ -1020,7 +1018,7 @@ function App() {
     if (type === "stage_tab") {
       setSidebarMode("projects");
       handleFocusStageTab((item as StageTab).id);
-      setShowQuickSwitcher(false);
+      setCommandCenterMode(null);
       return;
     }
 
@@ -1035,7 +1033,7 @@ function App() {
       await handleOpenQuickSwitcherSelectionInNewTab(type, revealItem);
       return;
     }
-    setShowQuickSwitcher(false);
+    setCommandCenterMode(null);
   }, [
     handleOpenQuickSwitcherSelectionInNewTab,
     handleFocusStageTab,
@@ -1046,7 +1044,7 @@ function App() {
 
   const handleCreatePendingPaneSession = useCallback(async (
     paneId: StagePaneId,
-    action: PendingStagePaneCreateAction,
+    action: CreateAction,
   ) => {
     let ref: StagePaneRef | null = null;
 
@@ -1167,6 +1165,124 @@ function App() {
     workspaceDivergenceById,
   ]);
 
+  const sourceSessionForCommandCenter = useMemo(() => {
+    // Explicit source for open-in-pane
+    if (commandCenterMode?.kind === "open-in-pane" && commandCenterMode.sourceSessionId) {
+      return workspaceSessions.get(commandCenterMode.sourceSessionId) ?? null;
+    }
+
+    // Active session (focused pane has a session)
+    if (activeSessionId) {
+      const session = workspaceSessions.get(activeSessionId);
+      if (session) return session;
+    }
+
+    // Target pane's session (e.g. replace mode when focused pane is pending)
+    if (commandCenterMode && "targetPaneId" in commandCenterMode && stageLayout) {
+      const targetPane = stageLayout.panes.find((p) => p.id === commandCenterMode.targetPaneId);
+      if (targetPane && targetPane.ref.kind !== "pending") {
+        const session = workspaceSessions.get(targetPane.ref.sessionId);
+        if (session) return session;
+      }
+    }
+
+    // Fall back to any session in any visible pane
+    if (stageLayout) {
+      for (const pane of stageLayout.panes) {
+        if (pane.ref.kind !== "pending") {
+          const session = workspaceSessions.get(pane.ref.sessionId);
+          if (session) return session;
+        }
+      }
+    }
+
+    return null;
+  }, [commandCenterMode, activeSessionId, workspaceSessions, stageLayout]);
+
+  const handleCommandCenterSelect = useCallback(async (result: CommandCenterSearchResult) => {
+    if (!commandCenterMode) return;
+
+    const mode = commandCenterMode;
+    const targetPaneId = "targetPaneId" in mode ? mode.targetPaneId : stageLayout?.focusedPaneId ?? null;
+
+    if (mode.kind === "reveal") {
+      void handleRevealQuickSwitcherSelection(result.type as "project" | "divergence" | "session" | "workspace" | "workspace_divergence" | "stage_tab", result.item as Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence | StageTab);
+      return;
+    }
+
+    if (result.type === "file") {
+      const file = result.item as { relativePath: string };
+      const rootPath = mode.kind === "open-file"
+        ? mode.rootPath
+        : (sourceSessionForCommandCenter?.path ?? "");
+      const absolutePath = getFileAbsolutePath(rootPath, file.relativePath);
+      handleOpenOrFocusEditorFile(absolutePath, sourceSessionForCommandCenter, { targetPaneId });
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "create_action") {
+      const action = result.item as CreateAction;
+      if (targetPaneId) {
+        await handleCreatePendingPaneSession(targetPaneId as StagePaneId, action);
+      }
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "project") {
+      handleSelectProject(result.item as Project);
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "divergence") {
+      handleSelectDivergence(result.item as Divergence);
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "workspace") {
+      handleSelectWorkspace(result.item as Workspace);
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "workspace_divergence") {
+      handleSelectWorkspaceDivergence(result.item as WorkspaceDivergence);
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "session") {
+      setSidebarMode("projects");
+      void handleSelectWorkspaceSession((result.item as WorkspaceSession).id);
+      setCommandCenterMode(null);
+      return;
+    }
+
+    if (result.type === "stage_tab") {
+      setSidebarMode("projects");
+      handleFocusStageTab((result.item as StageTab).id);
+      setCommandCenterMode(null);
+      return;
+    }
+  }, [
+    commandCenterMode,
+    handleCreatePendingPaneSession,
+    handleFocusStageTab,
+    handleOpenOrFocusEditorFile,
+    handleRevealQuickSwitcherSelection,
+    handleSelectDivergence,
+    handleSelectProject,
+    handleSelectWorkspace,
+    handleSelectWorkspaceDivergence,
+    handleSelectWorkspaceSession,
+    setSidebarMode,
+    sourceSessionForCommandCenter,
+    stageLayout,
+  ]);
+
   const handleCloseWorkspaceSession = (sessionId: string) => {
     if (editorSessions.has(sessionId)) {
       const closed = closeEditorSession(sessionId);
@@ -1278,7 +1394,6 @@ function App() {
     activeSessionId,
     stageLayout,
     stageTabIds,
-    quickSwitcherMode,
     handleCreateTab: () => {
       setSidebarMode("projects");
       if (!handleCreateStageTab()) {
@@ -1307,9 +1422,9 @@ function App() {
     setIsSidebarOpen,
     setSidebarMode,
     setWorkTab,
-    setShowQuickSwitcher,
-    setQuickSwitcherMode,
-    setShowFileQuickSwitcher,
+    setCommandCenterMode,
+    focusedPaneId: stageLayout?.focusedPaneId ?? "stage-pane-1",
+    activeSessionPath: sourceSessionForCommandCenter?.path ?? "",
     setShowSettings,
   });
 
@@ -1447,6 +1562,8 @@ function App() {
         return next;
       });
     }
+
+    handleCloseWorkspaceSession(sessionId);
   };
 
   const stageTabAttentionIds = useMemo(() => {
@@ -1652,7 +1769,6 @@ function App() {
           capabilities={agentRuntimeCapabilities}
           projectsLoading={projectsLoading}
           divergencesLoading={divergencesLoading}
-          showFileQuickSwitcher={showFileQuickSwitcher}
           editorRuntimeStateBySessionId={editorRuntimeStateBySessionId}
           editorViewStateBySessionId={editorViewStateBySessionId}
           isSidebarOpen={isSidebarOpen}
@@ -1674,12 +1790,12 @@ function App() {
           onDismissSessionAttention={handleDismissSessionAttention}
           onCloseSession={handleCloseWorkspaceSession}
           onCloseSessionAndKillTmux={handleCloseSessionAndKillTmux}
-          onCloseFileQuickSwitcher={() => setShowFileQuickSwitcher(false)}
           onSplitStage={handleSplitStagePane}
           onResetToSinglePane={handleResetStageToSinglePane}
           onFocusPane={handleFocusStagePane}
-          onReplacePaneRef={handleReplaceStagePaneRef}
-          onCreatePendingSession={handleCreatePendingPaneSession}
+          onOpenCommandCenter={(paneId, sourceSessionId) => {
+            setCommandCenterMode({ kind: "open-in-pane", targetPaneId: paneId, sourceSessionId });
+          }}
           onClosePane={handleCloseStagePane}
           onResizeStageAdjacentPanes={handleResizeStageAdjacentPanes}
           onOpenOrFocusEditorFile={handleOpenOrFocusEditorFile}
@@ -1708,38 +1824,23 @@ function App() {
         />
       )}
 
-      {/* Quick Switcher */}
+      {/* Command Center */}
       <AnimatePresence>
-        {showQuickSwitcher && (
-          <QuickSwitcher
+        {showCommandCenter && commandCenterMode && (
+          <CommandCenter
+            mode={commandCenterMode}
             projects={projects}
             divergencesByProject={divergencesByProject}
             sessions={workspaceSessions}
             stageTabs={tabGroup?.tabs ?? []}
             workspaces={workspaceList}
             workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
-            mode={quickSwitcherMode}
-            onSelect={(type, item) => {
-              if (quickSwitcherMode === "reveal") {
-                void handleRevealQuickSwitcherSelection(type, item);
-                return;
-              }
-
-              if (type === "project") {
-                handleSelectProject(item as Project);
-              } else if (type === "divergence") {
-                handleSelectDivergence(item as Divergence);
-              } else if (type === "workspace") {
-                handleSelectWorkspace(item as Workspace);
-              } else if (type === "workspace_divergence") {
-                handleSelectWorkspaceDivergence(item as WorkspaceDivergence);
-              } else {
-                setSidebarMode("projects");
-                void handleSelectWorkspaceSession((item as WorkspaceSession).id);
-              }
-              setShowQuickSwitcher(false);
+            agentProviders={agentProviders}
+            sourceSession={sourceSessionForCommandCenter}
+            onSelect={(result) => {
+              void handleCommandCenterSelect(result);
             }}
-            onClose={() => setShowQuickSwitcher(false)}
+            onClose={() => setCommandCenterMode(null)}
           />
         )}
       </AnimatePresence>
