@@ -38,6 +38,12 @@ type PendingResponseRegistry = Arc<Mutex<HashMap<String, PendingResponseSender>>
 type TurnCompletionSender = oneshot::Sender<Result<(), String>>;
 type TurnCompletionSignal = Arc<Mutex<Option<TurnCompletionSender>>>;
 
+#[derive(Debug, Clone)]
+struct SessionFailureState<'a> {
+    message: &'a str,
+    details: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRuntimeCapabilities {
@@ -181,7 +187,7 @@ pub enum AgentMessageRole {
     System,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentMessageStatus {
     Streaming,
@@ -827,7 +833,7 @@ impl AgentRuntimeState {
 
             if let Err(error) = run_result {
                 if !runtime.is_session_stopping(&session_id) {
-                    runtime.fail_session(&app, &session_id, &error);
+                    runtime.fail_session(&app, &session_id, &error, None);
                 }
             }
             runtime.remove_running_session(&session_id);
@@ -1066,22 +1072,22 @@ impl AgentRuntimeState {
         }
     }
 
-    fn fail_session(&self, app: &AppHandle, session_id: &str, error_message: &str) {
+    fn fail_session(
+        &self,
+        app: &AppHandle,
+        session_id: &str,
+        error_message: &str,
+        error_details: Option<String>,
+    ) {
         self.clear_pending_transport_for_session(session_id);
         let update_result = self.mutate_session(session_id, |session| {
-            if let Some(message) = last_assistant_message_mut(session) {
-                message.status = AgentMessageStatus::Error;
-                if message.content.trim().is_empty() {
-                    message.content = error_message.to_string();
-                }
-            }
-            session.status = AgentSessionStatus::Idle;
-            session.runtime_status = AgentRuntimeStatus::Error;
-            session.updated_at_ms = now_ms();
-            session.runtime_phase = Some("Errored".to_string());
-            push_runtime_event(session, "Errored", error_message, None);
-            session.pending_request = None;
-            session.error_message = Some(error_message.to_string());
+            apply_session_failure(
+                session,
+                SessionFailureState {
+                    message: error_message,
+                    details: error_details.clone(),
+                },
+            );
             Ok(())
         });
 
@@ -1611,6 +1617,22 @@ fn push_runtime_event(
         let overflow = session.runtime_events.len() - MAX_RUNTIME_EVENTS;
         session.runtime_events.drain(0..overflow);
     }
+}
+
+fn apply_session_failure(session: &mut AgentSessionSnapshot, failure: SessionFailureState<'_>) {
+    if let Some(message) = last_assistant_message_mut(session) {
+        message.status = AgentMessageStatus::Error;
+        if message.content.trim().is_empty() {
+            message.content = failure.message.to_string();
+        }
+    }
+    session.status = AgentSessionStatus::Idle;
+    session.runtime_status = AgentRuntimeStatus::Error;
+    session.updated_at_ms = now_ms();
+    session.runtime_phase = Some("Errored".to_string());
+    push_runtime_event(session, "Errored", failure.message, failure.details);
+    session.pending_request = None;
+    session.error_message = Some(failure.message.to_string());
 }
 
 fn read_provider_thread_id(value: &Value) -> Option<String> {
@@ -2278,9 +2300,10 @@ fn truncate_json_details(input: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        complete_activity, create_activity, derive_activity_metadata, split_provider_output_chunks,
-        strip_shell_wrapper, AgentActivityStatus, AgentMessage, AgentProvider, AgentRequest,
-        AgentRequestKind, AgentRequestStatus, AgentRuntimeState,
+        apply_session_failure, complete_activity, create_activity, derive_activity_metadata,
+        split_provider_output_chunks, strip_shell_wrapper, AgentActivityStatus, AgentMessage,
+        AgentMessageRole, AgentMessageStatus, AgentProvider, AgentRequest, AgentRequestKind,
+        AgentRequestStatus, AgentRuntimeState, SessionFailureState,
         AgentRuntimeDebugEvent, AgentRuntimeStatus, AgentSessionNameMode, AgentSessionRole,
         AgentSessionSnapshot, AgentSessionStatus, AgentTargetType, ProviderOutputChunk,
     };
@@ -2502,6 +2525,75 @@ mod tests {
             !runtime
                 .session_has_pending_request(session_id)
                 .expect("pending request state")
+        );
+    }
+
+    #[test]
+    fn apply_session_failure_populates_empty_assistant_message_with_sanitized_error() {
+        let mut session = make_test_session("session-3", None);
+        session.messages.push(AgentMessage {
+            id: "message-1".to_string(),
+            role: AgentMessageRole::Assistant,
+            content: String::new(),
+            status: AgentMessageStatus::Streaming,
+            created_at_ms: 1,
+            interaction_mode: None,
+            attachments: None,
+        });
+
+        apply_session_failure(
+            &mut session,
+            SessionFailureState {
+                message: "Gemini hit a rate limit before it produced a response.",
+                details: Some("RESOURCE_EXHAUSTED: 429 ...".to_string()),
+            },
+        );
+
+        let message = session.messages.last().expect("assistant message");
+        assert_eq!(message.status, AgentMessageStatus::Error);
+        assert_eq!(
+            message.content,
+            "Gemini hit a rate limit before it produced a response."
+        );
+        assert_eq!(
+            session.error_message.as_deref(),
+            Some("Gemini hit a rate limit before it produced a response.")
+        );
+        assert_eq!(session.runtime_status, AgentRuntimeStatus::Error);
+        assert!(session
+            .runtime_events
+            .last()
+            .and_then(|event| event.details.as_deref())
+            .is_some_and(|details| details.contains("RESOURCE_EXHAUSTED")));
+    }
+
+    #[test]
+    fn apply_session_failure_preserves_partial_assistant_output() {
+        let mut session = make_test_session("session-4", None);
+        session.messages.push(AgentMessage {
+            id: "message-1".to_string(),
+            role: AgentMessageRole::Assistant,
+            content: "Partial streamed answer".to_string(),
+            status: AgentMessageStatus::Streaming,
+            created_at_ms: 1,
+            interaction_mode: None,
+            attachments: None,
+        });
+
+        apply_session_failure(
+            &mut session,
+            SessionFailureState {
+                message: "Gemini CLI failed before it produced a response (exit code 17). Check Runtime Debug for provider details.",
+                details: Some("stack trace".to_string()),
+            },
+        );
+
+        let message = session.messages.last().expect("assistant message");
+        assert_eq!(message.status, AgentMessageStatus::Error);
+        assert_eq!(message.content, "Partial streamed answer");
+        assert_eq!(
+            session.error_message.as_deref(),
+            Some("Gemini CLI failed before it produced a response (exit code 17). Check Runtime Debug for provider details.")
         );
     }
 }
