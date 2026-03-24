@@ -6,7 +6,7 @@ import { useAgentRuntimeSession } from "../../../features/agent-runtime";
 import AgentSessionChangeDrawer from "./AgentSessionChangeDrawer.container";
 import { DEFAULT_EDITOR_THEME_DARK, DEFAULT_EDITOR_THEME_LIGHT } from "../../../shared";
 import { useAppSettings, useFileEditor, type ChangesMode, type GitChangeEntry } from "../../../shared";
-import { buildAgentSessionSettingsPatch } from "../../../entities";
+import { buildAgentSessionSettingsPatch, type AgentProposedPlan } from "../../../entities";
 import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
 import { PromptQueuePanel } from "../../../features/prompt-queue";
 import { useAgentLinearTaskQueue } from "../model/useAgentLinearTaskQueue";
@@ -40,6 +40,7 @@ function resolveAgentQueueScope(
 
 function AgentSessionViewContainer(props: AgentSessionViewProps) {
   const session = useAgentRuntimeSession(props.sessionId);
+  const { onConsumePendingTerminalContext, pendingTerminalContext } = props;
   const { settings: appSettings } = useAppSettings();
   const [isUpdatingSessionSettings, setIsUpdatingSessionSettings] = useState(false);
   const [requestAnswers, setRequestAnswers] = useState<string[]>([]);
@@ -84,6 +85,10 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
 
   const handleSetComposerText = useCallback((text: string) => {
     composerRef.current?.setText(text);
+  }, []);
+
+  const handleImplementProposedPlan = useCallback((plan: AgentProposedPlan) => {
+    composerRef.current?.queueProposedPlan(plan);
   }, []);
 
   const queueScope = useMemo(
@@ -153,6 +158,15 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
     setRequestAnswers(questions.map(() => ""));
     setIsResolvingRequest(false);
   }, [session?.pendingRequest?.id, session?.pendingRequest?.questions]);
+
+  useEffect(() => {
+    if (!session || !pendingTerminalContext) {
+      return;
+    }
+
+    composerRef.current?.addTerminalContext(pendingTerminalContext);
+    onConsumePendingTerminalContext?.(pendingTerminalContext.id);
+  }, [onConsumePendingTerminalContext, pendingTerminalContext, session]);
 
   const handleRequestAnswerChange = useCallback((index: number, value: string) => {
     setRequestAnswers((previous) => {
@@ -346,6 +360,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
       onCloseChangesSidebar={() => setChangesSidebarVisible(false)}
       onSidebarTabChange={setSidebarTab}
       onOpenChangedFile={handleOpenChangedFile}
+      onImplementProposedPlan={handleImplementProposedPlan}
       onSendPrompt={props.onSendPrompt}
       onStageAttachment={props.onStageAttachment}
       onDiscardAttachment={props.onDiscardAttachment}

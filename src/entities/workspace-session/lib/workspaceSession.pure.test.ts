@@ -48,6 +48,7 @@ const agentSession: AgentSessionSnapshot = {
   runtimeEvents: [],
   messages: [],
   activities: [],
+  proposedPlans: [],
   pendingRequest: null,
 };
 

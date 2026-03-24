@@ -10,6 +10,7 @@ export function createEmptyAgentSessionSnapshot(session: AgentSession): AgentSes
     runtimeEvents: [],
     messages: [],
     activities: [],
+    proposedPlans: [],
     pendingRequest: null,
     errorMessage: null,
   };

@@ -1,11 +1,18 @@
 import type { ReactNode, Ref } from "react";
-import type { AgentSessionSnapshot, Project, WorkspaceMember, WorkspaceSession } from "../../../entities";
+import type {
+  AgentProposedPlan,
+  AgentSessionSnapshot,
+  Project,
+  WorkspaceMember,
+  WorkspaceSession,
+} from "../../../entities";
 import type {
   AgentRuntimeAttachment,
   AgentRuntimeAttachmentKind,
   AgentRuntimeCapabilities,
   AgentRuntimeEffort,
   AgentRuntimeInteractionMode,
+  AgentRuntimeProviderTurnOptions,
   ChangesMode,
   GitChangeEntry,
 } from "../../../shared";
@@ -13,8 +20,20 @@ import type { AgentTimelineItem } from "../lib/agentTimeline.pure";
 
 export type AgentSidebarTab = "changes" | "linear" | "queue";
 
+export interface AgentSessionTerminalContext {
+  id: string;
+  sourceSessionId: string;
+  sourceSessionName: string;
+  lineStart?: number | null;
+  lineEnd?: number | null;
+  text: string;
+  createdAtMs: number;
+}
+
 export interface AgentSessionComposerHandle {
   setText: (text: string) => void;
+  addTerminalContext: (context: AgentSessionTerminalContext) => void;
+  queueProposedPlan: (plan: AgentProposedPlan) => void;
 }
 
 export interface AgentSessionComposerAttachment extends AgentRuntimeAttachment {
@@ -25,6 +44,9 @@ export interface AgentSessionComposerDraft {
   text: string;
   interactionMode: AgentRuntimeInteractionMode;
   attachments: AgentSessionComposerAttachment[];
+  terminalContexts: AgentSessionTerminalContext[];
+  sourceProposedPlanId: string | null;
+  providerTurnOptions: AgentRuntimeProviderTurnOptions;
   attachmentError: string | null;
 }
 
@@ -38,6 +60,8 @@ export interface AgentSessionViewProps {
   capabilities: AgentRuntimeCapabilities | null;
   projects: Project[];
   workspaceMembersByWorkspaceId: Map<number, WorkspaceMember[]>;
+  pendingTerminalContext?: AgentSessionTerminalContext | null;
+  onConsumePendingTerminalContext?: (contextId: string) => void;
   onSelectSession: (sessionId: string) => void;
   onDismissSessionAttention: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
@@ -51,6 +75,8 @@ export interface AgentSessionViewProps {
     options?: {
       interactionMode?: AgentRuntimeInteractionMode;
       attachments?: AgentRuntimeAttachment[];
+      sourceProposedPlanId?: string;
+      providerTurnOptions?: AgentRuntimeProviderTurnOptions;
     }
   ) => Promise<void>;
   onStageAttachment: (input: {
@@ -80,6 +106,7 @@ export interface AgentSessionHeaderProps {
 export interface AgentSessionTimelineProps {
   session: AgentSessionSnapshot;
   timelineItems: AgentTimelineItem[];
+  onImplementProposedPlan: (plan: AgentProposedPlan) => void;
 }
 
 export interface AgentSessionComposerProps {
@@ -130,6 +157,7 @@ export interface AgentSessionViewPresentationalProps {
   onCloseChangesSidebar: () => void;
   onSidebarTabChange: (tab: AgentSidebarTab) => void;
   onOpenChangedFile: (entry: GitChangeEntry, mode: ChangesMode) => Promise<void>;
+  onImplementProposedPlan: (plan: AgentProposedPlan) => void;
   onSendPrompt: AgentSessionViewProps["onSendPrompt"];
   onStageAttachment: AgentSessionViewProps["onStageAttachment"];
   onDiscardAttachment: AgentSessionViewProps["onDiscardAttachment"];

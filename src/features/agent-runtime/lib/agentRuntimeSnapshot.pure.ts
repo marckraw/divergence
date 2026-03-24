@@ -45,6 +45,7 @@ export function mapAgentRuntimeSnapshot(
     runtimeEvents: snapshot.runtimeEvents,
     messages: snapshot.messages,
     activities: snapshot.activities,
+    proposedPlans: snapshot.proposedPlans,
     pendingRequest: snapshot.pendingRequest,
     errorMessage: snapshot.errorMessage ?? null,
   };
@@ -85,6 +86,7 @@ export function mapAgentRuntimeSessionSummary(
     runtimeEvents: [],
     messages: [],
     activities: [],
+    proposedPlans: summary.proposedPlans,
     pendingRequest: summary.pendingRequest,
     errorMessage: summary.errorMessage ?? null,
   };

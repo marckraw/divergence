@@ -16,6 +16,7 @@ import {
   type AgentRuntimeAttachment,
   type AgentRuntimeCapabilities,
   type AgentRuntimeInteractionMode,
+  type AgentRuntimeProviderTurnOptions,
   type CreateAgentSessionInput,
   createFrameTask,
 } from "../../../shared";
@@ -284,6 +285,8 @@ export async function startAgentRuntimeTurnState(
     prompt: string;
     interactionMode?: AgentRuntimeInteractionMode;
     attachments?: AgentRuntimeAttachment[];
+    sourceProposedPlanId?: string;
+    providerTurnOptions?: AgentRuntimeProviderTurnOptions;
     claudeOAuthToken?: string;
     automationMode?: boolean;
   }

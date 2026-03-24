@@ -244,6 +244,17 @@ impl AgentRuntimeState {
             "model": session.model,
             "input": turn_input,
             "approvalPolicy": if turn.automation_mode { "never" } else { "on-request" },
+            "serviceTier": if turn
+                .provider_turn_options
+                .codex
+                .as_ref()
+                .and_then(|options| options.fast_mode)
+                .unwrap_or(false)
+            {
+                json!("fast")
+            } else {
+                Value::Null
+            },
         });
         if matches!(turn.interaction_mode, AgentInteractionMode::Plan) {
             turn_start_params["collaborationMode"] = json!({
@@ -761,6 +772,7 @@ impl AgentRuntimeState {
                             }
                         }
                     }
+                    upsert_proposed_plan_from_turn(session);
                     session.status = if error_message.is_some() {
                         AgentSessionStatus::Idle
                     } else {

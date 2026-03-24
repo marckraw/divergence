@@ -17,6 +17,7 @@ export type {
   AgentMessage,
   AgentMessageRole,
   AgentMessageStatus,
+  AgentProposedPlan,
   AgentProvider,
   AgentRequest,
   AgentRequestKind,

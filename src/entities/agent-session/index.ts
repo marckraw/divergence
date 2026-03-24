@@ -4,6 +4,7 @@ export type {
   AgentMessage,
   AgentMessageRole,
   AgentMessageStatus,
+  AgentProposedPlan,
   AgentProvider,
   AgentSession,
   AgentSessionRole,

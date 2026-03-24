@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionSnapshot, TerminalSession } from "../../../entities";
+import type { AgentProposedPlan, AgentSessionSnapshot, TerminalSession } from "../../../entities";
 import {
   buildSidebarNeedsAttentionItems,
   getSidebarSessionAttentionState,
@@ -36,10 +36,26 @@ function makeAgentSession(partial: Partial<AgentSessionSnapshot> = {}): AgentSes
     runtimeEvents: partial.runtimeEvents ?? [],
     messages: partial.messages ?? [],
     activities: partial.activities ?? [],
+    proposedPlans: partial.proposedPlans ?? [],
     pendingRequest: partial.pendingRequest ?? null,
     errorMessage: partial.errorMessage ?? null,
     threadId: partial.threadId,
     workspaceOwnerId: partial.workspaceOwnerId,
+  };
+}
+
+function makeProposedPlan(partial: Partial<AgentProposedPlan> = {}): AgentProposedPlan {
+  return {
+    id: partial.id ?? "plan-1",
+    sourceMessageId: partial.sourceMessageId ?? "assistant-1",
+    sourceTurnInteractionMode: "plan",
+    title: partial.title ?? "Plan ready",
+    planMarkdown: partial.planMarkdown ?? "1. First step",
+    status: partial.status ?? "proposed",
+    createdAtMs: partial.createdAtMs ?? 2_000,
+    updatedAtMs: partial.updatedAtMs ?? 2_000,
+    implementedAtMs: partial.implementedAtMs ?? null,
+    implementationSessionId: partial.implementationSessionId ?? null,
   };
 }
 
@@ -108,9 +124,7 @@ describe("sidebarAttention.pure", () => {
       }),
       makeAgentSession({
         id: "plan",
-        latestAssistantMessageInteractionMode: "plan",
-        latestAssistantMessageStatus: "done",
-        messages: [],
+        proposedPlans: [makeProposedPlan()],
         updatedAtMs: 3_000,
       }),
       makeTerminalSession({

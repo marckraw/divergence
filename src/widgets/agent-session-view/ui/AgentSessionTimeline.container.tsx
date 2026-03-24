@@ -1,10 +1,15 @@
 import { memo, useState } from "react";
 import { Paperclip } from "lucide-react";
 import { Virtuoso } from "react-virtuoso";
-import { Button, EmptyState, Markdown } from "../../../shared";
-import type { AgentActivity, AgentMessage } from "../../../entities";
+import { Button, EmptyState, Markdown, writeTextFile } from "../../../shared";
+import type { AgentActivity, AgentMessage, AgentProposedPlan } from "../../../entities";
+import {
+  buildProposedPlanSavePath,
+  findProposedPlanForMessage,
+} from "../lib/agentProposedPlan.pure";
 import type { AgentTimelineItem } from "../lib/agentTimeline.pure";
 import type { AgentSessionTimelineProps } from "./AgentSessionView.types";
+import AgentProposedPlanCardPresentational from "./AgentProposedPlanCard.presentational";
 
 function getActivityToneClass(status: "running" | "completed" | "error") {
   switch (status) {
@@ -74,13 +79,66 @@ function areActivitiesEqual(left: AgentActivity, right: AgentActivity): boolean 
     && left.completedAtMs === right.completedAtMs;
 }
 
+function areProposedPlansEqual(
+  left: AgentProposedPlan | null,
+  right: AgentProposedPlan | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return !left && !right;
+  }
+
+  return left.id === right.id
+    && left.status === right.status
+    && left.title === right.title
+    && left.planMarkdown === right.planMarkdown
+    && left.updatedAtMs === right.updatedAtMs
+    && left.implementedAtMs === right.implementedAtMs
+    && left.implementationSessionId === right.implementationSessionId;
+}
+
 const AgentTimelineMessageRow = memo(function AgentTimelineMessageRow({
   message,
+  proposedPlan,
+  isCopyingPlan,
+  isSavingPlan,
+  isQueuedPlan,
+  onCopyPlan,
+  onSavePlan,
+  onImplementPlan,
 }: {
   message: AgentMessage;
+  proposedPlan: AgentProposedPlan | null;
+  isCopyingPlan: boolean;
+  isSavingPlan: boolean;
+  isQueuedPlan: boolean;
+  onCopyPlan: (plan: AgentProposedPlan) => void;
+  onSavePlan: (plan: AgentProposedPlan) => void;
+  onImplementPlan: (plan: AgentProposedPlan) => void;
 }) {
+  const [isExpandedPlan, setIsExpandedPlan] = useState(false);
   const isUser = message.role === "user";
   const displayContent = message.content || (message.status === "streaming" ? "Working..." : "");
+
+  if (proposedPlan) {
+    return (
+      <AgentProposedPlanCardPresentational
+        plan={proposedPlan}
+        isExpanded={isExpandedPlan}
+        isCopying={isCopyingPlan}
+        isSaving={isSavingPlan}
+        isQueued={isQueuedPlan}
+        onToggleExpanded={() => {
+          setIsExpandedPlan((previous) => !previous);
+        }}
+        onCopy={() => onCopyPlan(proposedPlan)}
+        onSave={() => onSavePlan(proposedPlan)}
+        onImplement={() => onImplementPlan(proposedPlan)}
+      />
+    );
+  }
 
   return (
     <div
@@ -128,7 +186,13 @@ const AgentTimelineMessageRow = memo(function AgentTimelineMessageRow({
       )}
     </div>
   );
-}, (previous, next) => areMessagesEqual(previous.message, next.message));
+}, (previous, next) => (
+  areMessagesEqual(previous.message, next.message)
+  && areProposedPlansEqual(previous.proposedPlan, next.proposedPlan)
+  && previous.isCopyingPlan === next.isCopyingPlan
+  && previous.isSavingPlan === next.isSavingPlan
+  && previous.isQueuedPlan === next.isQueuedPlan
+));
 
 function formatActivityKind(kind: string): string {
   return kind.replace(/_/g, " ");
@@ -311,8 +375,22 @@ function AgentTimelineActivityGroupRow({
 
 const AgentTimelineRow = memo(function AgentTimelineRow({
   item,
+  session,
+  copiedPlanId,
+  savingPlanId,
+  queuedPlanId,
+  onCopyPlan,
+  onSavePlan,
+  onImplementProposedPlan,
 }: {
   item: AgentTimelineItem;
+  session: AgentSessionTimelineProps["session"];
+  copiedPlanId: string | null;
+  savingPlanId: string | null;
+  queuedPlanId: string | null;
+  onCopyPlan: (plan: AgentProposedPlan) => void;
+  onSavePlan: (plan: AgentProposedPlan) => void;
+  onImplementProposedPlan: AgentSessionTimelineProps["onImplementProposedPlan"];
 }) {
   if (item.kind === "activity_group") {
     return (
@@ -328,14 +406,59 @@ const AgentTimelineRow = memo(function AgentTimelineRow({
     return <AgentTimelineActivityMemoRow activity={item.activity} summary={item.summary} />;
   }
 
-  return <AgentTimelineMessageRow message={item.message} />;
+  const proposedPlan = item.message.role === "assistant"
+    ? findProposedPlanForMessage(session.proposedPlans, item.message.id)
+    : null;
+
+  return (
+    <AgentTimelineMessageRow
+      message={item.message}
+      proposedPlan={proposedPlan}
+      isCopyingPlan={proposedPlan?.id === copiedPlanId}
+      isSavingPlan={proposedPlan?.id === savingPlanId}
+      isQueuedPlan={proposedPlan?.id === queuedPlanId}
+      onCopyPlan={onCopyPlan}
+      onSavePlan={onSavePlan}
+      onImplementPlan={onImplementProposedPlan}
+    />
+  );
 });
 
 function AgentSessionTimelineContainer({
   session,
   timelineItems,
+  onImplementProposedPlan,
 }: AgentSessionTimelineProps) {
   const [isFollowingOutput, setIsFollowingOutput] = useState(true);
+  const [copiedPlanId, setCopiedPlanId] = useState<string | null>(null);
+  const [savingPlanId, setSavingPlanId] = useState<string | null>(null);
+  const [queuedPlanId, setQueuedPlanId] = useState<string | null>(null);
+
+  const handleCopyPlan = (plan: AgentProposedPlan) => {
+    void navigator.clipboard.writeText(plan.planMarkdown);
+    setCopiedPlanId(plan.id);
+    window.setTimeout(() => {
+      setCopiedPlanId((current) => (current === plan.id ? null : current));
+    }, 1500);
+  };
+
+  const handleSavePlan = (plan: AgentProposedPlan) => {
+    setSavingPlanId(plan.id);
+    void writeTextFile(
+      buildProposedPlanSavePath(session.path, plan),
+      plan.planMarkdown,
+    ).finally(() => {
+      setSavingPlanId((current) => (current === plan.id ? null : current));
+    });
+  };
+
+  const handleImplementPlan = (plan: AgentProposedPlan) => {
+    onImplementProposedPlan(plan);
+    setQueuedPlanId(plan.id);
+    window.setTimeout(() => {
+      setQueuedPlanId((current) => (current === plan.id ? null : current));
+    }, 1500);
+  };
 
   if (timelineItems.length === 0) {
     return (
@@ -363,7 +486,16 @@ function AgentSessionTimelineContainer({
         overscan={400}
         itemContent={(_, item) => (
           <div className="mx-auto w-full max-w-5xl py-1">
-            <AgentTimelineRow item={item} />
+            <AgentTimelineRow
+              item={item}
+              session={session}
+              copiedPlanId={copiedPlanId}
+              savingPlanId={savingPlanId}
+              queuedPlanId={queuedPlanId}
+              onCopyPlan={handleCopyPlan}
+              onSavePlan={handleSavePlan}
+              onImplementProposedPlan={handleImplementPlan}
+            />
           </div>
         )}
       />

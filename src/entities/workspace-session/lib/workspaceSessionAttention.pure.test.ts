@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionSnapshot, TerminalSession } from "../../../entities";
+import type { AgentProposedPlan, AgentSessionSnapshot, TerminalSession } from "../../../entities";
 import {
   compareWorkspaceSessionAttentionPriority,
   getWorkspaceSessionAttentionKey,
@@ -38,10 +38,26 @@ function makeAgentSession(partial: Partial<AgentSessionSnapshot> = {}): AgentSes
     runtimeEvents: partial.runtimeEvents ?? [],
     messages: partial.messages ?? [],
     activities: partial.activities ?? [],
+    proposedPlans: partial.proposedPlans ?? [],
     pendingRequest: partial.pendingRequest ?? null,
     errorMessage: partial.errorMessage ?? null,
     threadId: partial.threadId,
     workspaceOwnerId: partial.workspaceOwnerId,
+  };
+}
+
+function makeProposedPlan(partial: Partial<AgentProposedPlan> = {}): AgentProposedPlan {
+  return {
+    id: partial.id ?? "plan-1",
+    sourceMessageId: partial.sourceMessageId ?? "assistant-1",
+    sourceTurnInteractionMode: "plan",
+    title: partial.title ?? "Plan ready",
+    planMarkdown: partial.planMarkdown ?? "1. First step",
+    status: partial.status ?? "proposed",
+    createdAtMs: partial.createdAtMs ?? 2_000,
+    updatedAtMs: partial.updatedAtMs ?? 2_000,
+    implementedAtMs: partial.implementedAtMs ?? null,
+    implementationSessionId: partial.implementationSessionId ?? null,
   };
 }
 
@@ -81,18 +97,9 @@ describe("workspaceSessionAttention.pure", () => {
     expect(getWorkspaceSessionAttentionState(session)?.kind).toBe("approval-required");
   });
 
-  it("marks plan-ready sessions when the latest assistant turn was a plan", () => {
+  it("marks plan-ready sessions when there is a proposed plan object", () => {
     const session = makeAgentSession({
-      messages: [
-        {
-          id: "assistant-1",
-          role: "assistant",
-          content: "Plan ready",
-          status: "done",
-          createdAtMs: 2_000,
-          interactionMode: "plan",
-        },
-      ],
+      proposedPlans: [makeProposedPlan()],
     });
 
     expect(getWorkspaceSessionAttentionState(session)?.kind).toBe("plan-ready");
@@ -101,9 +108,14 @@ describe("workspaceSessionAttention.pure", () => {
   it("marks plan-ready sessions from summary metadata without full messages", () => {
     const session = makeAgentSession({
       hydrationState: "summary",
-      latestAssistantMessageInteractionMode: "plan",
-      latestAssistantMessageStatus: "done",
       messages: [],
+      proposedPlans: [
+        makeProposedPlan({
+          id: "plan-summary",
+          sourceMessageId: null,
+          updatedAtMs: 2_100,
+        }),
+      ],
     });
 
     expect(getWorkspaceSessionAttentionState(session)?.kind).toBe("plan-ready");

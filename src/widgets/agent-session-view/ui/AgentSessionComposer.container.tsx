@@ -23,7 +23,15 @@ import {
   getAttachmentButtonLabel,
   supportsAttachmentMimeType,
 } from "../lib/attachmentComposer.pure";
+import { buildProposedPlanImplementationPrompt } from "../lib/agentProposedPlan.pure";
+import { normalizeAgentProviderTurnOptions } from "../lib/agentProviderTraits.pure";
+import {
+  appendTerminalContextToPrompt,
+  formatTerminalContextLineRange,
+  sanitizeTerminalContexts,
+} from "../lib/terminalContext.pure";
 import { useAgentSkillDiscovery } from "../model/useAgentSkillDiscovery";
+import AgentProviderTraitsMenuContainer from "./AgentProviderTraitsMenu.container";
 import AgentSkillAutocompletePresentational from "./AgentSkillAutocomplete.presentational";
 import type {
   AgentSessionComposerAttachment,
@@ -40,20 +48,111 @@ function createDefaultDraft(): AgentSessionComposerDraft {
     text: "",
     interactionMode: "default",
     attachments: [],
+    terminalContexts: [],
+    sourceProposedPlanId: null,
+    providerTurnOptions: {},
     attachmentError: null,
   };
 }
 
-function isAgentSessionComposerDraft(value: unknown): value is AgentSessionComposerDraft {
+function normalizeProviderTurnOptions(value: unknown): AgentSessionComposerDraft["providerTurnOptions"] {
   if (!value || typeof value !== "object") {
-    return false;
+    return {};
+  }
+
+  const candidate = value as { codex?: { fastMode?: unknown } };
+  if (candidate.codex?.fastMode === true) {
+    return {
+      codex: {
+        fastMode: true,
+      },
+    };
+  }
+
+  return {};
+}
+
+function normalizeTerminalContexts(
+  value: unknown,
+): AgentSessionComposerDraft["terminalContexts"] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return sanitizeTerminalContexts(
+    value
+      .filter((context): context is AgentSessionComposerDraft["terminalContexts"][number] => {
+        if (!context || typeof context !== "object") {
+          return false;
+        }
+
+        const candidate = context as Partial<AgentSessionComposerDraft["terminalContexts"][number]>;
+        return typeof candidate.id === "string"
+          && typeof candidate.sourceSessionId === "string"
+          && typeof candidate.sourceSessionName === "string"
+          && typeof candidate.text === "string"
+          && typeof candidate.createdAtMs === "number";
+      }),
+  );
+}
+
+function normalizeAgentSessionComposerDraft(value: unknown): AgentSessionComposerDraft | null {
+  if (!value || typeof value !== "object") {
+    return null;
   }
 
   const candidate = value as Partial<AgentSessionComposerDraft>;
-  return typeof candidate.text === "string"
-    && (candidate.interactionMode === "default" || candidate.interactionMode === "plan")
-    && Array.isArray(candidate.attachments)
-    && (candidate.attachmentError === null || typeof candidate.attachmentError === "string");
+  if (
+    typeof candidate.text !== "string"
+    || (candidate.interactionMode !== "default" && candidate.interactionMode !== "plan")
+    || !Array.isArray(candidate.attachments)
+    || (candidate.attachmentError !== null && typeof candidate.attachmentError !== "string" && candidate.attachmentError !== undefined)
+  ) {
+    return null;
+  }
+
+  return {
+    text: candidate.text,
+    interactionMode: candidate.interactionMode,
+    attachments: candidate.attachments as AgentSessionComposerAttachment[],
+    terminalContexts: normalizeTerminalContexts(candidate.terminalContexts),
+    sourceProposedPlanId: typeof candidate.sourceProposedPlanId === "string"
+      ? candidate.sourceProposedPlanId
+      : null,
+    providerTurnOptions: normalizeProviderTurnOptions(candidate.providerTurnOptions),
+    attachmentError: candidate.attachmentError ?? null,
+  };
+}
+
+function areProviderTurnOptionsEqual(
+  left: AgentSessionComposerDraft["providerTurnOptions"],
+  right: AgentSessionComposerDraft["providerTurnOptions"],
+): boolean {
+  return left.codex?.fastMode === right.codex?.fastMode;
+}
+
+function areTerminalContextsEqual(
+  left: AgentSessionComposerDraft["terminalContexts"],
+  right: AgentSessionComposerDraft["terminalContexts"],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((context, index) => {
+    const next = right[index];
+    return next
+      && context.id === next.id
+      && context.sourceSessionId === next.sourceSessionId
+      && context.sourceSessionName === next.sourceSessionName
+      && context.lineStart === next.lineStart
+      && context.lineEnd === next.lineEnd
+      && context.text === next.text
+      && context.createdAtMs === next.createdAtMs;
+  });
 }
 
 function stripDraftAttachmentPreview(
@@ -84,8 +183,8 @@ function readStoredDrafts(): Record<string, AgentSessionComposerDraft> {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     return Object.fromEntries(
       Object.entries(parsed)
-        .filter(([, value]) => isAgentSessionComposerDraft(value))
-        .map(([key, value]) => [key, value]),
+        .map(([key, value]) => [key, normalizeAgentSessionComposerDraft(value)])
+        .filter(([, value]) => value !== null),
     ) as Record<string, AgentSessionComposerDraft>;
   } catch {
     return {};
@@ -214,6 +313,23 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
     setText(text: string) {
       setDraft((prev) => ({ ...prev, text }));
     },
+    addTerminalContext(context) {
+      setDraft((previous) => ({
+        ...previous,
+        terminalContexts: sanitizeTerminalContexts([
+          ...previous.terminalContexts.filter((existing) => existing.id !== context.id),
+          context,
+        ]),
+      }));
+    },
+    queueProposedPlan(plan) {
+      setDraft((previous) => ({
+        ...previous,
+        text: previous.text.trim() ? previous.text : buildProposedPlanImplementationPrompt(plan),
+        interactionMode: "default",
+        sourceProposedPlanId: plan.id,
+      }));
+    },
   }), []);
 
   useEffect(() => {
@@ -270,6 +386,41 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
   const updateDraft = useCallback((updater: (previous: AgentSessionComposerDraft) => AgentSessionComposerDraft) => {
     setDraft((previous) => updater(previous));
   }, []);
+
+  useEffect(() => {
+    updateDraft((previous) => {
+      const terminalContexts = sanitizeTerminalContexts(previous.terminalContexts);
+      const providerTurnOptions = normalizeAgentProviderTurnOptions(
+        session.provider,
+        session.model,
+        previous.providerTurnOptions,
+      );
+      const sourcePlanIsStillActive = previous.sourceProposedPlanId
+        ? session.proposedPlans.some((plan) => (
+          plan.id === previous.sourceProposedPlanId && plan.status === "proposed"
+        ))
+        : false;
+      const nextInteractionMode = supportsPlanMode ? previous.interactionMode : "default";
+      const nextDraft: AgentSessionComposerDraft = {
+        ...previous,
+        interactionMode: nextInteractionMode,
+        terminalContexts,
+        sourceProposedPlanId: sourcePlanIsStillActive ? previous.sourceProposedPlanId : null,
+        providerTurnOptions,
+      };
+
+      if (
+        nextDraft.interactionMode === previous.interactionMode
+        && nextDraft.sourceProposedPlanId === previous.sourceProposedPlanId
+        && areTerminalContextsEqual(nextDraft.terminalContexts, previous.terminalContexts)
+        && areProviderTurnOptionsEqual(nextDraft.providerTurnOptions, previous.providerTurnOptions)
+      ) {
+        return previous;
+      }
+
+      return nextDraft;
+    });
+  }, [session.model, session.proposedPlans, session.provider, supportsPlanMode, updateDraft]);
 
   const setAttachmentError = useCallback((message: string | null) => {
     updateDraft((previous) => ({
@@ -336,7 +487,7 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
   }, [onStageAttachment, session.id, session.provider, setAttachmentError, supportedAttachmentKinds, updateDraft]);
 
   const handleSubmit = useCallback(async () => {
-    const prompt = draft.text.trim();
+    const prompt = appendTerminalContextToPrompt(draft.text, draft.terminalContexts);
     if (!prompt || isSubmitting || session.pendingRequest || session.runtimeStatus === "running") {
       return;
     }
@@ -346,12 +497,23 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
       await onSendPrompt(session.id, prompt, {
         interactionMode: draft.interactionMode,
         attachments: draft.attachments.map(stripDraftAttachmentPreview),
+        sourceProposedPlanId: draft.interactionMode === "plan"
+          ? undefined
+          : draft.sourceProposedPlanId ?? undefined,
+        providerTurnOptions: normalizeAgentProviderTurnOptions(
+          session.provider,
+          session.model,
+          draft.providerTurnOptions,
+        ),
       });
       draft.attachments.forEach(revokeDraftAttachmentPreview);
       const nextDraft = {
         ...draft,
         text: "",
         attachments: [],
+        terminalContexts: [],
+        sourceProposedPlanId: null,
+        providerTurnOptions: {},
         attachmentError: null,
       };
       setDraft(nextDraft);
@@ -362,7 +524,7 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
     } finally {
       setIsSubmitting(false);
     }
-  }, [draft, isSubmitting, onSendPrompt, session.id, session.pendingRequest, session.runtimeStatus]);
+  }, [draft, isSubmitting, onSendPrompt, session.id, session.model, session.pendingRequest, session.provider, session.runtimeStatus]);
 
   const handleAttachmentInputChange = useCallback(async (
     event: ChangeEvent<HTMLInputElement>,
@@ -423,6 +585,29 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
     }
   }, [draft.attachments, onDiscardAttachment, session.id, setAttachmentError, updateDraft]);
 
+  const handleRemoveTerminalContext = useCallback((contextId: string) => {
+    updateDraft((previous) => ({
+      ...previous,
+      terminalContexts: previous.terminalContexts.filter((context) => context.id !== contextId),
+    }));
+  }, [updateDraft]);
+
+  const handleClearSourceProposedPlan = useCallback(() => {
+    updateDraft((previous) => ({
+      ...previous,
+      sourceProposedPlanId: null,
+    }));
+  }, [updateDraft]);
+
+  const sourceProposedPlan = useMemo(
+    () => (
+      draft.sourceProposedPlanId
+        ? session.proposedPlans.find((plan) => plan.id === draft.sourceProposedPlanId) ?? null
+        : null
+    ),
+    [draft.sourceProposedPlanId, session.proposedPlans],
+  );
+
   return (
     <div className="border-t border-surface bg-sidebar/70 px-5 py-4">
       <div className="mx-auto w-full max-w-5xl space-y-3">
@@ -452,6 +637,16 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
                 />
               </div>
               <div className="flex items-center gap-2">
+                <AgentProviderTraitsMenuContainer
+                  session={session}
+                  draftOptions={draft.providerTurnOptions}
+                  onChange={(nextOptions) => {
+                    updateDraft((previous) => ({
+                      ...previous,
+                      providerTurnOptions: nextOptions,
+                    }));
+                  }}
+                />
                 <input
                   ref={attachmentInputRef as RefObject<HTMLInputElement>}
                   type="file"
@@ -473,6 +668,52 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
                 </Button>
               </div>
             </div>
+            {(sourceProposedPlan || draft.terminalContexts.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {sourceProposedPlan && (
+                  <div className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-[11px] text-text">
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-accent">
+                      Plan
+                    </span>
+                    <span className="max-w-[18rem] truncate">
+                      {sourceProposedPlan.title?.trim() || "Implement proposed plan"}
+                    </span>
+                    <IconButton
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      icon={<X className="h-3.5 w-3.5" />}
+                      label="Clear selected plan"
+                      onClick={handleClearSourceProposedPlan}
+                    />
+                  </div>
+                )}
+                {draft.terminalContexts.map((context) => {
+                  const lineRange = formatTerminalContextLineRange(context);
+                  const label = lineRange
+                    ? `${context.sourceSessionName} ${lineRange}`
+                    : context.sourceSessionName;
+                  return (
+                    <div
+                      key={context.id}
+                      className="inline-flex items-center gap-2 rounded-full border border-surface/80 bg-main/60 px-3 py-1 text-[11px] text-subtext"
+                    >
+                      <span className="max-w-[20rem] truncate">{label}</span>
+                      <IconButton
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        icon={<X className="h-3.5 w-3.5" />}
+                        label={`Remove ${label}`}
+                        onClick={() => {
+                          handleRemoveTerminalContext(context.id);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {draft.attachments.length > 0 && (
               <TooltipProvider delayDuration={120}>
                 <div className="flex flex-wrap gap-2">
@@ -547,77 +788,77 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
                   />
                 </div>
               )}
-            <Textarea
-              value={draft.text}
-              onChange={(event) => {
-                setDraft((previous) => ({
-                  ...previous,
-                  text: event.target.value,
-                }));
-              }}
-              onBlur={() => {
-                writeStoredDraft(session.id, draftRef.current);
-              }}
-              onPaste={(event) => {
-                void handleComposerPaste(event);
-              }}
-              onDrop={(event) => {
-                void handleComposerDrop(event);
-              }}
-              onDragOver={handleComposerDragOver}
-              onKeyDown={(event) => {
-                if (skillAutocompleteOpen && skillDiscovery.matchingSkills.length > 0) {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    setSkillSelectedIndex((previous) =>
-                      previous < skillDiscovery.matchingSkills.length - 1 ? previous + 1 : 0,
-                    );
-                    return;
-                  }
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setSkillSelectedIndex((previous) =>
-                      previous > 0 ? previous - 1 : skillDiscovery.matchingSkills.length - 1,
-                    );
-                    return;
-                  }
-                  if (event.key === "Enter" || event.key === "Tab") {
-                    event.preventDefault();
-                    handleSkillSelect(skillDiscovery.matchingSkills[skillSelectedIndex]);
-                    return;
-                  }
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    setSkillAutocompleteOpen(false);
-                    return;
-                  }
-                }
-                if (
-                  isInteractionModeShortcut(event)
-                  && supportsPlanMode
-                  && !isSubmitting
-                  && session.runtimeStatus !== "running"
-                ) {
-                  event.preventDefault();
-                  updateDraft((previous) => ({
+              <Textarea
+                value={draft.text}
+                onChange={(event) => {
+                  setDraft((previous) => ({
                     ...previous,
-                    interactionMode: previous.interactionMode === "plan" ? "default" : "plan",
+                    text: event.target.value,
                   }));
-                  return;
+                }}
+                onBlur={() => {
+                  writeStoredDraft(session.id, draftRef.current);
+                }}
+                onPaste={(event) => {
+                  void handleComposerPaste(event);
+                }}
+                onDrop={(event) => {
+                  void handleComposerDrop(event);
+                }}
+                onDragOver={handleComposerDragOver}
+                onKeyDown={(event) => {
+                  if (skillAutocompleteOpen && skillDiscovery.matchingSkills.length > 0) {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      setSkillSelectedIndex((previous) =>
+                        previous < skillDiscovery.matchingSkills.length - 1 ? previous + 1 : 0,
+                      );
+                      return;
+                    }
+                    if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      setSkillSelectedIndex((previous) =>
+                        previous > 0 ? previous - 1 : skillDiscovery.matchingSkills.length - 1,
+                      );
+                      return;
+                    }
+                    if (event.key === "Enter" || event.key === "Tab") {
+                      event.preventDefault();
+                      handleSkillSelect(skillDiscovery.matchingSkills[skillSelectedIndex]);
+                      return;
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setSkillAutocompleteOpen(false);
+                      return;
+                    }
+                  }
+                  if (
+                    isInteractionModeShortcut(event)
+                    && supportsPlanMode
+                    && !isSubmitting
+                    && session.runtimeStatus !== "running"
+                  ) {
+                    event.preventDefault();
+                    updateDraft((previous) => ({
+                      ...previous,
+                      interactionMode: previous.interactionMode === "plan" ? "default" : "plan",
+                    }));
+                    return;
+                  }
+                  if (!isSubmitShortcut(event)) {
+                    return;
+                  }
+                  event.preventDefault();
+                  void handleSubmit();
+                }}
+                placeholder={
+                  draft.interactionMode === "plan"
+                    ? `Ask ${session.provider} to investigate and plan work in ${session.path}`
+                    : `Ask ${session.provider} to work in ${session.path}`
                 }
-                if (!isSubmitShortcut(event)) {
-                  return;
-                }
-                event.preventDefault();
-                void handleSubmit();
-              }}
-              placeholder={
-                draft.interactionMode === "plan"
-                  ? `Ask ${session.provider} to investigate and plan work in ${session.path}`
-                  : `Ask ${session.provider} to work in ${session.path}`
-              }
-              className="min-h-[112px] resize-y rounded-2xl bg-main/80"
-            />
+                className="min-h-[112px] resize-y rounded-2xl bg-main/80"
+              />
             </div>
           </>
         )}
