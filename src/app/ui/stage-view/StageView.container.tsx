@@ -247,11 +247,30 @@ function StageView({
     [layout],
   );
   const focusedSession = useMemo(() => {
-    if (!focusedPane || focusedPane.ref.kind === "pending") {
-      return null;
+    if (!focusedPane) return null;
+
+    if (focusedPane.ref.kind !== "pending") {
+      return workspaceSessions.get(focusedPane.ref.sessionId) ?? null;
     }
-    return workspaceSessions.get(focusedPane.ref.sessionId) ?? null;
-  }, [focusedPane, workspaceSessions]);
+
+    // Pending pane: fall back to source session so the sidebar stays useful
+    if (focusedPane.ref.sourceSessionId) {
+      const source = workspaceSessions.get(focusedPane.ref.sourceSessionId);
+      if (source) return source;
+    }
+
+    // Fall back to any other visible pane's session
+    if (layout) {
+      for (const pane of layout.panes) {
+        if (pane.ref.kind !== "pending") {
+          const session = workspaceSessions.get(pane.ref.sessionId);
+          if (session) return session;
+        }
+      }
+    }
+
+    return null;
+  }, [focusedPane, workspaceSessions, layout]);
   const focusedAgentComposerRef = useMemo(() => {
     if (!focusedSession || !isAgentSession(focusedSession)) {
       return null;
