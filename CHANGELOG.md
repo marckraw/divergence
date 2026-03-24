@@ -1,5 +1,11 @@
 # divergence
 
+## 0.44.1
+
+### Patch Changes
+
+- 7744942: Improve Command Center responsiveness in large projects by debouncing search input, capping visible results, and reducing result-list animation churn. The modal now also shows when results are truncated so users can narrow their query instead of rendering thousands of matches.
+
 ## 0.44.0
 
 ### Minor Changes
