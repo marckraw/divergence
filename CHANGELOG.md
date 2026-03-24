@@ -1,5 +1,11 @@
 # divergence
 
+## 0.45.1
+
+### Patch Changes
+
+- 3e63ce9: fix: "Open on GitHub" button in pull request view now correctly opens the PR in the system browser using the Tauri shell plugin instead of `window.open`
+
 ## 0.45.0
 
 ### Minor Changes
