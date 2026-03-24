@@ -1042,6 +1042,14 @@ function App() {
     setSidebarMode,
   ]);
 
+  const handleRevealProjectFromSidebar = useCallback((project: Project) => {
+    void handleRevealQuickSwitcherSelection("project", project);
+  }, [handleRevealQuickSwitcherSelection]);
+
+  const handleRevealDivergenceFromSidebar = useCallback((divergence: Divergence) => {
+    void handleRevealQuickSwitcherSelection("divergence", divergence);
+  }, [handleRevealQuickSwitcherSelection]);
+
   const handleCreatePendingPaneSession = useCallback(async (
     paneId: StagePaneId,
     action: CreateAction,
@@ -1632,8 +1640,8 @@ function App() {
           dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           createDivergenceFor={createDivergenceFor}
           onCreateDivergenceForChange={setCreateDivergenceFor}
-          onSelectProject={handleSelectProject}
-          onSelectDivergence={handleSelectDivergence}
+          onSelectProject={handleRevealProjectFromSidebar}
+          onSelectDivergence={handleRevealDivergenceFromSidebar}
           onSelectSession={(sessionId) => {
             void handleSelectWorkspaceSession(sessionId);
           }}
