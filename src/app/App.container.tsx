@@ -845,7 +845,7 @@ function App() {
     setActiveSessionId(session.id);
   }, [createTargetedAgentSession, setActiveSessionId]);
 
-  const handleSelectWorkspaceSession = async (sessionId: string) => {
+  const handleSelectWorkspaceSession = useCallback(async (sessionId: string) => {
     if (workspaceSessions.has(sessionId)) {
       setActiveSessionId(sessionId);
       return;
@@ -865,7 +865,7 @@ function App() {
       }
     }
     setActiveSessionId(sessionId);
-  };
+  }, [agentSessions, openAgentSession, setActiveSessionId, workspaceSessions]);
 
   const ensureWorkspaceSessionId = useCallback((workspace: Workspace): string => {
     const sessionId = `workspace-${workspace.id}`;
