@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Divergence, Project, StageTab, WorkspaceSession } from "../../../entities";
 import type { CommandCenterMode } from "../ui/CommandCenter.types";
 import {
+  MAX_VISIBLE_RESULTS,
   buildCommandCenterSearchResults,
   filterCommandCenterSearchResults,
   getCommandCenterContextLabel,
@@ -89,6 +90,13 @@ const openFileMode: CommandCenterMode = { kind: "open-file", rootPath: "/alpha" 
 const openInPaneMode: CommandCenterMode = { kind: "open-in-pane", targetPaneId: "stage-pane-2" };
 
 describe("commandCenter.pure", () => {
+  describe("MAX_VISIBLE_RESULTS", () => {
+    it("exports the visible result cap used by the command center", () => {
+      expect(MAX_VISIBLE_RESULTS).toBe(100);
+      expect(MAX_VISIBLE_RESULTS).toBeGreaterThan(0);
+    });
+  });
+
   describe("buildCommandCenterSearchResults", () => {
     it("builds results for replace mode with all categories", () => {
       const items = buildCommandCenterSearchResults(replaceMode, {
