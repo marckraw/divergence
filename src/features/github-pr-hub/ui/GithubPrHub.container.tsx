@@ -1,3 +1,4 @@
+import { open as openShell } from "@tauri-apps/plugin-shell";
 import { useCallback, useEffect, useState } from "react";
 import type { AgentSessionSnapshot, Project } from "../../../entities";
 import { getErrorMessage, type CreateAgentSessionInput } from "../../../shared";
@@ -103,7 +104,7 @@ function GithubPrHubContainer({
     if (!normalized) {
       return;
     }
-    window.open(normalized, "_blank", "noopener,noreferrer");
+    openShell(normalized);
   }, []);
 
   const handleMergeMethodChange = useCallback((method: GithubPullRequestMergeMethod) => {
