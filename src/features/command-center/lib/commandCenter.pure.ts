@@ -21,6 +21,7 @@ import type {
   FileResult,
 } from "../ui/CommandCenter.types";
 import { buildCommandCenterCreateActions } from "./commandCenterActions.pure";
+import { fuzzyMatch, fuzzyMatchPath } from "./fuzzyMatch.pure";
 
 export interface CommandCenterContext {
   projects: Project[];
@@ -222,85 +223,123 @@ export function filterCommandCenterSearchResults(
     return filtered;
   }
 
-  const lowerQuery = query.toLowerCase();
-  return filtered.filter((result) => matchesQuery(result, lowerQuery));
+  const matchedEntries: { index: number; result: CommandCenterSearchResult }[] = [];
+  filtered.forEach((result, index) => {
+    const match = getResultMatch(result, query);
+    if (!match.match) {
+      return;
+    }
+
+    matchedEntries.push({
+      index,
+      result: {
+        ...result,
+        score: match.score,
+        matchedIndices: match.matchedIndices,
+      },
+    });
+  });
+
+  return matchedEntries
+    .sort((left, right) => {
+      const categoryDelta = getCategorySortIndex(left.result.category) - getCategorySortIndex(right.result.category);
+      if (categoryDelta !== 0) {
+        return categoryDelta;
+      }
+
+      const scoreDelta = (right.result.score ?? 0) - (left.result.score ?? 0);
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+
+      return left.index - right.index;
+    })
+    .map((entry) => entry.result);
 }
 
-function matchesQuery(result: CommandCenterSearchResult, lowerQuery: string): boolean {
+function getResultMatch(
+  result: CommandCenterSearchResult,
+  query: string,
+): { match: boolean; score: number; matchedIndices?: number[] } {
   if (result.type === "file") {
     const file = result.item as FileResult;
-    return file.relativePath.toLowerCase().includes(lowerQuery);
+    const fileNameMatch = fuzzyMatch(query, file.fileName);
+    if (fileNameMatch.match) {
+      const pathMatch = fuzzyMatchPath(query, file.relativePath);
+      return {
+        match: true,
+        score: pathMatch.score,
+        matchedIndices: fileNameMatch.matchedIndices,
+      };
+    }
+
+    const pathMatch = fuzzyMatchPath(query, file.relativePath);
+    return pathMatch.match ? { match: true, score: pathMatch.score } : { match: false, score: 0 };
   }
 
   if (result.type === "create_action") {
     const action = result.item as { label: string; description: string };
-    return (
-      action.label.toLowerCase().includes(lowerQuery)
-      || action.description.toLowerCase().includes(lowerQuery)
-    );
+    return findBestMatch(query, [
+      { text: action.label, shouldHighlight: true },
+      { text: action.description },
+    ]);
   }
-
-  const name = "name" in result.item
-    ? (result.item as { name: string }).name.toLowerCase()
-    : "label" in result.item
-      ? (result.item as { label: string }).label.toLowerCase()
-      : "";
 
   if (result.type === "divergence") {
     const divergence = result.item as Divergence;
-    return (
-      name.includes(lowerQuery)
-      || divergence.branch.toLowerCase().includes(lowerQuery)
-      || (result.projectName?.toLowerCase().includes(lowerQuery) ?? false)
-    );
+    return findBestMatch(query, [
+      { text: divergence.branch, shouldHighlight: true },
+      { text: divergence.name },
+      { text: result.projectName },
+    ]);
   }
 
   if (result.type === "session") {
     const session = result.item as WorkspaceSession;
-    return (
-      name.includes(lowerQuery)
-      || session.path.toLowerCase().includes(lowerQuery)
-      || (isEditorSession(session)
-        ? session.filePath.toLowerCase().includes(lowerQuery)
-        : "sessionRole" in session
-          ? session.sessionRole.toLowerCase().includes(lowerQuery)
-          : false)
-      || (isAgentSession(session)
-        ? (
-          session.provider.toLowerCase().includes(lowerQuery)
-          || session.model.toLowerCase().includes(lowerQuery)
-        )
-        : false)
-      || (result.projectName?.toLowerCase().includes(lowerQuery) ?? false)
-      || (result.workspaceName?.toLowerCase().includes(lowerQuery) ?? false)
-    );
+    return findBestMatch(query, [
+      { text: session.name, shouldHighlight: true },
+      { text: session.path },
+      { text: isEditorSession(session) ? session.filePath : undefined },
+      { text: "sessionRole" in session ? session.sessionRole : undefined },
+      { text: isAgentSession(session) ? session.provider : undefined },
+      { text: isAgentSession(session) ? session.model : undefined },
+      { text: result.projectName },
+      { text: result.workspaceName },
+    ]);
   }
 
   if (result.type === "workspace") {
     const workspace = result.item as Workspace;
-    return (
-      name.includes(lowerQuery)
-      || workspace.slug.toLowerCase().includes(lowerQuery)
-    );
+    return findBestMatch(query, [
+      { text: workspace.name, shouldHighlight: true },
+      { text: workspace.slug },
+    ]);
   }
 
   if (result.type === "workspace_divergence") {
     const wd = result.item as WorkspaceDivergence;
-    return (
-      name.includes(lowerQuery)
-      || wd.branch.toLowerCase().includes(lowerQuery)
-      || (result.workspaceName?.toLowerCase().includes(lowerQuery) ?? false)
-    );
+    return findBestMatch(query, [
+      { text: wd.branch, shouldHighlight: true },
+      { text: wd.name },
+      { text: result.workspaceName },
+    ]);
   }
 
   if (result.type === "stage_tab") {
-    return (
-      name.includes(lowerQuery)
-      || (result.detail?.toLowerCase().includes(lowerQuery) ?? false)
-    );
+    const tab = result.item as StageTab;
+    return findBestMatch(query, [
+      { text: tab.label, shouldHighlight: true },
+      { text: result.detail },
+    ]);
   }
 
-  return name.includes(lowerQuery);
+  const name = "name" in result.item
+    ? (result.item as { name: string }).name
+    : "label" in result.item
+      ? (result.item as { label: string }).label
+      : "";
+
+  return findBestMatch(query, [{ text: name, shouldHighlight: true }]);
 }
 
 function buildFileResult(filePath: string): FileResult {
@@ -376,4 +415,58 @@ export function groupResultsByCategory(
   }
 
   return groups;
+}
+
+function findBestMatch(
+  query: string,
+  candidates: { text?: string; shouldHighlight?: boolean }[],
+): { match: boolean; score: number; matchedIndices?: number[] } {
+  let bestMatch: { match: boolean; score: number; matchedIndices?: number[] } | null = null;
+
+  for (const candidate of candidates) {
+    if (!candidate.text) {
+      continue;
+    }
+
+    const nextMatch = fuzzyMatch(query, candidate.text);
+    if (!nextMatch.match) {
+      continue;
+    }
+
+    const annotatedMatch = {
+      match: true,
+      score: nextMatch.score,
+      matchedIndices: candidate.shouldHighlight ? nextMatch.matchedIndices : undefined,
+    };
+
+    if (!bestMatch || annotatedMatch.score > bestMatch.score) {
+      bestMatch = annotatedMatch;
+      continue;
+    }
+
+    if (
+      annotatedMatch.score === bestMatch.score
+      && annotatedMatch.matchedIndices
+      && !bestMatch.matchedIndices
+    ) {
+      bestMatch = annotatedMatch;
+    }
+  }
+
+  return bestMatch ?? { match: false, score: 0 };
+}
+
+function getCategorySortIndex(category: CommandCenterSearchResult["category"]): number {
+  switch (category) {
+    case "recent":
+      return 0;
+    case "files":
+      return 1;
+    case "navigation":
+      return 2;
+    case "create":
+      return 3;
+    default:
+      return Number.MAX_SAFE_INTEGER;
+  }
 }

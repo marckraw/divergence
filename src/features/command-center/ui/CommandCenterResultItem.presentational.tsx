@@ -127,7 +127,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     const file = result.item as FileResult;
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-text truncate font-medium text-sm">{file.fileName}</div>
+        <div className="text-text truncate font-medium text-sm">
+          <HighlightedText text={file.fileName} matchedIndices={result.matchedIndices} />
+        </div>
         {file.directory && <div className="text-xs text-subtext truncate">{file.directory}</div>}
       </div>
     );
@@ -137,7 +139,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     const action = result.item as CreateAction;
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-text truncate text-sm">{action.label}</div>
+        <div className="text-text truncate text-sm">
+          <HighlightedText text={action.label} matchedIndices={result.matchedIndices} />
+        </div>
         <div className="text-xs text-subtext truncate">{action.description}</div>
       </div>
     );
@@ -149,7 +153,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     const editor = isEditorSession(session) ? session : null;
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-text truncate">{session.name}</div>
+        <div className="text-text truncate">
+          <HighlightedText text={session.name} matchedIndices={result.matchedIndices} />
+        </div>
         {(result.projectName || result.workspaceName) && (
           <div className="text-xs text-subtext truncate">
             {result.projectName}{result.workspaceName ? ` - ${result.workspaceName}` : ""}
@@ -165,7 +171,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     const divergence = result.item as Divergence;
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-text truncate">{divergence.branch}</div>
+        <div className="text-text truncate">
+          <HighlightedText text={divergence.branch} matchedIndices={result.matchedIndices} />
+        </div>
         {result.projectName && <div className="text-xs text-subtext truncate">{result.projectName}</div>}
       </div>
     );
@@ -175,7 +183,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     const workspace = result.item as Workspace;
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-text truncate">{workspace.name}</div>
+        <div className="text-text truncate">
+          <HighlightedText text={workspace.name} matchedIndices={result.matchedIndices} />
+        </div>
         <div className="text-xs text-subtext truncate">{workspace.slug}</div>
       </div>
     );
@@ -185,7 +195,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     const wd = result.item as WorkspaceDivergence;
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-text truncate">{wd.branch}</div>
+        <div className="text-text truncate">
+          <HighlightedText text={wd.branch} matchedIndices={result.matchedIndices} />
+        </div>
         {result.workspaceName && <div className="text-xs text-subtext truncate">{result.workspaceName}</div>}
       </div>
     );
@@ -195,7 +207,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     const tab = result.item as StageTab;
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-text truncate">{tab.label}</div>
+        <div className="text-text truncate">
+          <HighlightedText text={tab.label} matchedIndices={result.matchedIndices} />
+        </div>
         {result.detail && <div className="text-xs text-subtext truncate">{result.detail}</div>}
       </div>
     );
@@ -205,7 +219,9 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
   const project = result.item as { name: string };
   return (
     <div className="flex-1 min-w-0">
-      <div className="text-text truncate">{project.name}</div>
+      <div className="text-text truncate">
+        <HighlightedText text={project.name} matchedIndices={result.matchedIndices} />
+      </div>
     </div>
   );
 }
@@ -242,6 +258,26 @@ function getBadgeConfig(result: CommandCenterSearchResult): { className: string;
   if (result.type === "workspace_divergence") return { className: "bg-accent/20 text-accent", label: "ws divergence" };
   if (result.type === "stage_tab") return { className: "bg-surface text-subtext", label: "tab" };
   return { className: "bg-surface text-subtext", label: result.type };
+}
+
+function HighlightedText({ text, matchedIndices }: { text: string; matchedIndices?: number[] }) {
+  if (!matchedIndices || matchedIndices.length === 0) {
+    return <>{text}</>;
+  }
+
+  const matchedIndexSet = new Set(matchedIndices);
+  return (
+    <>
+      {Array.from(text).map((char, index) => (
+        <span
+          key={`${char}-${index}`}
+          className={matchedIndexSet.has(index) ? "text-accent font-semibold" : undefined}
+        >
+          {char}
+        </span>
+      ))}
+    </>
+  );
 }
 
 export default CommandCenterResultItem;
