@@ -191,6 +191,29 @@ describe("commandCenter.pure", () => {
       expect(filterCommandCenterSearchResults(items, "main")).toHaveLength(1);
     });
 
+    it("supports fuzzy file queries with non-contiguous characters and word splits", () => {
+      const items = buildCommandCenterSearchResults(openFileMode, {
+        projects,
+        divergencesByProject: divergences,
+        sessions,
+        files: [
+          "src/features/command-center/ui/CommandCenter.container.tsx",
+          "src/features/command-center/ui/CommandCenter.presentational.tsx",
+          "src/main.ts",
+        ],
+      });
+
+      const filtered = filterCommandCenterSearchResults(items, "cc cont");
+
+      expect(filtered).toHaveLength(2);
+      expect((filtered[0].item as { relativePath: string }).relativePath).toBe(
+        "src/features/command-center/ui/CommandCenter.container.tsx",
+      );
+      expect(filtered[0].matchedIndices).toEqual([0, 7, 14, 15, 16, 17]);
+      expect(filtered[0].score).toBeGreaterThan(0);
+      expect(filtered[0].score).toBeGreaterThan(filtered[1].score ?? 0);
+    });
+
     it("filters by category", () => {
       const items = buildCommandCenterSearchResults(replaceMode, {
         projects,
@@ -216,6 +239,31 @@ describe("commandCenter.pure", () => {
       });
       const filtered = filterCommandCenterSearchResults(items, "pr review");
       expect(filtered.some((r) => r.type === "stage_tab")).toBe(true);
+    });
+
+    it("sorts results by score within each category when a query is present", () => {
+      const items = buildCommandCenterSearchResults(replaceMode, {
+        projects,
+        divergencesByProject: divergences,
+        sessions,
+        files: [
+          "src/CommandCenter.tsx",
+          "src/features/command-center/ui/CommandCenter.tsx",
+          "src/features/command-center/ui/CommandCenter.container.tsx",
+        ],
+        agentProviders: ["claude"],
+        sourceSession: sessions.get("divergence-10") ?? null,
+      });
+
+      const filtered = filterCommandCenterSearchResults(items, "cc", "files");
+
+      expect(filtered.map((result) => (result.item as { relativePath: string }).relativePath)).toEqual([
+        "src/CommandCenter.tsx",
+        "src/features/command-center/ui/CommandCenter.tsx",
+        "src/features/command-center/ui/CommandCenter.container.tsx",
+      ]);
+      expect((filtered[0].score ?? 0)).toBeGreaterThan(filtered[1].score ?? 0);
+      expect((filtered[1].score ?? 0)).toBeGreaterThanOrEqual(filtered[2].score ?? 0);
     });
   });
 

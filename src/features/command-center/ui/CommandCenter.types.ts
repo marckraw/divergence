@@ -54,6 +54,8 @@ export interface CommandCenterSearchResult {
   workspaceName?: string;
   detail?: string;
   category: "recent" | "files" | "navigation" | "create";
+  score?: number;
+  matchedIndices?: number[];
 }
 
 export interface CommandCenterProps {
