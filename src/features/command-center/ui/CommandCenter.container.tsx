@@ -26,6 +26,8 @@ function CommandCenterContainer({
   workspaces,
   workspaceDivergences,
   agentProviders,
+  excludePatterns,
+  respectGitignore,
   sourceSession,
   onSelect,
   onClose,
@@ -51,13 +53,15 @@ function CommandCenterContainer({
   // Fetch files when root path is available
   useEffect(() => {
     if (!needsFiles || !rootPath) {
+      setFiles([]);
+      setIsLoadingFiles(false);
       return;
     }
 
     let cancelled = false;
     setIsLoadingFiles(true);
 
-    listProjectFiles(rootPath)
+    listProjectFiles(rootPath, excludePatterns, respectGitignore)
       .then((result) => {
         if (!cancelled) {
           setFiles(result.files);
@@ -71,7 +75,7 @@ function CommandCenterContainer({
       });
 
     return () => { cancelled = true; };
-  }, [rootPath, needsFiles]);
+  }, [excludePatterns, needsFiles, respectGitignore, rootPath]);
 
   // Focus input on mount
   useEffect(() => {

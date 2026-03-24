@@ -67,6 +67,8 @@ export interface CommandCenterProps {
   workspaces: Workspace[];
   workspaceDivergences: WorkspaceDivergence[];
   agentProviders: AgentProvider[];
+  excludePatterns: string[];
+  respectGitignore: boolean;
   sourceSession: WorkspaceSession | null;
   onSelect: (result: CommandCenterSearchResult) => void;
   onClose: () => void;

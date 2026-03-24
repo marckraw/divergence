@@ -178,6 +178,7 @@ export {
 
 export {
   DEFAULT_APP_SETTINGS,
+  DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS,
   DEFAULT_MAX_STAGE_TABS,
   DEFAULT_TMUX_HISTORY_LIMIT,
   MAX_MAX_STAGE_TABS,
@@ -185,6 +186,7 @@ export {
   SETTINGS_STORAGE_KEY,
   SETTINGS_UPDATED_EVENT,
   normalizeAppSettings,
+  normalizeCommandCenterExcludePatterns,
   normalizeCustomAgentModels,
   normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
