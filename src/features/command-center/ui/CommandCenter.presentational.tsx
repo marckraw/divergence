@@ -1,4 +1,3 @@
-import { AnimatePresence } from "framer-motion";
 import {
   EmptyState,
   Kbd,
@@ -14,10 +13,12 @@ function CommandCenterPresentational({
   query,
   selectedIndex,
   activeCategory,
-  filteredItems,
+  visibleItems,
+  totalFilteredCount,
   isLoadingFiles,
   contextLabel,
   showCategoryTabs,
+  resultsKey,
   inputRef,
   listRef,
   onClose,
@@ -28,7 +29,7 @@ function CommandCenterPresentational({
   onCategoryChange,
 }: CommandCenterPresentationalProps) {
   const modeLabel = getModeBadgeLabel(mode);
-  const groups = groupResultsByCategory(filteredItems);
+  const groups = groupResultsByCategory(visibleItems);
 
   // Compute a flat index mapping for grouped rendering
   let flatIndex = 0;
@@ -100,7 +101,7 @@ function CommandCenterPresentational({
 
       {/* Results */}
       <div ref={listRef} className="flex-1 overflow-y-auto p-2">
-        {isLoadingFiles && filteredItems.length === 0 ? (
+        {isLoadingFiles && visibleItems.length === 0 ? (
           <div className="flex items-center justify-center py-8 gap-2 text-subtext">
             <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -108,10 +109,10 @@ function CommandCenterPresentational({
             </svg>
             <span>Loading files...</span>
           </div>
-        ) : filteredItems.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <EmptyState>No results found</EmptyState>
         ) : (
-          <AnimatePresence initial={false}>
+          <div key={resultsKey}>
             {groupsWithIndices.map((group) => (
               <div key={group.category}>
                 <div className="px-2 pt-3 pb-1 text-[10px] uppercase tracking-[0.14em] text-subtext">
@@ -128,7 +129,12 @@ function CommandCenterPresentational({
                 ))}
               </div>
             ))}
-          </AnimatePresence>
+            {totalFilteredCount > visibleItems.length && (
+              <div className="px-2 pt-3 pb-2 text-xs text-subtext">
+                {`Showing ${visibleItems.length.toLocaleString()} of ${totalFilteredCount.toLocaleString()} results. Type to narrow down.`}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

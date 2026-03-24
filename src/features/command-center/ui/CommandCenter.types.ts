@@ -75,10 +75,12 @@ export interface CommandCenterPresentationalProps {
   query: string;
   selectedIndex: number;
   activeCategory: CommandCenterCategory;
-  filteredItems: CommandCenterSearchResult[];
+  visibleItems: CommandCenterSearchResult[];
+  totalFilteredCount: number;
   isLoadingFiles: boolean;
   contextLabel: string;
   showCategoryTabs: boolean;
+  resultsKey: string;
   inputRef: RefObject<HTMLInputElement>;
   listRef: RefObject<HTMLDivElement>;
   onClose: () => void;

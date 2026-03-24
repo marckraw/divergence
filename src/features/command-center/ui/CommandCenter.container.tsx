@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import type { KeyboardEvent } from "react";
 import {
+  MAX_VISIBLE_RESULTS,
   buildCommandCenterSearchResults,
   filterCommandCenterSearchResults,
   getCommandCenterContextLabel,
@@ -14,6 +15,7 @@ import type {
 import CommandCenterPresentational from "./CommandCenter.presentational";
 
 const CATEGORY_ORDER: CommandCenterCategory[] = ["all", "files", "sessions", "create"];
+const SEARCH_DEBOUNCE_MS = 150;
 
 function CommandCenterContainer({
   mode,
@@ -29,6 +31,7 @@ function CommandCenterContainer({
   onClose,
 }: CommandCenterProps) {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [activeCategory, setActiveCategory] = useState<CommandCenterCategory>("all");
   const [files, setFiles] = useState<string[]>([]);
@@ -75,6 +78,16 @@ function CommandCenterContainer({
     inputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(query);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
   const showCategoryTabs = mode.kind === "replace" || mode.kind === "open-in-pane";
 
   // Build and filter search results
@@ -98,8 +111,13 @@ function CommandCenterContainer({
   }, [mode.kind]);
 
   const filteredItems = useMemo(() => {
-    return filterCommandCenterSearchResults(allItems, query, showCategoryTabs ? activeCategory : undefined);
-  }, [allItems, query, activeCategory, showCategoryTabs]);
+    return filterCommandCenterSearchResults(allItems, debouncedQuery, showCategoryTabs ? activeCategory : undefined);
+  }, [activeCategory, allItems, debouncedQuery, showCategoryTabs]);
+
+  const totalFilteredCount = filteredItems.length;
+  const visibleItems = useMemo(() => {
+    return filteredItems.slice(0, MAX_VISIBLE_RESULTS);
+  }, [filteredItems]);
 
   // Reset selection when items change
   useEffect(() => {
@@ -109,21 +127,22 @@ function CommandCenterContainer({
   // Scroll selected into view
   useEffect(() => {
     const list = listRef.current;
-    if (!list || filteredItems.length === 0) return;
+    if (!list || visibleItems.length === 0) return;
 
     // Find the selected element among all result items
     const resultElements = list.querySelectorAll("[data-result-item]");
     const selected = resultElements[selectedIndex] as HTMLElement | undefined;
     selected?.scrollIntoView({ block: "nearest" });
-  }, [selectedIndex, filteredItems.length]);
+  }, [selectedIndex, visibleItems.length]);
 
   const contextLabel = getCommandCenterContextLabel(mode, sourceSession);
+  const resultsKey = `${mode.kind}:${showCategoryTabs ? activeCategory : "all"}:${debouncedQuery}`;
 
   const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
-        setSelectedIndex((prev) => (prev < filteredItems.length - 1 ? prev + 1 : prev));
+        setSelectedIndex((prev) => (prev < visibleItems.length - 1 ? prev + 1 : prev));
         break;
       case "ArrowUp":
         event.preventDefault();
@@ -131,8 +150,8 @@ function CommandCenterContainer({
         break;
       case "Enter":
         event.preventDefault();
-        if (filteredItems[selectedIndex]) {
-          onSelect(filteredItems[selectedIndex]);
+        if (visibleItems[selectedIndex]) {
+          onSelect(visibleItems[selectedIndex]);
         }
         break;
       case "Tab":
@@ -152,7 +171,7 @@ function CommandCenterContainer({
         onClose();
         break;
     }
-  }, [filteredItems, onClose, onSelect, selectedIndex, showCategoryTabs]);
+  }, [onClose, onSelect, selectedIndex, showCategoryTabs, visibleItems]);
 
   const handleSelectResult = useCallback((result: CommandCenterSearchResult) => {
     onSelect(result);
@@ -168,10 +187,12 @@ function CommandCenterContainer({
       query={query}
       selectedIndex={selectedIndex}
       activeCategory={activeCategory}
-      filteredItems={filteredItems}
+      visibleItems={visibleItems}
+      totalFilteredCount={totalFilteredCount}
       isLoadingFiles={isLoadingFiles}
       contextLabel={contextLabel}
       showCategoryTabs={showCategoryTabs}
+      resultsKey={resultsKey}
       inputRef={inputRef}
       listRef={listRef}
       onClose={onClose}

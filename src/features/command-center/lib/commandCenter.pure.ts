@@ -34,6 +34,8 @@ export interface CommandCenterContext {
   sourceSession?: WorkspaceSession | null;
 }
 
+export const MAX_VISIBLE_RESULTS = 100;
+
 export function buildCommandCenterSearchResults(
   mode: CommandCenterMode,
   context: CommandCenterContext,
