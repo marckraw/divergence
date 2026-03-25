@@ -7,7 +7,13 @@ import {
 } from "../../entities";
 import { formatFileSize } from "../../shared";
 import { getBranchDiff, getWorkingDiff } from "../../shared/api/git.api";
-import { readTextFile, writeTextFile } from "../../shared/api/fs.api";
+import {
+  DEFAULT_TEXT_FILE_READ_TIMEOUT_MS,
+  readTextFileWithTimeout,
+  writeTextFile,
+} from "../../shared/api/fs.api";
+
+const EDITOR_SESSION_LOAD_TIMEOUT_MS = DEFAULT_TEXT_FILE_READ_TIMEOUT_MS;
 
 export interface EditorSessionViewState {
   preferredTab: "edit" | "diff";
@@ -128,6 +134,7 @@ export function useEditorSessionManagement(): UseEditorSessionManagementResult {
   const [editorRuntimeStateBySessionId, setEditorRuntimeStateBySessionId] = useState<Map<string, EditorSessionRuntimeState>>(new Map());
   const editorSessionsRef = useRef(editorSessions);
   const editorRuntimeStateBySessionIdRef = useRef(editorRuntimeStateBySessionId);
+  const editorLoadRequestIdBySessionIdRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     editorSessionsRef.current = editorSessions;
@@ -139,6 +146,12 @@ export function useEditorSessionManagement(): UseEditorSessionManagementResult {
 
   useEffect(() => {
     const sessionIds = new Set(editorSessions.keys());
+
+    editorLoadRequestIdBySessionIdRef.current.forEach((_, key) => {
+      if (!sessionIds.has(key)) {
+        editorLoadRequestIdBySessionIdRef.current.delete(key);
+      }
+    });
 
     setEditorViewStateBySessionId((previous) => {
       let changed = false;
@@ -260,6 +273,14 @@ export function useEditorSessionManagement(): UseEditorSessionManagementResult {
       return;
     }
 
+    const requestId = (editorLoadRequestIdBySessionIdRef.current.get(sessionId) ?? 0) + 1;
+    editorLoadRequestIdBySessionIdRef.current.set(sessionId, requestId);
+
+    const isStaleLoadRequest = () => (
+      editorLoadRequestIdBySessionIdRef.current.get(sessionId) !== requestId
+      || !editorSessionsRef.current.has(sessionId)
+    );
+
     updateEditorRuntimeState(sessionId, (previous) => ({
       ...previous,
       isLoadingFile: true,
@@ -274,7 +295,13 @@ export function useEditorSessionManagement(): UseEditorSessionManagementResult {
     }));
 
     try {
-      const content = await readTextFile(session.filePath);
+      const content = await readTextFileWithTimeout(
+        session.filePath,
+        EDITOR_SESSION_LOAD_TIMEOUT_MS,
+      );
+      if (isStaleLoadRequest()) {
+        return;
+      }
       updateEditorRuntimeState(sessionId, (previous) => ({
         ...previous,
         content,
@@ -291,17 +318,20 @@ export function useEditorSessionManagement(): UseEditorSessionManagementResult {
       }));
       updateEditorSessionStatus(sessionId, "idle");
     } catch (error) {
+      if (isStaleLoadRequest()) {
+        return;
+      }
       updateEditorRuntimeState(sessionId, (previous) => ({
         ...previous,
-        content: "",
-        initialContent: "",
+        content: previous.isLoaded ? previous.content : "",
+        initialContent: previous.isLoaded ? previous.initialContent : "",
         fileLoadError: error instanceof Error ? error.message : "Failed to read file.",
         fileSaveError: null,
         isLoadingFile: false,
-        isReadOnly: false,
+        isReadOnly: previous.isLoaded ? previous.isReadOnly : false,
         isDeleted: false,
-        largeFileWarning: null,
-        isLoaded: false,
+        largeFileWarning: previous.isLoaded ? previous.largeFileWarning : null,
+        isLoaded: previous.isLoaded,
       }));
       updateEditorSessionStatus(sessionId, "idle");
     }
@@ -505,6 +535,7 @@ export function useEditorSessionManagement(): UseEditorSessionManagementResult {
       next.delete(sessionId);
       return next;
     });
+    editorLoadRequestIdBySessionIdRef.current.delete(sessionId);
     return true;
   }, []);
 

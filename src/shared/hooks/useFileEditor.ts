@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { getBranchDiff, getWorkingDiff } from "../api/git.api";
-import { readTextFile, writeTextFile } from "../api/fs.api";
+import { readTextFileWithTimeout, writeTextFile } from "../api/fs.api";
 import type { ChangesMode, GitChangeEntry } from "../lib/gitChanges.pure";
 import { joinPath } from "../lib/pathJoin.pure";
 import { formatFileSize } from "../lib/quickEdit.pure";
@@ -60,7 +60,7 @@ export function useFileEditor({ activeRootPath }: UseFileEditorParams) {
     setIsLoadingFile(true);
 
     try {
-      const content = await readTextFile(path);
+      const content = await readTextFileWithTimeout(path);
       setOpenFileContent(content);
       setOpenFileInitial(content);
 
