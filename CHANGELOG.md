@@ -1,5 +1,11 @@
 # divergence
 
+## 0.45.6
+
+### Patch Changes
+
+- 02f014e: Show focused pane changed files from the local working directory instead of branch-to-base diffs, so the Working view matches the repository's current uncommitted changes.
+
 ## 0.45.5
 
 ### Patch Changes
