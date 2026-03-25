@@ -2,29 +2,45 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Sidebar from "../widgets/sidebar";
-import { InboxPanel } from "../features/inbox";
+import { InboxPanel, useGithubInboxPolling } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
 import { useAgentRuntime } from "../features/agent-runtime";
-import CommandCenter, { type CommandCenterMode, type CommandCenterSearchResult, type CreateAction, getFileAbsolutePath } from "../features/command-center";
+import CommandCenter, {
+  type CommandCenterMode,
+  type CommandCenterSearchResult,
+  type CreateAction,
+  getFileAbsolutePath,
+} from "../features/command-center";
 import { onMobileHandshake } from "./api/mobileHandshake.api";
 import Settings from "../widgets/settings-modal";
 import type { SettingsCategoryId } from "../widgets/settings-modal";
-import { MergeNotification, useMergeDetection, type MergeNotificationData } from "../features/merge-detection";
+import {
+  MergeNotification,
+  useMergeDetection,
+  type MergeNotificationData,
+} from "../features/merge-detection";
 import {
   CreateWorkspaceModal,
   CreateWorkspaceDivergenceModal,
 } from "../features/workspace-management";
 import { WorkspaceSettings } from "../features/workspace-settings";
-import { TaskCenterPage, TaskToasts, useTaskCenter } from "../features/task-center";
+import {
+  TaskCenterPage,
+  TaskToasts,
+  useTaskCenterAttachment,
+  useTaskCenter,
+} from "../features/task-center";
+import { useReviewAgentSession } from "../features/review-agent";
 import { hydrateTasksFromAutomationRuns } from "../entities/task";
 import { useAllDivergences } from "../entities/divergence";
 import { useProjectSettingsMap, useProjects } from "../entities/project";
 import { useWorkspaces } from "../entities/workspace";
-import { usePortAllocations, type PortAllocation } from "../entities/port-management";
-import { useAutomations } from "../entities/automation";
 import {
-  useInboxEvents,
-} from "../entities/inbox-event";
+  usePortAllocations,
+  type PortAllocation,
+} from "../entities/port-management";
+import { useAutomations } from "../entities/automation";
+import { useInboxEvents } from "../entities/inbox-event";
 import {
   AGENT_PROVIDER_ORDER,
   Button,
@@ -57,6 +73,9 @@ import type {
   WorkspaceSession,
 } from "../entities";
 import {
+  buildWorkspaceDivergenceTerminalSession,
+  buildWorkspaceKey,
+  buildWorkspaceTerminalSession,
   getWorkspaceSessionAttentionKey,
   getWorkspaceSessionAttentionState,
   isAgentSession,
@@ -66,18 +85,19 @@ import {
 } from "../entities";
 import { useSplitPaneManagement } from "./model/useSplitPaneManagement";
 import { useStageTabGroup } from "./model/useStageTabGroup";
-import { useGithubInboxPolling } from "./model/useGithubInboxPolling";
 import { useSidebarLayout } from "./model/useSidebarLayout";
 import { useIdleNotification } from "./model/useIdleNotification";
 import { useGlobalErrorTracking } from "./model/useGlobalErrorTracking";
 import { useSessionPersistence } from "./model/useSessionPersistence";
-import { useEditorSessionManagement } from "./model/useEditorSessionManagement";
-import { useSessionManagement, type SessionNotificationCallbacks } from "./model/useSessionManagement";
-import { useAutomationOrchestration } from "./model/useAutomationOrchestration";
-import { useEntityOperations } from "./model/useEntityOperations";
+import { useEditorSessionRegistry } from "./model/useEditorSessionRegistry";
+import {
+  useWorkspaceSessionRegistry,
+  type SessionNotificationCallbacks,
+} from "./model/useWorkspaceSessionRegistry";
+import { useAutomationShellIntegration } from "./model/useAutomationShellIntegration";
 import { useAppKeyboardShortcuts } from "./model/useAppKeyboardShortcuts";
-import { useReviewAgentSession } from "./model/useReviewAgentSession";
-import { useTaskCenterAttachment } from "./model/useTaskCenterAttachment";
+import { useProjectOperations } from "./model/useProjectOperations";
+import { useWorkspaceOperations } from "./model/useWorkspaceOperations";
 import { DebugConsolePanel } from "../features/debug-console";
 import { PortDashboard } from "../features/port-dashboard";
 import {
@@ -87,22 +107,23 @@ import {
   type GithubPullRequestDetail,
   type GithubPullRequestSummary,
 } from "../features/github-pr-hub";
-import {
-  buildWorkspaceDivergenceTerminalSession,
-  buildWorkspaceKey,
-  buildWorkspaceTerminalSession,
-} from "./lib/sessionBuilder.pure";
 import StageView from "./ui/stage-view/StageView.container";
 
 function App() {
   const updater = useUpdater(true);
-  const { projects, addProject, removeProject, loading: projectsLoading } = useProjects();
+  const {
+    projects,
+    addProject,
+    removeProject,
+    loading: projectsLoading,
+  } = useProjects();
   const {
     divergencesByProject,
     refresh: refreshDivergences,
     loading: divergencesLoading,
   } = useAllDivergences();
-  const { settingsByProjectId, updateProjectSettings } = useProjectSettingsMap(projects);
+  const { settingsByProjectId, updateProjectSettings } =
+    useProjectSettingsMap(projects);
   const { settings: appSettings } = useAppSettings();
   const {
     workspaces: workspaceList,
@@ -110,25 +131,31 @@ function App() {
     workspaceDivergencesByWorkspaceId,
     refresh: refreshWorkspaces,
   } = useWorkspaces();
-  const { allocations: portAllocations, refresh: refreshPortAllocations } = usePortAllocations();
+  const { allocations: portAllocations, refresh: refreshPortAllocations } =
+    usePortAllocations();
   const {
     splitBySessionId,
     setSplitBySessionId,
     handleFocusSplitPane,
     handleResizeSplitPanes,
   } = useSplitPaneManagement();
-  const [commandCenterMode, setCommandCenterMode] = useState<CommandCenterMode | null>(null);
+  const [commandCenterMode, setCommandCenterMode] =
+    useState<CommandCenterMode | null>(null);
   const showCommandCenter = commandCenterMode !== null;
   const [showSettings, setShowSettings] = useState(false);
   const [renameAgentSessionState, setRenameAgentSessionState] = useState<{
     sessionId: string;
     value: string;
   } | null>(null);
-  const [settingsInitialCategory, setSettingsInitialCategory] = useState<SettingsCategoryId>("general");
-  const [createDivergenceFor, setCreateDivergenceFor] = useState<Project | null>(null);
+  const [settingsInitialCategory, setSettingsInitialCategory] =
+    useState<SettingsCategoryId>("general");
+  const [createDivergenceFor, setCreateDivergenceFor] =
+    useState<Project | null>(null);
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = useState(false);
-  const [createWorkspaceDivergenceFor, setCreateWorkspaceDivergenceFor] = useState<import("../entities").Workspace | null>(null);
-  const [mergeNotification, setMergeNotification] = useState<MergeNotificationData | null>(null);
+  const [createWorkspaceDivergenceFor, setCreateWorkspaceDivergenceFor] =
+    useState<import("../entities").Workspace | null>(null);
+  const [mergeNotification, setMergeNotification] =
+    useState<MergeNotificationData | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const {
     isSidebarOpen,
@@ -176,7 +203,7 @@ function App() {
   // Build projects by ID maps
   const projectsById = useMemo(() => {
     const map = new Map<number, { name: string }>();
-    projects.forEach(p => map.set(p.id, { name: p.name }));
+    projects.forEach((p) => map.set(p.id, { name: p.name }));
     return map;
   }, [projects]);
 
@@ -210,13 +237,13 @@ function App() {
   }, [workspaceDivergencesByWorkspaceId]);
 
   // ── Session Management ──
-  // Use a ref to break the circular dependency between useSessionManagement
+  // Use a ref to break the circular dependency between useWorkspaceSessionRegistry
   // and useIdleNotification (each needs outputs from the other).
   const notificationCallbacksRef = useRef<SessionNotificationCallbacks>({
-    clearNotificationTracking: () => {},
-    onSessionBecameBusy: () => {},
-    onSessionBecameActive: () => {},
-    onSessionBecameIdle: () => {},
+    clearNotificationTracking: () => { },
+    onSessionBecameBusy: () => { },
+    onSessionBecameActive: () => { },
+    onSessionBecameIdle: () => { },
   });
 
   const {
@@ -243,7 +270,7 @@ function App() {
     closeSessionsForProject,
     closeSessionsForDivergence,
     closeSessionsForWorkspaceDivergence,
-  } = useSessionManagement({
+  } = useWorkspaceSessionRegistry({
     settingsByProjectId,
     projectsById,
     appSettings,
@@ -268,8 +295,9 @@ function App() {
     closeSessionsForProject: closeEditorSessionsForProject,
     closeSessionsForDivergence: closeEditorSessionsForDivergence,
     closeSessionsForWorkspace: closeEditorSessionsForWorkspace,
-    closeSessionsForWorkspaceDivergence: closeEditorSessionsForWorkspaceDivergence,
-  } = useEditorSessionManagement();
+    closeSessionsForWorkspaceDivergence:
+    closeEditorSessionsForWorkspaceDivergence,
+  } = useEditorSessionRegistry();
 
   const {
     idleAttentionSessionIds,
@@ -360,7 +388,10 @@ function App() {
     closeSessionsForDivergence(divergenceId);
     closeEditorSessionsForDivergence(divergenceId);
     agentSessions.forEach((session) => {
-      if (session.targetType === "divergence" && session.targetId === divergenceId) {
+      if (
+        session.targetType === "divergence" &&
+        session.targetId === divergenceId
+      ) {
         void deleteAgentSession(session.id).catch((error) => {
           console.warn("Failed to delete divergence agent session:", error);
         });
@@ -368,13 +399,21 @@ function App() {
     });
   };
 
-  const closeSessionsForWorkspaceDivergenceAndAgents = (workspaceDivergenceId: number) => {
+  const closeSessionsForWorkspaceDivergenceAndAgents = (
+    workspaceDivergenceId: number
+  ) => {
     closeSessionsForWorkspaceDivergence(workspaceDivergenceId);
     closeEditorSessionsForWorkspaceDivergence(workspaceDivergenceId);
     agentSessions.forEach((session) => {
-      if (session.targetType === "workspace_divergence" && session.targetId === workspaceDivergenceId) {
+      if (
+        session.targetType === "workspace_divergence" &&
+        session.targetId === workspaceDivergenceId
+      ) {
         void deleteAgentSession(session.id).catch((error) => {
-          console.warn("Failed to delete workspace divergence agent session:", error);
+          console.warn(
+            "Failed to delete workspace divergence agent session:",
+            error
+          );
         });
       }
     });
@@ -383,7 +422,10 @@ function App() {
   const closeSessionsForWorkspaceAndAgents = (workspaceId: number) => {
     closeEditorSessionsForWorkspace(workspaceId);
     agentSessions.forEach((session) => {
-      if (session.targetType === "workspace" && session.targetId === workspaceId) {
+      if (
+        session.targetType === "workspace" &&
+        session.targetId === workspaceId
+      ) {
         void deleteAgentSession(session.id).catch((error) => {
           console.warn("Failed to delete workspace agent session:", error);
         });
@@ -431,7 +473,11 @@ function App() {
   }, [projects]);
 
   const hydratedTasks = useMemo(() => {
-    return hydrateTasksFromAutomationRuns(automationRuns, automationLookupById, projectLookupById);
+    return hydrateTasksFromAutomationRuns(
+      automationRuns,
+      automationLookupById,
+      projectLookupById
+    );
   }, [automationRuns, automationLookupById, projectLookupById]);
 
   const {
@@ -455,7 +501,7 @@ function App() {
     handleCreateAutomation,
     handleUpdateAutomation,
     handleDeleteAutomation,
-  } = useAutomationOrchestration({
+  } = useAutomationShellIntegration({
     automations,
     automationRuns,
     projects,
@@ -468,19 +514,31 @@ function App() {
     refreshDivergences,
     refreshWorkspaces,
     refreshInbox,
-    refreshPortAllocations,
     createAutomation,
     saveAutomation,
     removeAutomation,
-    latestRunByAutomationId,
   });
 
-  // ── Entity Operations ──
+  // ── Project Operations ──
   const {
     handleAddProject,
     handleRemoveProject,
     handleCreateDivergence,
     handleDeleteDivergence,
+  } = useProjectOperations({
+    projectsById,
+    divergencesByProject,
+    runTask,
+    addProject,
+    removeProject,
+    refreshDivergences,
+    refreshPortAllocations,
+    closeSessionsForProject: closeSessionsForProjectAndAgents,
+    closeSessionsForDivergence: closeSessionsForDivergenceAndAgents,
+  });
+
+  // ── Workspace Operations ──
+  const {
     handleSelectWorkspace,
     handleCreateWorkspace,
     handleDeleteWorkspace,
@@ -490,22 +548,17 @@ function App() {
     handleCreateWorkspaceDivergences,
     activeWorkspaceSettingsId,
     setActiveWorkspaceSettingsId,
-  } = useEntityOperations({
+  } = useWorkspaceOperations({
     projects,
-    projectsById,
-    divergencesByProject,
     appSettings,
     portAllocationByEntityKey,
     runTask,
-    addProject,
-    removeProject,
     refreshDivergences,
     refreshWorkspaces,
     refreshPortAllocations,
-    closeSessionsForProject: closeSessionsForProjectAndAgents,
-    closeSessionsForDivergence: closeSessionsForDivergenceAndAgents,
     closeSessionsForWorkspace: closeSessionsForWorkspaceAndAgents,
-    closeSessionsForWorkspaceDivergence: closeSessionsForWorkspaceDivergenceAndAgents,
+    closeSessionsForWorkspaceDivergence:
+      closeSessionsForWorkspaceDivergenceAndAgents,
     handleCloseSession,
     sessionsRef,
     setSessions,
@@ -521,84 +574,101 @@ function App() {
   });
 
   // ── Task Center Attachment ──
-  const { handleViewTaskCenterTask, handleAttachToAutomationSession } = useTaskCenterAttachment({
-    viewTask,
-    setIsSidebarOpen,
-    setSidebarMode,
-    setWorkTab,
-    projectById,
-    settingsByProjectId,
-    projectsById,
-    appSettings,
-    portAllocationByEntityKey,
-    agentSessions,
-    setSessions,
-    setActiveSessionId,
-    sendCommandToSession,
-  });
+  const { handleViewTaskCenterTask, handleAttachToAutomationSession } =
+    useTaskCenterAttachment({
+      viewTask,
+      setIsSidebarOpen,
+      setSidebarMode,
+      setWorkTab,
+      projectById,
+      settingsByProjectId,
+      projectsById,
+      appSettings,
+      portAllocationByEntityKey,
+      agentSessions,
+      setSessions,
+      setActiveSessionId,
+      sendCommandToSession,
+    });
 
   // Wrap handleSelectProject / handleSelectDivergence to also set sidebar mode
-  const handleSelectProject = useCallback((project: Project) => {
-    handleSelectProjectRaw(project);
-    setSidebarMode("projects");
-  }, [handleSelectProjectRaw, setSidebarMode]);
-
-  const handleSelectDivergence = useCallback((divergence: Divergence) => {
-    handleSelectDivergenceRaw(divergence);
-    setSidebarMode("projects");
-  }, [handleSelectDivergenceRaw, setSidebarMode]);
-
-  const handleOpenGithubPrDivergence = useCallback(async (
-    mode: "review" | "conflict-resolution",
-    input: {
-      pullRequest: GithubPullRequestSummary;
-      detail: GithubPullRequestDetail;
+  const handleSelectProject = useCallback(
+    (project: Project) => {
+      handleSelectProjectRaw(project);
+      setSidebarMode("projects");
     },
-  ) => {
-    const openPrDivergence = mode === "conflict-resolution"
-      ? openPrConflictResolutionDivergence
-      : openPrReviewDivergence;
+    [handleSelectProjectRaw, setSidebarMode]
+  );
 
-    await openPrDivergence({
-      pullRequest: input.pullRequest,
-      detail: input.detail,
-      githubToken: appSettings.githubToken ?? "",
-      runTask,
+  const handleSelectDivergence = useCallback(
+    (divergence: Divergence) => {
+      handleSelectDivergenceRaw(divergence);
+      setSidebarMode("projects");
+    },
+    [handleSelectDivergenceRaw, setSidebarMode]
+  );
+
+  const handleOpenGithubPrDivergence = useCallback(
+    async (
+      mode: "review" | "conflict-resolution",
+      input: {
+        pullRequest: GithubPullRequestSummary;
+        detail: GithubPullRequestDetail;
+      }
+    ) => {
+      const openPrDivergence =
+        mode === "conflict-resolution"
+          ? openPrConflictResolutionDivergence
+          : openPrReviewDivergence;
+
+      await openPrDivergence({
+        pullRequest: input.pullRequest,
+        detail: input.detail,
+        githubToken: appSettings.githubToken ?? "",
+        runTask,
+        refreshDivergences,
+        refreshPortAllocations,
+        onSelectDivergence: handleSelectDivergence,
+        setActiveSessionId,
+        createAgentSession,
+        startAgentTurn,
+        agentRuntimeCapabilities,
+      });
+      setSidebarMode("projects");
+    },
+    [
+      agentRuntimeCapabilities,
+      appSettings.githubToken,
+      createAgentSession,
+      handleSelectDivergence,
       refreshDivergences,
       refreshPortAllocations,
-      onSelectDivergence: handleSelectDivergence,
+      runTask,
+      setSidebarMode,
       setActiveSessionId,
-      createAgentSession,
       startAgentTurn,
-      agentRuntimeCapabilities,
-    });
-    setSidebarMode("projects");
-  }, [
-    agentRuntimeCapabilities,
-    appSettings.githubToken,
-    createAgentSession,
-    handleSelectDivergence,
-    refreshDivergences,
-    refreshPortAllocations,
-    runTask,
-    setSidebarMode,
-    setActiveSessionId,
-    startAgentTurn,
-  ]);
+    ]
+  );
 
-  const handleOpenPrReviewDivergence = useCallback(async (input: {
-    pullRequest: GithubPullRequestSummary;
-    detail: GithubPullRequestDetail;
-  }) => {
-    await handleOpenGithubPrDivergence("review", input);
-  }, [handleOpenGithubPrDivergence]);
+  const handleOpenPrReviewDivergence = useCallback(
+    async (input: {
+      pullRequest: GithubPullRequestSummary;
+      detail: GithubPullRequestDetail;
+    }) => {
+      await handleOpenGithubPrDivergence("review", input);
+    },
+    [handleOpenGithubPrDivergence]
+  );
 
-  const handleOpenPrConflictResolutionDivergence = useCallback(async (input: {
-    pullRequest: GithubPullRequestSummary;
-    detail: GithubPullRequestDetail;
-  }) => {
-    await handleOpenGithubPrDivergence("conflict-resolution", input);
-  }, [handleOpenGithubPrDivergence]);
+  const handleOpenPrConflictResolutionDivergence = useCallback(
+    async (input: {
+      pullRequest: GithubPullRequestSummary;
+      detail: GithubPullRequestDetail;
+    }) => {
+      await handleOpenGithubPrDivergence("conflict-resolution", input);
+    },
+    [handleOpenGithubPrDivergence]
+  );
 
   const workspaceSessions = useMemo(() => {
     const next = new Map<string, WorkspaceSession>();
@@ -660,522 +730,651 @@ function App() {
   });
   const stageTabIds = useMemo(
     () => tabGroup?.tabs.map((tab) => tab.id) ?? [],
-    [tabGroup],
+    [tabGroup]
   );
   const notifyMaxStageTabsReached = useCallback(() => {
-    toast.info(`Layout tabs are limited to ${appSettings.maxStageTabs}. Adjust the limit in Settings > General.`);
+    toast.info(
+      `Layout tabs are limited to ${appSettings.maxStageTabs}. Adjust the limit in Settings > General.`
+    );
   }, [appSettings.maxStageTabs]);
 
-  const buildEditorOpenInputFromSession = useCallback((
-    session: WorkspaceSession,
-    filePath: string,
-    options?: {
-      preferredTab?: "edit" | "diff";
-      diffMode?: ChangesMode | null;
-      changeEntry?: GitChangeEntry | null;
-      focusLine?: number | null;
-      focusColumn?: number | null;
-    },
-  ) => ({
-    targetType: getWorkspaceSessionTargetType(session),
-    targetId: session.targetId,
-    projectId: session.projectId,
-    workspaceOwnerId: session.workspaceOwnerId,
-    workspaceKey: session.workspaceKey,
-    path: session.path,
-    filePath,
-    preferredTab: options?.preferredTab,
-    diffMode: options?.diffMode ?? null,
-    changeEntry: options?.changeEntry ?? null,
-    focusLine: options?.focusLine ?? null,
-    focusColumn: options?.focusColumn ?? null,
-  }), []);
+  const buildEditorOpenInputFromSession = useCallback(
+    (
+      session: WorkspaceSession,
+      filePath: string,
+      options?: {
+        preferredTab?: "edit" | "diff";
+        diffMode?: ChangesMode | null;
+        changeEntry?: GitChangeEntry | null;
+        focusLine?: number | null;
+        focusColumn?: number | null;
+      }
+    ) => ({
+      targetType: getWorkspaceSessionTargetType(session),
+      targetId: session.targetId,
+      projectId: session.projectId,
+      workspaceOwnerId: session.workspaceOwnerId,
+      workspaceKey: session.workspaceKey,
+      path: session.path,
+      filePath,
+      preferredTab: options?.preferredTab,
+      diffMode: options?.diffMode ?? null,
+      changeEntry: options?.changeEntry ?? null,
+      focusLine: options?.focusLine ?? null,
+      focusColumn: options?.focusColumn ?? null,
+    }),
+    []
+  );
 
-  const showEditorSessionInStage = useCallback((
-    sessionId: string,
-    options?: { targetPaneId?: StagePaneId | null },
-  ) => {
-    if (handleRevealStageSession(sessionId)) {
-      setActiveSessionId(sessionId);
-      return;
-    }
-
-    const ref: StagePaneRef = { kind: "editor", sessionId };
-    const targetPaneId = options?.targetPaneId ?? stageLayout?.focusedPaneId ?? null;
-    if (stageLayout && targetPaneId) {
-      handleReplaceStagePaneRef(targetPaneId, ref);
-      setActiveSessionId(sessionId);
-      return;
-    }
-
-    handleCreateStageTabWithRef(ref);
-  }, [
-    handleCreateStageTabWithRef,
-    handleRevealStageSession,
-    handleReplaceStagePaneRef,
-    setActiveSessionId,
-    stageLayout,
-  ]);
-
-  const handleOpenOrFocusEditorFile = useCallback((
-    filePath: string,
-    sourceSession: WorkspaceSession | null,
-    options?: { targetPaneId?: StagePaneId | null },
-  ) => {
-    if (!sourceSession) {
-      return;
-    }
-
-    const { session } = openOrReuseEditorSession(
-      buildEditorOpenInputFromSession(sourceSession, filePath, { preferredTab: "edit" }),
-    );
-
-    setSidebarMode("projects");
-    showEditorSessionInStage(session.id, options);
-  }, [
-    buildEditorOpenInputFromSession,
-    openOrReuseEditorSession,
-    setSidebarMode,
-    showEditorSessionInStage,
-  ]);
-
-  const handleOpenOrFocusEditorChange = useCallback((
-    entry: GitChangeEntry,
-    mode: ChangesMode,
-    sourceSession: WorkspaceSession | null,
-  ) => {
-    if (!sourceSession) {
-      return;
-    }
-
-    const filePath = joinPath(sourceSession.path, entry.path);
-    const { session } = openOrReuseEditorSession(
-      buildEditorOpenInputFromSession(sourceSession, filePath, {
-        preferredTab: "diff",
-        diffMode: mode,
-        changeEntry: entry,
-      }),
-    );
-
-    setSidebarMode("projects");
-    showEditorSessionInStage(session.id);
-  }, [
-    buildEditorOpenInputFromSession,
-    openOrReuseEditorSession,
-    setSidebarMode,
-    showEditorSessionInStage,
-  ]);
-
-  const handleOpenOrFocusEditorSearchMatch = useCallback((
-    filePath: string,
-    lineNumber: number,
-    columnStart: number,
-    sourceSession: WorkspaceSession | null,
-  ) => {
-    if (!sourceSession) {
-      return;
-    }
-
-    const { session } = openOrReuseEditorSession(
-      buildEditorOpenInputFromSession(sourceSession, filePath, {
-        preferredTab: "edit",
-        focusLine: lineNumber,
-        focusColumn: columnStart,
-      }),
-    );
-
-    setSidebarMode("projects");
-    showEditorSessionInStage(session.id);
-  }, [
-    buildEditorOpenInputFromSession,
-    openOrReuseEditorSession,
-    setSidebarMode,
-    showEditorSessionInStage,
-  ]);
-
-  const createTargetedAgentSession = useCallback(async (input: {
-    provider: AgentProvider;
-    type: "project" | "divergence" | "workspace" | "workspace_divergence";
-    item: Project | Divergence | Workspace | WorkspaceDivergence;
-  }) => {
-    const path = "folderPath" in input.item ? input.item.folderPath : input.item.path;
-    const projectId = input.type === "project"
-      ? input.item.id
-      : input.type === "divergence"
-        ? (input.item as Divergence).projectId
-        : 0;
-    const workspaceOwnerId = input.type === "workspace"
-      ? input.item.id
-      : input.type === "workspace_divergence"
-        ? (input.item as WorkspaceDivergence).workspaceId
-        : undefined;
-    const existingConversationCount = Array.from(agentSessions.values()).filter((session) => (
-      session.provider === input.provider
-      && session.targetType === input.type
-      && session.targetId === input.item.id
-      && session.sessionRole === "default"
-    )).length;
-    const conversationSuffix = existingConversationCount > 0 ? ` ${existingConversationCount + 1}` : "";
-    const session = await createAgentSession({
-      provider: input.provider,
-      targetType: input.type,
-      targetId: input.item.id,
-      projectId,
-      workspaceOwnerId,
-      workspaceKey: buildWorkspaceKey(input.type, input.item.id),
-      sessionRole: "default",
-      nameMode: "default",
-      model: getAgentRuntimeProviderDefaultModel(agentRuntimeCapabilities, input.provider) ?? undefined,
-      name: `${input.item.name} • ${input.provider}${conversationSuffix}`,
-      path,
-    });
-    return session;
-  }, [
-    agentRuntimeCapabilities,
-    agentSessions,
-    createAgentSession,
-  ]);
-
-  const handleCreateAgentSession = useCallback(async (input: {
-    provider: AgentProvider;
-    type: "project" | "divergence" | "workspace" | "workspace_divergence";
-    item: Project | Divergence | Workspace | WorkspaceDivergence;
-  }) => {
-    const session = await createTargetedAgentSession(input);
-    setActiveSessionId(session.id);
-  }, [createTargetedAgentSession, setActiveSessionId]);
-
-  const handleSelectWorkspaceSession = useCallback(async (sessionId: string) => {
-    if (workspaceSessions.has(sessionId)) {
-      setActiveSessionId(sessionId);
-      return;
-    }
-
-    const agentSession = agentSessions.get(sessionId);
-    if (!agentSession) {
-      return;
-    }
-
-    if (!agentSession.isOpen) {
-      try {
-        await openAgentSession(sessionId);
-      } catch (error) {
-        console.warn("Failed to reopen agent session:", error);
+  const showEditorSessionInStage = useCallback(
+    (sessionId: string, options?: { targetPaneId?: StagePaneId | null }) => {
+      if (handleRevealStageSession(sessionId)) {
+        setActiveSessionId(sessionId);
         return;
       }
-    }
-    setActiveSessionId(sessionId);
-  }, [agentSessions, openAgentSession, setActiveSessionId, workspaceSessions]);
 
-  const ensureWorkspaceSessionId = useCallback((workspace: Workspace): string => {
-    const sessionId = `workspace-${workspace.id}`;
-    if (sessionsRef.current.has(sessionId)) {
-      return sessionId;
-    }
-
-    const session = buildWorkspaceTerminalSession({
-      workspace,
-      globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
-    });
-
-    setSessions((previous) => {
-      if (previous.has(sessionId)) {
-        return previous;
+      const ref: StagePaneRef = { kind: "editor", sessionId };
+      const targetPaneId =
+        options?.targetPaneId ?? stageLayout?.focusedPaneId ?? null;
+      if (stageLayout && targetPaneId) {
+        handleReplaceStagePaneRef(targetPaneId, ref);
+        setActiveSessionId(sessionId);
+        return;
       }
-      const next = new Map(previous);
-      next.set(sessionId, session);
-      return next;
-    });
 
-    return session.id;
-  }, [appSettings.tmuxHistoryLimit, sessionsRef, setSessions]);
+      handleCreateStageTabWithRef(ref);
+    },
+    [
+      handleCreateStageTabWithRef,
+      handleRevealStageSession,
+      handleReplaceStagePaneRef,
+      setActiveSessionId,
+      stageLayout,
+    ]
+  );
 
-  const ensureWorkspaceDivergenceSessionId = useCallback((workspaceDivergence: WorkspaceDivergence): string => {
-    const sessionId = `workspace_divergence-${workspaceDivergence.id}`;
-    if (sessionsRef.current.has(sessionId)) {
-      return sessionId;
-    }
-
-    const session = buildWorkspaceDivergenceTerminalSession({
-      workspaceDivergence,
-      globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
-      portAllocation: portAllocationByEntityKey.get(`workspace_divergence:${workspaceDivergence.id}`) ?? null,
-    });
-
-    setSessions((previous) => {
-      if (previous.has(sessionId)) {
-        return previous;
+  const handleOpenOrFocusEditorFile = useCallback(
+    (
+      filePath: string,
+      sourceSession: WorkspaceSession | null,
+      options?: { targetPaneId?: StagePaneId | null }
+    ) => {
+      if (!sourceSession) {
+        return;
       }
-      const next = new Map(previous);
-      next.set(sessionId, session);
-      return next;
-    });
 
-    return session.id;
-  }, [appSettings.tmuxHistoryLimit, portAllocationByEntityKey, sessionsRef, setSessions]);
+      const { session } = openOrReuseEditorSession(
+        buildEditorOpenInputFromSession(sourceSession, filePath, {
+          preferredTab: "edit",
+        })
+      );
 
-  const resolveQuickSwitcherSelectionRef = useCallback(async (
-    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
-    item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence,
-  ): Promise<StagePaneRef | null> => {
-    if (type === "project") {
-      const session = createSession("project", item as Project);
+      setSidebarMode("projects");
+      showEditorSessionInStage(session.id, options);
+    },
+    [
+      buildEditorOpenInputFromSession,
+      openOrReuseEditorSession,
+      setSidebarMode,
+      showEditorSessionInStage,
+    ]
+  );
+
+  const handleOpenOrFocusEditorChange = useCallback(
+    (
+      entry: GitChangeEntry,
+      mode: ChangesMode,
+      sourceSession: WorkspaceSession | null
+    ) => {
+      if (!sourceSession) {
+        return;
+      }
+
+      const filePath = joinPath(sourceSession.path, entry.path);
+      const { session } = openOrReuseEditorSession(
+        buildEditorOpenInputFromSession(sourceSession, filePath, {
+          preferredTab: "diff",
+          diffMode: mode,
+          changeEntry: entry,
+        })
+      );
+
+      setSidebarMode("projects");
+      showEditorSessionInStage(session.id);
+    },
+    [
+      buildEditorOpenInputFromSession,
+      openOrReuseEditorSession,
+      setSidebarMode,
+      showEditorSessionInStage,
+    ]
+  );
+
+  const handleOpenOrFocusEditorSearchMatch = useCallback(
+    (
+      filePath: string,
+      lineNumber: number,
+      columnStart: number,
+      sourceSession: WorkspaceSession | null
+    ) => {
+      if (!sourceSession) {
+        return;
+      }
+
+      const { session } = openOrReuseEditorSession(
+        buildEditorOpenInputFromSession(sourceSession, filePath, {
+          preferredTab: "edit",
+          focusLine: lineNumber,
+          focusColumn: columnStart,
+        })
+      );
+
+      setSidebarMode("projects");
+      showEditorSessionInStage(session.id);
+    },
+    [
+      buildEditorOpenInputFromSession,
+      openOrReuseEditorSession,
+      setSidebarMode,
+      showEditorSessionInStage,
+    ]
+  );
+
+  const createTargetedAgentSession = useCallback(
+    async (input: {
+      provider: AgentProvider;
+      type: "project" | "divergence" | "workspace" | "workspace_divergence";
+      item: Project | Divergence | Workspace | WorkspaceDivergence;
+    }) => {
+      const path =
+        "folderPath" in input.item ? input.item.folderPath : input.item.path;
+      const projectId =
+        input.type === "project"
+          ? input.item.id
+          : input.type === "divergence"
+            ? (input.item as Divergence).projectId
+            : 0;
+      const workspaceOwnerId =
+        input.type === "workspace"
+          ? input.item.id
+          : input.type === "workspace_divergence"
+            ? (input.item as WorkspaceDivergence).workspaceId
+            : undefined;
+      const existingConversationCount = Array.from(
+        agentSessions.values()
+      ).filter(
+        (session) =>
+          session.provider === input.provider &&
+          session.targetType === input.type &&
+          session.targetId === input.item.id &&
+          session.sessionRole === "default"
+      ).length;
+      const conversationSuffix =
+        existingConversationCount > 0
+          ? ` ${existingConversationCount + 1}`
+          : "";
+      const session = await createAgentSession({
+        provider: input.provider,
+        targetType: input.type,
+        targetId: input.item.id,
+        projectId,
+        workspaceOwnerId,
+        workspaceKey: buildWorkspaceKey(input.type, input.item.id),
+        sessionRole: "default",
+        nameMode: "default",
+        model:
+          getAgentRuntimeProviderDefaultModel(
+            agentRuntimeCapabilities,
+            input.provider
+          ) ?? undefined,
+        name: `${input.item.name} • ${input.provider}${conversationSuffix}`,
+        path,
+      });
+      return session;
+    },
+    [agentRuntimeCapabilities, agentSessions, createAgentSession]
+  );
+
+  const handleCreateAgentSession = useCallback(
+    async (input: {
+      provider: AgentProvider;
+      type: "project" | "divergence" | "workspace" | "workspace_divergence";
+      item: Project | Divergence | Workspace | WorkspaceDivergence;
+    }) => {
+      const session = await createTargetedAgentSession(input);
+      setActiveSessionId(session.id);
+    },
+    [createTargetedAgentSession, setActiveSessionId]
+  );
+
+  const handleSelectWorkspaceSession = useCallback(
+    async (sessionId: string) => {
+      if (workspaceSessions.has(sessionId)) {
+        setActiveSessionId(sessionId);
+        return;
+      }
+
+      const agentSession = agentSessions.get(sessionId);
+      if (!agentSession) {
+        return;
+      }
+
+      if (!agentSession.isOpen) {
+        try {
+          await openAgentSession(sessionId);
+        } catch (error) {
+          console.warn("Failed to reopen agent session:", error);
+          return;
+        }
+      }
+      setActiveSessionId(sessionId);
+    },
+    [agentSessions, openAgentSession, setActiveSessionId, workspaceSessions]
+  );
+
+  const ensureWorkspaceSessionId = useCallback(
+    (workspace: Workspace): string => {
+      const sessionId = `workspace-${workspace.id}`;
+      if (sessionsRef.current.has(sessionId)) {
+        return sessionId;
+      }
+
+      const session = buildWorkspaceTerminalSession({
+        workspace,
+        globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+      });
+
+      setSessions((previous) => {
+        if (previous.has(sessionId)) {
+          return previous;
+        }
+        const next = new Map(previous);
+        next.set(sessionId, session);
+        return next;
+      });
+
+      return session.id;
+    },
+    [appSettings.tmuxHistoryLimit, sessionsRef, setSessions]
+  );
+
+  const ensureWorkspaceDivergenceSessionId = useCallback(
+    (workspaceDivergence: WorkspaceDivergence): string => {
+      const sessionId = `workspace_divergence-${workspaceDivergence.id}`;
+      if (sessionsRef.current.has(sessionId)) {
+        return sessionId;
+      }
+
+      const session = buildWorkspaceDivergenceTerminalSession({
+        workspaceDivergence,
+        globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+        portAllocation:
+          portAllocationByEntityKey.get(
+            `workspace_divergence:${workspaceDivergence.id}`
+          ) ?? null,
+      });
+
+      setSessions((previous) => {
+        if (previous.has(sessionId)) {
+          return previous;
+        }
+        const next = new Map(previous);
+        next.set(sessionId, session);
+        return next;
+      });
+
+      return session.id;
+    },
+    [
+      appSettings.tmuxHistoryLimit,
+      portAllocationByEntityKey,
+      sessionsRef,
+      setSessions,
+    ]
+  );
+
+  const resolveQuickSwitcherSelectionRef = useCallback(
+    async (
+      type:
+        | "project"
+        | "divergence"
+        | "session"
+        | "workspace"
+        | "workspace_divergence",
+      item:
+        | Project
+        | Divergence
+        | WorkspaceSession
+        | Workspace
+        | WorkspaceDivergence
+    ): Promise<StagePaneRef | null> => {
+      if (type === "project") {
+        const session = createSession("project", item as Project);
+        return { kind: "terminal", sessionId: session.id };
+      }
+
+      if (type === "divergence") {
+        const session = createSession("divergence", item as Divergence);
+        return { kind: "terminal", sessionId: session.id };
+      }
+
+      if (type === "workspace") {
+        return {
+          kind: "terminal",
+          sessionId: ensureWorkspaceSessionId(item as Workspace),
+        };
+      }
+
+      if (type === "workspace_divergence") {
+        return {
+          kind: "terminal",
+          sessionId: ensureWorkspaceDivergenceSessionId(
+            item as WorkspaceDivergence
+          ),
+        };
+      }
+
+      const session = item as WorkspaceSession;
+      if (isAgentSession(session) && !workspaceSessions.has(session.id)) {
+        try {
+          await openAgentSession(session.id);
+        } catch (error) {
+          console.warn(
+            "Failed to reopen agent session from quick switcher:",
+            error
+          );
+          return null;
+        }
+      }
+
+      if (isAgentSession(session)) {
+        return { kind: "agent", sessionId: session.id };
+      }
+
+      if (isEditorSession(session)) {
+        return { kind: "editor", sessionId: session.id };
+      }
+
       return { kind: "terminal", sessionId: session.id };
-    }
+    },
+    [
+      createSession,
+      ensureWorkspaceDivergenceSessionId,
+      ensureWorkspaceSessionId,
+      openAgentSession,
+      workspaceSessions,
+    ]
+  );
 
-    if (type === "divergence") {
-      const session = createSession("divergence", item as Divergence);
-      return { kind: "terminal", sessionId: session.id };
-    }
-
-    if (type === "workspace") {
-      return { kind: "terminal", sessionId: ensureWorkspaceSessionId(item as Workspace) };
-    }
-
-    if (type === "workspace_divergence") {
-      return { kind: "terminal", sessionId: ensureWorkspaceDivergenceSessionId(item as WorkspaceDivergence) };
-    }
-
-    const session = item as WorkspaceSession;
-    if (isAgentSession(session) && !workspaceSessions.has(session.id)) {
-      try {
-        await openAgentSession(session.id);
-      } catch (error) {
-        console.warn("Failed to reopen agent session from quick switcher:", error);
-        return null;
+  const handleOpenQuickSwitcherSelectionInNewTab = useCallback(
+    async (
+      type:
+        | "project"
+        | "divergence"
+        | "session"
+        | "workspace"
+        | "workspace_divergence",
+      item:
+        | Project
+        | Divergence
+        | WorkspaceSession
+        | Workspace
+        | WorkspaceDivergence
+    ) => {
+      const ref = await resolveQuickSwitcherSelectionRef(type, item);
+      if (!ref || ref.kind === "pending") {
+        return;
       }
-    }
 
-    if (isAgentSession(session)) {
-      return { kind: "agent", sessionId: session.id };
-    }
-
-    if (isEditorSession(session)) {
-      return { kind: "editor", sessionId: session.id };
-    }
-
-    return { kind: "terminal", sessionId: session.id };
-  }, [
-    createSession,
-    ensureWorkspaceDivergenceSessionId,
-    ensureWorkspaceSessionId,
-    openAgentSession,
-    workspaceSessions,
-  ]);
-
-  const handleOpenQuickSwitcherSelectionInNewTab = useCallback(async (
-    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence",
-    item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence,
-  ) => {
-    const ref = await resolveQuickSwitcherSelectionRef(type, item);
-    if (!ref || ref.kind === "pending") {
-      return;
-    }
-
-    setSidebarMode("projects");
-    if (!handleCreateStageTabWithRef(ref)) {
-      notifyMaxStageTabsReached();
-      return;
-    }
-    setCommandCenterMode(null);
-  }, [
-    handleCreateStageTabWithRef,
-    notifyMaxStageTabsReached,
-    resolveQuickSwitcherSelectionRef,
-    setSidebarMode,
-  ]);
-
-  const handleRevealWorkspaceSession = useCallback(async (sessionId: string) => {
-    const session = sidebarSessions.get(sessionId);
-    if (!session) {
-      return;
-    }
-
-    const ref = await resolveQuickSwitcherSelectionRef("session", session);
-    if (!ref || ref.kind === "pending") {
-      return;
-    }
-
-    setSidebarMode("projects");
-    if (!handleRevealStageSession(ref.sessionId)) {
+      setSidebarMode("projects");
       if (!handleCreateStageTabWithRef(ref)) {
         notifyMaxStageTabsReached();
+        return;
       }
-    }
-  }, [
-    handleCreateStageTabWithRef,
-    handleRevealStageSession,
-    notifyMaxStageTabsReached,
-    resolveQuickSwitcherSelectionRef,
-    setSidebarMode,
-    sidebarSessions,
-  ]);
-
-  const handleRevealQuickSwitcherSelection = useCallback(async (
-    type: "project" | "divergence" | "session" | "workspace" | "workspace_divergence" | "stage_tab",
-    item: Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence | StageTab,
-  ) => {
-    if (type === "stage_tab") {
-      setSidebarMode("projects");
-      handleFocusStageTab((item as StageTab).id);
       setCommandCenterMode(null);
-      return;
-    }
+    },
+    [
+      handleCreateStageTabWithRef,
+      notifyMaxStageTabsReached,
+      resolveQuickSwitcherSelectionRef,
+      setSidebarMode,
+    ]
+  );
 
-    const revealItem = item as Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence;
-    const ref = await resolveQuickSwitcherSelectionRef(type, revealItem);
-    if (!ref || ref.kind === "pending") {
-      return;
-    }
-
-    setSidebarMode("projects");
-    if (!handleRevealStageSession(ref.sessionId)) {
-      await handleOpenQuickSwitcherSelectionInNewTab(type, revealItem);
-      return;
-    }
-    setCommandCenterMode(null);
-  }, [
-    handleOpenQuickSwitcherSelectionInNewTab,
-    handleFocusStageTab,
-    handleRevealStageSession,
-    resolveQuickSwitcherSelectionRef,
-    setSidebarMode,
-  ]);
-
-  const handleRevealProjectFromSidebar = useCallback((project: Project) => {
-    void handleRevealQuickSwitcherSelection("project", project);
-  }, [handleRevealQuickSwitcherSelection]);
-
-  const handleRevealDivergenceFromSidebar = useCallback((divergence: Divergence) => {
-    void handleRevealQuickSwitcherSelection("divergence", divergence);
-  }, [handleRevealQuickSwitcherSelection]);
-
-  const handleCreatePendingPaneSession = useCallback(async (
-    paneId: StagePaneId,
-    action: CreateAction,
-  ) => {
-    let ref: StagePaneRef | null = null;
-
-    if (action.sessionKind === "terminal") {
-      switch (action.targetType) {
-        case "project": {
-          const project = projectById.get(action.targetId);
-          if (!project) {
-            return;
-          }
-          const session = createManualSession("project", project);
-          ref = { kind: "terminal", sessionId: session.id };
-          break;
-        }
-        case "divergence": {
-          const divergence = divergenceById.get(action.targetId);
-          if (!divergence) {
-            return;
-          }
-          const session = createManualSession("divergence", divergence);
-          ref = { kind: "terminal", sessionId: session.id };
-          break;
-        }
-        case "workspace": {
-          const workspace = workspaceById.get(action.targetId);
-          if (!workspace) {
-            return;
-          }
-          ref = { kind: "terminal", sessionId: ensureWorkspaceSessionId(workspace) };
-          break;
-        }
-        case "workspace_divergence": {
-          const workspaceDivergence = workspaceDivergenceById.get(action.targetId);
-          if (!workspaceDivergence) {
-            return;
-          }
-          ref = { kind: "terminal", sessionId: ensureWorkspaceDivergenceSessionId(workspaceDivergence) };
-          break;
-        }
-      }
-    } else {
-      if (!action.provider) {
+  const handleRevealWorkspaceSession = useCallback(
+    async (sessionId: string) => {
+      const session = sidebarSessions.get(sessionId);
+      if (!session) {
         return;
       }
 
-      switch (action.targetType) {
-        case "project": {
-          const project = projectById.get(action.targetId);
-          if (!project) {
-            return;
-          }
-          const session = await createTargetedAgentSession({
-            provider: action.provider,
-            type: "project",
-            item: project,
-          });
-          ref = { kind: "agent", sessionId: session.id };
-          break;
-        }
-        case "divergence": {
-          const divergence = divergenceById.get(action.targetId);
-          if (!divergence) {
-            return;
-          }
-          const session = await createTargetedAgentSession({
-            provider: action.provider,
-            type: "divergence",
-            item: divergence,
-          });
-          ref = { kind: "agent", sessionId: session.id };
-          break;
-        }
-        case "workspace": {
-          const workspace = workspaceById.get(action.targetId);
-          if (!workspace) {
-            return;
-          }
-          const session = await createTargetedAgentSession({
-            provider: action.provider,
-            type: "workspace",
-            item: workspace,
-          });
-          ref = { kind: "agent", sessionId: session.id };
-          break;
-        }
-        case "workspace_divergence": {
-          const workspaceDivergence = workspaceDivergenceById.get(action.targetId);
-          if (!workspaceDivergence) {
-            return;
-          }
-          const session = await createTargetedAgentSession({
-            provider: action.provider,
-            type: "workspace_divergence",
-            item: workspaceDivergence,
-          });
-          ref = { kind: "agent", sessionId: session.id };
-          break;
+      const ref = await resolveQuickSwitcherSelectionRef("session", session);
+      if (!ref || ref.kind === "pending") {
+        return;
+      }
+
+      setSidebarMode("projects");
+      if (!handleRevealStageSession(ref.sessionId)) {
+        if (!handleCreateStageTabWithRef(ref)) {
+          notifyMaxStageTabsReached();
         }
       }
-    }
+    },
+    [
+      handleCreateStageTabWithRef,
+      handleRevealStageSession,
+      notifyMaxStageTabsReached,
+      resolveQuickSwitcherSelectionRef,
+      setSidebarMode,
+      sidebarSessions,
+    ]
+  );
 
-    if (!ref) {
-      return;
-    }
+  const handleRevealQuickSwitcherSelection = useCallback(
+    async (
+      type:
+        | "project"
+        | "divergence"
+        | "session"
+        | "workspace"
+        | "workspace_divergence"
+        | "stage_tab",
+      item:
+        | Project
+        | Divergence
+        | WorkspaceSession
+        | Workspace
+        | WorkspaceDivergence
+        | StageTab
+    ) => {
+      if (type === "stage_tab") {
+        setSidebarMode("projects");
+        handleFocusStageTab((item as StageTab).id);
+        setCommandCenterMode(null);
+        return;
+      }
 
-    setSidebarMode("projects");
-    handleReplaceStagePaneRef(paneId, ref);
-  }, [
-    createManualSession,
-    createTargetedAgentSession,
-    divergenceById,
-    ensureWorkspaceDivergenceSessionId,
-    ensureWorkspaceSessionId,
-    handleReplaceStagePaneRef,
-    projectById,
-    setSidebarMode,
-    workspaceById,
-    workspaceDivergenceById,
-  ]);
+      const revealItem = item as
+        | Project
+        | Divergence
+        | WorkspaceSession
+        | Workspace
+        | WorkspaceDivergence;
+      const ref = await resolveQuickSwitcherSelectionRef(type, revealItem);
+      if (!ref || ref.kind === "pending") {
+        return;
+      }
+
+      setSidebarMode("projects");
+      if (!handleRevealStageSession(ref.sessionId)) {
+        await handleOpenQuickSwitcherSelectionInNewTab(type, revealItem);
+        return;
+      }
+      setCommandCenterMode(null);
+    },
+    [
+      handleOpenQuickSwitcherSelectionInNewTab,
+      handleFocusStageTab,
+      handleRevealStageSession,
+      resolveQuickSwitcherSelectionRef,
+      setSidebarMode,
+    ]
+  );
+
+  const handleRevealProjectFromSidebar = useCallback(
+    (project: Project) => {
+      void handleRevealQuickSwitcherSelection("project", project);
+    },
+    [handleRevealQuickSwitcherSelection]
+  );
+
+  const handleRevealDivergenceFromSidebar = useCallback(
+    (divergence: Divergence) => {
+      void handleRevealQuickSwitcherSelection("divergence", divergence);
+    },
+    [handleRevealQuickSwitcherSelection]
+  );
+
+  const handleCreatePendingPaneSession = useCallback(
+    async (paneId: StagePaneId, action: CreateAction) => {
+      let ref: StagePaneRef | null = null;
+
+      if (action.sessionKind === "terminal") {
+        switch (action.targetType) {
+          case "project": {
+            const project = projectById.get(action.targetId);
+            if (!project) {
+              return;
+            }
+            const session = createManualSession("project", project);
+            ref = { kind: "terminal", sessionId: session.id };
+            break;
+          }
+          case "divergence": {
+            const divergence = divergenceById.get(action.targetId);
+            if (!divergence) {
+              return;
+            }
+            const session = createManualSession("divergence", divergence);
+            ref = { kind: "terminal", sessionId: session.id };
+            break;
+          }
+          case "workspace": {
+            const workspace = workspaceById.get(action.targetId);
+            if (!workspace) {
+              return;
+            }
+            ref = {
+              kind: "terminal",
+              sessionId: ensureWorkspaceSessionId(workspace),
+            };
+            break;
+          }
+          case "workspace_divergence": {
+            const workspaceDivergence = workspaceDivergenceById.get(
+              action.targetId
+            );
+            if (!workspaceDivergence) {
+              return;
+            }
+            ref = {
+              kind: "terminal",
+              sessionId:
+                ensureWorkspaceDivergenceSessionId(workspaceDivergence),
+            };
+            break;
+          }
+        }
+      } else {
+        if (!action.provider) {
+          return;
+        }
+
+        switch (action.targetType) {
+          case "project": {
+            const project = projectById.get(action.targetId);
+            if (!project) {
+              return;
+            }
+            const session = await createTargetedAgentSession({
+              provider: action.provider,
+              type: "project",
+              item: project,
+            });
+            ref = { kind: "agent", sessionId: session.id };
+            break;
+          }
+          case "divergence": {
+            const divergence = divergenceById.get(action.targetId);
+            if (!divergence) {
+              return;
+            }
+            const session = await createTargetedAgentSession({
+              provider: action.provider,
+              type: "divergence",
+              item: divergence,
+            });
+            ref = { kind: "agent", sessionId: session.id };
+            break;
+          }
+          case "workspace": {
+            const workspace = workspaceById.get(action.targetId);
+            if (!workspace) {
+              return;
+            }
+            const session = await createTargetedAgentSession({
+              provider: action.provider,
+              type: "workspace",
+              item: workspace,
+            });
+            ref = { kind: "agent", sessionId: session.id };
+            break;
+          }
+          case "workspace_divergence": {
+            const workspaceDivergence = workspaceDivergenceById.get(
+              action.targetId
+            );
+            if (!workspaceDivergence) {
+              return;
+            }
+            const session = await createTargetedAgentSession({
+              provider: action.provider,
+              type: "workspace_divergence",
+              item: workspaceDivergence,
+            });
+            ref = { kind: "agent", sessionId: session.id };
+            break;
+          }
+        }
+      }
+
+      if (!ref) {
+        return;
+      }
+
+      setSidebarMode("projects");
+      handleReplaceStagePaneRef(paneId, ref);
+    },
+    [
+      createManualSession,
+      createTargetedAgentSession,
+      divergenceById,
+      ensureWorkspaceDivergenceSessionId,
+      ensureWorkspaceSessionId,
+      handleReplaceStagePaneRef,
+      projectById,
+      setSidebarMode,
+      workspaceById,
+      workspaceDivergenceById,
+    ]
+  );
 
   const sourceSessionForCommandCenter = useMemo(() => {
     // Explicit source for open-in-pane
-    if (commandCenterMode?.kind === "open-in-pane" && commandCenterMode.sourceSessionId) {
+    if (
+      commandCenterMode?.kind === "open-in-pane" &&
+      commandCenterMode.sourceSessionId
+    ) {
       return workspaceSessions.get(commandCenterMode.sourceSessionId) ?? null;
     }
 
@@ -1186,8 +1385,14 @@ function App() {
     }
 
     // Target pane's session (e.g. replace mode when focused pane is pending)
-    if (commandCenterMode && "targetPaneId" in commandCenterMode && stageLayout) {
-      const targetPane = stageLayout.panes.find((p) => p.id === commandCenterMode.targetPaneId);
+    if (
+      commandCenterMode &&
+      "targetPaneId" in commandCenterMode &&
+      stageLayout
+    ) {
+      const targetPane = stageLayout.panes.find(
+        (p) => p.id === commandCenterMode.targetPaneId
+      );
       if (targetPane && targetPane.ref.kind !== "pending") {
         const session = workspaceSessions.get(targetPane.ref.sessionId);
         if (session) return session;
@@ -1207,95 +1412,126 @@ function App() {
     return null;
   }, [commandCenterMode, activeSessionId, workspaceSessions, stageLayout]);
 
-  const handleCommandCenterSelect = useCallback(async (result: CommandCenterSearchResult) => {
-    if (!commandCenterMode) return;
+  const handleCommandCenterSelect = useCallback(
+    async (result: CommandCenterSearchResult) => {
+      if (!commandCenterMode) return;
 
-    const mode = commandCenterMode;
-    const targetPaneId = "targetPaneId" in mode ? mode.targetPaneId : stageLayout?.focusedPaneId ?? null;
+      const mode = commandCenterMode;
+      const targetPaneId =
+        "targetPaneId" in mode
+          ? mode.targetPaneId
+          : stageLayout?.focusedPaneId ?? null;
 
-    if (mode.kind === "reveal") {
-      void handleRevealQuickSwitcherSelection(result.type as "project" | "divergence" | "session" | "workspace" | "workspace_divergence" | "stage_tab", result.item as Project | Divergence | WorkspaceSession | Workspace | WorkspaceDivergence | StageTab);
-      return;
-    }
-
-    if (result.type === "file") {
-      const file = result.item as { relativePath: string };
-      const rootPath = mode.kind === "open-file"
-        ? mode.rootPath
-        : (sourceSessionForCommandCenter?.path ?? "");
-      const absolutePath = getFileAbsolutePath(rootPath, file.relativePath);
-      handleOpenOrFocusEditorFile(absolutePath, sourceSessionForCommandCenter, { targetPaneId });
-      setCommandCenterMode(null);
-      return;
-    }
-
-    if (result.type === "create_action") {
-      const action = result.item as CreateAction;
-      if (targetPaneId) {
-        await handleCreatePendingPaneSession(targetPaneId as StagePaneId, action);
+      if (mode.kind === "reveal") {
+        void handleRevealQuickSwitcherSelection(
+          result.type as
+          | "project"
+          | "divergence"
+          | "session"
+          | "workspace"
+          | "workspace_divergence"
+          | "stage_tab",
+          result.item as
+          | Project
+          | Divergence
+          | WorkspaceSession
+          | Workspace
+          | WorkspaceDivergence
+          | StageTab
+        );
+        return;
       }
-      setCommandCenterMode(null);
-      return;
-    }
 
-    if (result.type === "project") {
-      handleSelectProject(result.item as Project);
-      setCommandCenterMode(null);
-      return;
-    }
+      if (result.type === "file") {
+        const file = result.item as { relativePath: string };
+        const rootPath =
+          mode.kind === "open-file"
+            ? mode.rootPath
+            : sourceSessionForCommandCenter?.path ?? "";
+        const absolutePath = getFileAbsolutePath(rootPath, file.relativePath);
+        handleOpenOrFocusEditorFile(
+          absolutePath,
+          sourceSessionForCommandCenter,
+          { targetPaneId }
+        );
+        setCommandCenterMode(null);
+        return;
+      }
 
-    if (result.type === "divergence") {
-      handleSelectDivergence(result.item as Divergence);
-      setCommandCenterMode(null);
-      return;
-    }
+      if (result.type === "create_action") {
+        const action = result.item as CreateAction;
+        if (targetPaneId) {
+          await handleCreatePendingPaneSession(
+            targetPaneId as StagePaneId,
+            action
+          );
+        }
+        setCommandCenterMode(null);
+        return;
+      }
 
-    if (result.type === "workspace") {
-      handleSelectWorkspace(result.item as Workspace);
-      setCommandCenterMode(null);
-      return;
-    }
+      if (result.type === "project") {
+        handleSelectProject(result.item as Project);
+        setCommandCenterMode(null);
+        return;
+      }
 
-    if (result.type === "workspace_divergence") {
-      handleSelectWorkspaceDivergence(result.item as WorkspaceDivergence);
-      setCommandCenterMode(null);
-      return;
-    }
+      if (result.type === "divergence") {
+        handleSelectDivergence(result.item as Divergence);
+        setCommandCenterMode(null);
+        return;
+      }
 
-    if (result.type === "session") {
-      setSidebarMode("projects");
-      void handleSelectWorkspaceSession((result.item as WorkspaceSession).id);
-      setCommandCenterMode(null);
-      return;
-    }
+      if (result.type === "workspace") {
+        handleSelectWorkspace(result.item as Workspace);
+        setCommandCenterMode(null);
+        return;
+      }
 
-    if (result.type === "stage_tab") {
-      setSidebarMode("projects");
-      handleFocusStageTab((result.item as StageTab).id);
-      setCommandCenterMode(null);
-      return;
-    }
-  }, [
-    commandCenterMode,
-    handleCreatePendingPaneSession,
-    handleFocusStageTab,
-    handleOpenOrFocusEditorFile,
-    handleRevealQuickSwitcherSelection,
-    handleSelectDivergence,
-    handleSelectProject,
-    handleSelectWorkspace,
-    handleSelectWorkspaceDivergence,
-    handleSelectWorkspaceSession,
-    setSidebarMode,
-    sourceSessionForCommandCenter,
-    stageLayout,
-  ]);
+      if (result.type === "workspace_divergence") {
+        handleSelectWorkspaceDivergence(result.item as WorkspaceDivergence);
+        setCommandCenterMode(null);
+        return;
+      }
+
+      if (result.type === "session") {
+        setSidebarMode("projects");
+        void handleSelectWorkspaceSession((result.item as WorkspaceSession).id);
+        setCommandCenterMode(null);
+        return;
+      }
+
+      if (result.type === "stage_tab") {
+        setSidebarMode("projects");
+        handleFocusStageTab((result.item as StageTab).id);
+        setCommandCenterMode(null);
+        return;
+      }
+    },
+    [
+      commandCenterMode,
+      handleCreatePendingPaneSession,
+      handleFocusStageTab,
+      handleOpenOrFocusEditorFile,
+      handleRevealQuickSwitcherSelection,
+      handleSelectDivergence,
+      handleSelectProject,
+      handleSelectWorkspace,
+      handleSelectWorkspaceDivergence,
+      handleSelectWorkspaceSession,
+      setSidebarMode,
+      sourceSessionForCommandCenter,
+      stageLayout,
+    ]
+  );
 
   const handleCloseWorkspaceSession = (sessionId: string) => {
     if (editorSessions.has(sessionId)) {
       const closed = closeEditorSession(sessionId);
       if (closed) {
-        setActiveSessionId((current) => current === sessionId ? null : current);
+        setActiveSessionId((current) =>
+          current === sessionId ? null : current
+        );
       }
       return;
     }
@@ -1308,14 +1544,14 @@ function App() {
     void closeAgentSession(sessionId).catch((error) => {
       console.warn("Failed to close agent session:", error);
     });
-    setActiveSessionId((current) => current === sessionId ? null : current);
+    setActiveSessionId((current) => (current === sessionId ? null : current));
   };
 
   const handleDeleteAgentConversation = (sessionId: string) => {
     void deleteAgentSession(sessionId).catch((error) => {
       console.warn("Failed to delete agent session:", error);
     });
-    setActiveSessionId((current) => current === sessionId ? null : current);
+    setActiveSessionId((current) => (current === sessionId ? null : current));
   };
 
   const handleRenameAgentConversation = (sessionId: string) => {
@@ -1351,11 +1587,13 @@ function App() {
       sessionId: renameAgentSessionState.sessionId,
       name: trimmedName,
       nameMode: "manual",
-    }).catch((error) => {
-      console.warn("Failed to rename agent session:", error);
-    }).finally(() => {
-      setRenameAgentSessionState(null);
-    });
+    })
+      .catch((error) => {
+        console.warn("Failed to rename agent session:", error);
+      })
+      .finally(() => {
+        setRenameAgentSessionState(null);
+      });
   };
 
   useEffect(() => {
@@ -1388,11 +1626,13 @@ function App() {
         sessionId: session.id,
         name: suggestedTitle,
         nameMode: "auto",
-      }).catch((error) => {
-        console.warn("Failed to auto-rename agent session:", error);
-      }).finally(() => {
-        renamingAgentSessionIdsRef.current.delete(session.id);
-      });
+      })
+        .catch((error) => {
+          console.warn("Failed to auto-rename agent session:", error);
+        })
+        .finally(() => {
+          renamingAgentSessionIdsRef.current.delete(session.id);
+        });
     });
   }, [agentSessions, updateAgentSession]);
 
@@ -1450,7 +1690,7 @@ function App() {
   // Flatten divergences for merge detection
   const allDivergences = useMemo(() => {
     const all: Divergence[] = [];
-    divergencesByProject.forEach(divs => all.push(...divs));
+    divergencesByProject.forEach((divs) => all.push(...divs));
     return all;
   }, [divergencesByProject]);
 
@@ -1469,7 +1709,8 @@ function App() {
   useEffect(() => {
     const theme = appSettings.theme ?? "dark";
     document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme === "light" ? "light" : "dark";
+    document.documentElement.style.colorScheme =
+      theme === "light" ? "light" : "dark";
   }, [appSettings.theme]);
 
   const editorTheme =
@@ -1478,14 +1719,16 @@ function App() {
       : DEFAULT_EDITOR_THEME_DARK;
   const workspaceSessionList = useMemo(
     () => Array.from(workspaceSessions.values()),
-    [workspaceSessions],
+    [workspaceSessions]
   );
-  const [lastViewedRuntimeEventAtMsBySessionId, setLastViewedRuntimeEventAtMsBySessionId] = useState<Map<string, number>>(
-    () => new Map(),
-  );
-  const [dismissedAttentionKeyBySessionId, setDismissedAttentionKeyBySessionId] = useState<Map<string, string>>(
-    () => new Map(),
-  );
+  const [
+    lastViewedRuntimeEventAtMsBySessionId,
+    setLastViewedRuntimeEventAtMsBySessionId,
+  ] = useState<Map<string, number>>(() => new Map());
+  const [
+    dismissedAttentionKeyBySessionId,
+    setDismissedAttentionKeyBySessionId,
+  ] = useState<Map<string, string>>(() => new Map());
   const agentProviders = useMemo(() => {
     const available = getAvailableAgentProviders(agentRuntimeCapabilities);
     return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
@@ -1530,15 +1773,20 @@ function App() {
 
     const attentionOptions = {
       hasIdleAttention: idleAttentionSessionIds.has(sessionId),
-      lastViewedRuntimeEventAtMs: lastViewedRuntimeEventAtMsBySessionId.get(sessionId) ?? null,
+      lastViewedRuntimeEventAtMs:
+        lastViewedRuntimeEventAtMsBySessionId.get(sessionId) ?? null,
     };
-    const attentionKey = getWorkspaceSessionAttentionKey(session, attentionOptions);
+    const attentionKey = getWorkspaceSessionAttentionKey(
+      session,
+      attentionOptions
+    );
     if (!attentionKey) {
       return;
     }
 
     if (isAgentSession(session)) {
-      const lastRuntimeEventAtMs = session.lastRuntimeEventAtMs ?? session.updatedAtMs;
+      const lastRuntimeEventAtMs =
+        session.lastRuntimeEventAtMs ?? session.updatedAtMs;
       if (lastRuntimeEventAtMs) {
         setLastViewedRuntimeEventAtMsBySessionId((previous) => {
           if (previous.get(sessionId) === lastRuntimeEventAtMs) {
@@ -1594,8 +1842,10 @@ function App() {
         const attentionState = getWorkspaceSessionAttentionState(session, {
           isActive: session.id === activeSessionId,
           hasIdleAttention: idleAttentionSessionIds.has(session.id),
-          lastViewedRuntimeEventAtMs: lastViewedRuntimeEventAtMsBySessionId.get(session.id) ?? null,
-          dismissedAttentionKey: dismissedAttentionKeyBySessionId.get(session.id) ?? null,
+          lastViewedRuntimeEventAtMs:
+            lastViewedRuntimeEventAtMsBySessionId.get(session.id) ?? null,
+          dismissedAttentionKey:
+            dismissedAttentionKeyBySessionId.get(session.id) ?? null,
         });
 
         return Boolean(attentionState) || session.status === "busy";
@@ -1619,9 +1869,8 @@ function App() {
   return (
     <div className="flex h-full w-full">
       <div
-        className={`h-full shrink-0 overflow-hidden${
-          isDraggingSidebar ? "" : " transition-[width] duration-200 ease-out"
-        }`}
+        className={`h-full shrink-0 overflow-hidden${isDraggingSidebar ? "" : " transition-[width] duration-200 ease-out"
+          }`}
         style={{ width: isSidebarOpen ? sidebarWidth : 0 }}
       >
         <Sidebar
@@ -1636,7 +1885,9 @@ function App() {
           sessions={sidebarSessions}
           activeSessionId={activeSessionId}
           idleAttentionSessionIds={idleAttentionSessionIds}
-          lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+          lastViewedRuntimeEventAtMsBySessionId={
+            lastViewedRuntimeEventAtMsBySessionId
+          }
           dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           createDivergenceFor={createDivergenceFor}
           onCreateDivergenceForChange={setCreateDivergenceFor}
@@ -1712,7 +1963,9 @@ function App() {
               startAgentTurn={startAgentTurn}
               deleteAgentSession={deleteAgentSession}
               onOpenReviewDivergence={handleOpenPrReviewDivergence}
-              onOpenConflictResolutionDivergence={handleOpenPrConflictResolutionDivergence}
+              onOpenConflictResolutionDivergence={
+                handleOpenPrConflictResolutionDivergence
+              }
             />
           )}
           {workTab === "task_center" && (
@@ -1746,7 +1999,9 @@ function App() {
             <PortDashboard
               projects={projects}
               divergencesByProject={divergencesByProject}
-              workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
+              workspaceDivergences={Array.from(
+                workspaceDivergencesByWorkspaceId.values()
+              ).flat()}
             />
           )}
           {workTab === "debug" && <DebugConsolePanel />}
@@ -1762,7 +2017,9 @@ function App() {
           sessionList={workspaceSessionList}
           activeSessionId={activeSessionId}
           idleAttentionSessionIds={idleAttentionSessionIds}
-          lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+          lastViewedRuntimeEventAtMsBySessionId={
+            lastViewedRuntimeEventAtMsBySessionId
+          }
           dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
           projects={projects}
           agentProviders={agentProviders}
@@ -1802,7 +2059,11 @@ function App() {
           onResetToSinglePane={handleResetStageToSinglePane}
           onFocusPane={handleFocusStagePane}
           onOpenCommandCenter={(paneId, sourceSessionId) => {
-            setCommandCenterMode({ kind: "open-in-pane", targetPaneId: paneId, sourceSessionId });
+            setCommandCenterMode({
+              kind: "open-in-pane",
+              targetPaneId: paneId,
+              sourceSessionId,
+            });
           }}
           onClosePane={handleCloseStagePane}
           onResizeStageAdjacentPanes={handleResizeStageAdjacentPanes}
@@ -1823,7 +2084,9 @@ function App() {
           onRunReviewAgentRequest={handleRunReviewAgent}
           onProjectSettingsSaved={updateProjectSettings}
           onSendPromptToSession={handleSendPromptToSession}
-          onUpdateSessionSettings={(sessionId, input) => updateAgentSession({ sessionId, ...input })}
+          onUpdateSessionSettings={(sessionId, input) =>
+            updateAgentSession({ sessionId, ...input })
+          }
           onSendPrompt={startAgentTurn}
           onStageAttachment={stageAgentAttachment}
           onDiscardAttachment={discardAgentAttachment}
@@ -1842,7 +2105,9 @@ function App() {
             sessions={workspaceSessions}
             stageTabs={tabGroup?.tabs ?? []}
             workspaces={workspaceList}
-            workspaceDivergences={Array.from(workspaceDivergencesByWorkspaceId.values()).flat()}
+            workspaceDivergences={Array.from(
+              workspaceDivergencesByWorkspaceId.values()
+            ).flat()}
             agentProviders={agentProviders}
             excludePatterns={appSettings.commandCenterExcludePatterns}
             respectGitignore={appSettings.commandCenterRespectGitignore}
@@ -1894,19 +2159,23 @@ function App() {
 
       {/* Create Workspace Divergence Modal */}
       <AnimatePresence>
-        {createWorkspaceDivergenceFor && (() => {
-          const wsMembers = membersByWorkspaceId.get(createWorkspaceDivergenceFor.id) ?? [];
-          const memberProjectIds = new Set(wsMembers.map((m) => m.projectId));
-          const memberProjects = projects.filter((p) => memberProjectIds.has(p.id));
-          return (
-            <CreateWorkspaceDivergenceModal
-              workspace={createWorkspaceDivergenceFor}
-              memberProjects={memberProjects}
-              onClose={() => setCreateWorkspaceDivergenceFor(null)}
-              onCreateDivergences={handleCreateWorkspaceDivergences}
-            />
-          );
-        })()}
+        {createWorkspaceDivergenceFor &&
+          (() => {
+            const wsMembers =
+              membersByWorkspaceId.get(createWorkspaceDivergenceFor.id) ?? [];
+            const memberProjectIds = new Set(wsMembers.map((m) => m.projectId));
+            const memberProjects = projects.filter((p) =>
+              memberProjectIds.has(p.id)
+            );
+            return (
+              <CreateWorkspaceDivergenceModal
+                workspace={createWorkspaceDivergenceFor}
+                memberProjects={memberProjects}
+                onClose={() => setCreateWorkspaceDivergenceFor(null)}
+                onCreateDivergences={handleCreateWorkspaceDivergences}
+              />
+            );
+          })()}
       </AnimatePresence>
 
       <AnimatePresence>
@@ -1924,9 +2193,12 @@ function App() {
               }}
             >
               <div className="p-4 border-b border-surface">
-                <h2 className="text-lg font-semibold text-text">Rename Conversation</h2>
+                <h2 className="text-lg font-semibold text-text">
+                  Rename Conversation
+                </h2>
                 <p className="text-xs text-subtext mt-1">
-                  Give this conversation a custom name. Manual names stay fixed and will not be auto-renamed.
+                  Give this conversation a custom name. Manual names stay fixed
+                  and will not be auto-renamed.
                 </p>
               </div>
 
@@ -1991,11 +2263,21 @@ function App() {
                 size="xs"
                 className="text-subtext hover:text-text"
                 label="Dismiss restored tabs notification"
-                icon={(
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                icon={
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
-                )}
+                }
               />
             </div>
           </div>
@@ -2003,48 +2285,66 @@ function App() {
       )}
 
       {/* Update Banner */}
-      {!bannerDismissed && (updater.status === "available" || updater.status === "downloading" || updater.status === "error") && (
-        <div className={`fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm text-white shadow-lg ${
-          updater.status === "error" ? "bg-red-600" : "bg-blue-600"
-        }`}>
-          <div className="flex items-center gap-3">
-            {updater.status === "available" && (
-              <>
-                <span>Update {updater.version} available</span>
-                <Button
-                  onClick={updater.downloadAndInstall}
-                  variant="secondary"
-                  size="xs"
-                  className="rounded bg-white px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
-                >
-                  Install & Restart
-                </Button>
-              </>
-            )}
-            {updater.status === "downloading" && (
-              <>
-                <span>Downloading update... {updater.progress}%</span>
-                <ProgressBar value={updater.progress} className="w-24 bg-blue-400" barClassName="bg-white" />
-              </>
-            )}
-            {updater.status === "error" && (
-              <span>{updater.error ?? "Update check failed"}</span>
-            )}
-            <IconButton
-              onClick={() => setBannerDismissed(true)}
-              variant="ghost"
-              size="xs"
-              className="ml-1 rounded p-0.5 hover:bg-white/20"
-              label="Dismiss"
-              icon={(
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+      {!bannerDismissed &&
+        (updater.status === "available" ||
+          updater.status === "downloading" ||
+          updater.status === "error") && (
+          <div
+            className={`fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 text-sm text-white shadow-lg ${updater.status === "error" ? "bg-red-600" : "bg-blue-600"
+              }`}
+          >
+            <div className="flex items-center gap-3">
+              {updater.status === "available" && (
+                <>
+                  <span>Update {updater.version} available</span>
+                  <Button
+                    onClick={updater.downloadAndInstall}
+                    variant="secondary"
+                    size="xs"
+                    className="rounded bg-white px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+                  >
+                    Install & Restart
+                  </Button>
+                </>
               )}
-            />
+              {updater.status === "downloading" && (
+                <>
+                  <span>Downloading update... {updater.progress}%</span>
+                  <ProgressBar
+                    value={updater.progress}
+                    className="w-24 bg-blue-400"
+                    barClassName="bg-white"
+                  />
+                </>
+              )}
+              {updater.status === "error" && (
+                <span>{updater.error ?? "Update check failed"}</span>
+              )}
+              <IconButton
+                onClick={() => setBannerDismissed(true)}
+                variant="ghost"
+                size="xs"
+                className="ml-1 rounded p-0.5 hover:bg-white/20"
+                label="Dismiss"
+                icon={
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                }
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
       <Toaster />
     </div>
   );

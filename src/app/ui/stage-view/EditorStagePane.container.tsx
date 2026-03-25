@@ -3,7 +3,7 @@ import EditorSessionView from "../../../widgets/editor-session-view";
 import type {
   EditorSessionRuntimeState,
   EditorSessionViewState,
-} from "../../model/useEditorSessionManagement";
+} from "../../model/useEditorSessionRegistry";
 import type { EditorThemeId } from "../../../shared";
 
 interface EditorStagePaneProps {

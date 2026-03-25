@@ -110,12 +110,17 @@ export {
 } from "./stage-layout";
 export {
   areSplitPaneSizesEqual,
+  buildTerminalSession,
   buildEqualSplitPaneSizes,
+  buildWorkspaceDivergenceTerminalSession,
+  buildWorkspaceKey,
+  buildWorkspaceTerminalSession,
   MAX_SPLIT_PANES,
   normalizeSplitPaneSizes,
   resizeSplitPaneSizes,
   SECONDARY_SPLIT_PANE_IDS,
   SPLIT_PANE_IDS,
+  generateSessionEntropy,
 } from "./terminal-session";
 export type {
   BackgroundTask,

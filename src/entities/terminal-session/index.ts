@@ -22,6 +22,13 @@ export {
   countOrphanTmuxSessions,
 } from "./lib/tmuxOwnership.pure";
 export {
+  buildTerminalSession,
+  buildWorkspaceDivergenceTerminalSession,
+  buildWorkspaceKey,
+  buildWorkspaceTerminalSession,
+  generateSessionEntropy,
+} from "./lib/sessionBuilder.pure";
+export {
   areSplitPaneSizesEqual,
   buildEqualSplitPaneSizes,
   normalizeSplitPaneSizes,

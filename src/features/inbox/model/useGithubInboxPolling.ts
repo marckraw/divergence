@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Project } from "../../entities";
-import { getRalphyConfigSummary } from "../../shared/api/ralphyConfig.api";
+import type { Project } from "../../../entities";
 import {
   getGithubPollState,
   insertInboxEvent,
   upsertGithubPollState,
-} from "../../entities/inbox-event";
+} from "../../../entities/inbox-event";
+import { getRalphyConfigSummary } from "../../../shared/api/ralphyConfig.api";
+import { fetchGithubPullRequests } from "../api/githubPullRequests.api";
 import {
   buildGithubInboxBody,
   buildGithubInboxExternalId,
@@ -13,8 +14,7 @@ import {
   buildGithubRepoTarget,
   classifyGithubPullRequestEvent,
 } from "../lib/githubInbox.pure";
-import { fetchGithubPullRequests } from "../api/githubPullRequests.api";
-import type { GithubRepoTarget } from "./githubPullRequests.types";
+import type { GithubRepoTarget } from "./githubInbox.types";
 
 const GITHUB_POLL_INTERVAL_MS = 2 * 60_000;
 const GITHUB_INITIAL_POLL_DELAY_MS = 15_000;
@@ -32,7 +32,9 @@ export function useGithubInboxPolling({
   appSettings,
   onRefreshInbox,
 }: UseGithubInboxPollingParams) {
-  const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>([]);
+  const [githubRepoTargets, setGithubRepoTargets] = useState<GithubRepoTarget[]>(
+    []
+  );
   const githubRepoTargetsRef = useRef<GithubRepoTarget[]>([]);
   const githubPollingInFlightRef = useRef(false);
   const githubTokenWarningShownRef = useRef(false);
@@ -47,30 +49,37 @@ export function useGithubInboxPolling({
       return;
     }
 
-    const targets = await Promise.all(projects.map(async (project) => {
-      try {
-        const config = await getRalphyConfigSummary(project.path);
-        if (config.status !== "ok") {
+    const targets = await Promise.all(
+      projects.map(async (project) => {
+        try {
+          const config = await getRalphyConfigSummary(project.path);
+          if (config.status !== "ok") {
+            return null;
+          }
+          const owner = config.summary.integrations?.github?.owner?.trim();
+          const repo = config.summary.integrations?.github?.repo?.trim();
+          if (!owner || !repo) {
+            return null;
+          }
+          return buildGithubRepoTarget({
+            projectId: project.id,
+            projectName: project.name,
+            owner,
+            repo,
+          });
+        } catch (error) {
+          console.warn(
+            `Failed to load Ralphy config for ${project.name}:`,
+            error
+          );
           return null;
         }
-        const owner = config.summary.integrations?.github?.owner?.trim();
-        const repo = config.summary.integrations?.github?.repo?.trim();
-        if (!owner || !repo) {
-          return null;
-        }
-        return buildGithubRepoTarget({
-          projectId: project.id,
-          projectName: project.name,
-          owner,
-          repo,
-        });
-      } catch (error) {
-        console.warn(`Failed to load Ralphy config for ${project.name}:`, error);
-        return null;
-      }
-    }));
+      })
+    );
 
-    setGithubRepoTargets(targets.filter((target): target is GithubRepoTarget => target !== null));
+    setGithubRepoTargets(
+      targets.filter((target): target is GithubRepoTarget => target !== null)
+    );
   }, [projects]);
 
   useEffect(() => {
@@ -86,7 +95,9 @@ export function useGithubInboxPolling({
     if (!githubToken) {
       if (!githubTokenWarningShownRef.current) {
         githubTokenWarningShownRef.current = true;
-        console.warn("GitHub polling is disabled because no GitHub token is configured in Settings.");
+        console.warn(
+          "GitHub polling is disabled because no GitHub token is configured in Settings."
+        );
       }
       return;
     }
@@ -110,22 +121,33 @@ export function useGithubInboxPolling({
 
         let pullRequests;
         try {
-          pullRequests = await fetchGithubPullRequests(githubToken, repoTarget.owner, repoTarget.repo);
+          pullRequests = await fetchGithubPullRequests(
+            githubToken,
+            repoTarget.owner,
+            repoTarget.repo
+          );
         } catch (error) {
-          console.warn(`GitHub polling failed for ${repoTarget.repoKey}:`, error);
+          console.warn(
+            `GitHub polling failed for ${repoTarget.repoKey}:`,
+            error
+          );
           continue;
         }
 
         for (const pullRequest of pullRequests) {
           try {
-            const kind = classifyGithubPullRequestEvent(pullRequest, lastPolledAtMs);
+            const kind = classifyGithubPullRequestEvent(
+              pullRequest,
+              lastPolledAtMs
+            );
             if (!kind) {
               continue;
             }
 
-            const eventAtMs = kind === "github_pr_opened"
-              ? pullRequest.createdAtMs
-              : pullRequest.updatedAtMs;
+            const eventAtMs =
+              kind === "github_pr_opened"
+                ? pullRequest.createdAtMs
+                : pullRequest.updatedAtMs;
             const insertedId = await insertInboxEvent({
               kind,
               source: "github",
@@ -136,7 +158,11 @@ export function useGithubInboxPolling({
                 kind,
                 eventAtMs
               ),
-              title: buildGithubInboxTitle(repoTarget.repoKey, pullRequest.number, kind),
+              title: buildGithubInboxTitle(
+                repoTarget.repoKey,
+                pullRequest.number,
+                kind
+              ),
               body: buildGithubInboxBody(pullRequest),
               payloadJson: JSON.stringify({
                 projectId: repoTarget.projectId,
@@ -149,7 +175,10 @@ export function useGithubInboxPolling({
               insertedCount += 1;
             }
           } catch (error) {
-            console.warn(`Failed to process PR #${pullRequest.number} for ${repoTarget.repoKey}:`, error);
+            console.warn(
+              `Failed to process PR #${pullRequest.number} for ${repoTarget.repoKey}:`,
+              error
+            );
           }
         }
 

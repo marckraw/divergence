@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { Divergence, Project } from "../../types";
-import type { ProjectSettings } from "../../entities/project";
+import type {
+  Divergence,
+  Project,
+  Workspace,
+  WorkspaceDivergence,
+} from "../../index";
+import type { ProjectSettings } from "../../project";
 import {
   buildTerminalSession,
+  buildWorkspaceDivergenceTerminalSession,
   buildWorkspaceKey,
   buildWorkspaceTerminalSession,
-  buildWorkspaceDivergenceTerminalSession,
   generateSessionEntropy,
 } from "./sessionBuilder.pure";
 
@@ -26,12 +31,33 @@ const divergence: Divergence = {
   hasDiverged: false,
 };
 
+const workspace: Workspace = {
+  id: 5,
+  name: "My Workspace",
+  slug: "my-workspace",
+  description: null,
+  folderPath: "/home/.divergence/workspaces/my-workspace",
+  createdAtMs: 1000,
+  updatedAtMs: 1000,
+};
+
+const workspaceDivergence: WorkspaceDivergence = {
+  id: 7,
+  workspaceId: 5,
+  name: "my-workspace--feat-xyz",
+  branch: "feat/xyz",
+  folderPath: "/home/.divergence/workspaces/my-workspace--feat-xyz",
+  createdAtMs: 2000,
+};
+
 describe("session builder utils", () => {
   it("builds workspace keys", () => {
     expect(buildWorkspaceKey("project", 3)).toBe("project:3");
     expect(buildWorkspaceKey("divergence", 9)).toBe("divergence:9");
     expect(buildWorkspaceKey("workspace", 5)).toBe("workspace:5");
-    expect(buildWorkspaceKey("workspace_divergence", 7)).toBe("workspace_divergence:7");
+    expect(buildWorkspaceKey("workspace_divergence", 7)).toBe(
+      "workspace_divergence:7"
+    );
   });
 
   it("builds project session with defaults", () => {
@@ -52,15 +78,20 @@ describe("session builder utils", () => {
   });
 
   it("builds divergence session with project overrides", () => {
-    const settings = new Map<number, ProjectSettings>([[1, {
-      projectId: 1,
-      copyIgnoredSkip: [],
-      useTmux: false,
-      useWebgl: false,
-      tmuxHistoryLimit: 12345,
-      defaultPort: null,
-      framework: null,
-    }]]);
+    const settings = new Map<number, ProjectSettings>([
+      [
+        1,
+        {
+          projectId: 1,
+          copyIgnoredSkip: [],
+          useTmux: false,
+          useWebgl: false,
+          tmuxHistoryLimit: 12345,
+          defaultPort: null,
+          framework: null,
+        },
+      ],
+    ]);
 
     const session = buildTerminalSession({
       type: "divergence",
@@ -76,22 +107,16 @@ describe("session builder utils", () => {
     expect(session.sessionRole).toBe("default");
     expect(session.useTmux).toBe(false);
     expect(session.tmuxHistoryLimit).toBe(12345);
-    expect(session.tmuxSessionName).toContain("divergence-branch-alpha-feat-search-9");
+    expect(session.tmuxSessionName).toContain(
+      "divergence-branch-alpha-feat-search-9"
+    );
   });
 });
 
 describe("buildWorkspaceTerminalSession", () => {
   it("builds a workspace session with correct defaults", () => {
     const session = buildWorkspaceTerminalSession({
-      workspace: {
-        id: 5,
-        name: "My Workspace",
-        slug: "my-workspace",
-        description: null,
-        folderPath: "/home/.divergence/workspaces/my-workspace",
-        createdAtMs: 1000,
-        updatedAtMs: 1000,
-      },
+      workspace,
       globalTmuxHistoryLimit: 50000,
     });
 
@@ -102,24 +127,17 @@ describe("buildWorkspaceTerminalSession", () => {
     expect(session.workspaceOwnerId).toBe(5);
     expect(session.workspaceKey).toBe("workspace:5");
     expect(session.sessionRole).toBe("default");
-    expect(session.path).toBe("/home/.divergence/workspaces/my-workspace");
+    expect(session.path).toBe(workspace.folderPath);
     expect(session.useTmux).toBe(true);
     expect(session.tmuxHistoryLimit).toBe(50000);
-    expect(session.name).toBe("My Workspace");
+    expect(session.name).toBe(workspace.name);
   });
 });
 
 describe("buildWorkspaceDivergenceTerminalSession", () => {
   it("builds a workspace divergence session with correct defaults", () => {
     const session = buildWorkspaceDivergenceTerminalSession({
-      workspaceDivergence: {
-        id: 7,
-        workspaceId: 5,
-        name: "my-workspace--feat-xyz",
-        branch: "feat/xyz",
-        folderPath: "/home/.divergence/workspaces/my-workspace--feat-xyz",
-        createdAtMs: 2000,
-      },
+      workspaceDivergence,
       globalTmuxHistoryLimit: 50000,
     });
 
@@ -130,15 +148,15 @@ describe("buildWorkspaceDivergenceTerminalSession", () => {
     expect(session.workspaceOwnerId).toBe(5);
     expect(session.workspaceKey).toBe("workspace_divergence:7");
     expect(session.sessionRole).toBe("default");
-    expect(session.path).toBe("/home/.divergence/workspaces/my-workspace--feat-xyz");
+    expect(session.path).toBe(workspaceDivergence.folderPath);
     expect(session.useTmux).toBe(true);
     expect(session.tmuxHistoryLimit).toBe(50000);
-    expect(session.name).toBe("my-workspace--feat-xyz");
+    expect(session.name).toBe(workspaceDivergence.name);
   });
 });
 
 describe("generateSessionEntropy", () => {
-  it("returns a string containing a timestamp and random number", () => {
+  it("returns a string containing a timestamp and counter", () => {
     const entropy = generateSessionEntropy();
     expect(entropy).toMatch(/^\d+-\d+$/);
   });

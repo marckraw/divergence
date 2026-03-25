@@ -49,7 +49,7 @@ import TerminalStagePane from "./TerminalStagePane.container";
 import type {
   EditorSessionRuntimeState,
   EditorSessionViewState,
-} from "../../model/useEditorSessionManagement";
+} from "../../model/useEditorSessionRegistry";
 
 interface StageViewProps {
   tabs: StageTab[];
