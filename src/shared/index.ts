@@ -40,6 +40,7 @@ export {
   TabButton,
   Textarea,
   TextInput,
+  Toaster,
   SecretTokenField,
   ToolbarButton,
   Tooltip,
@@ -79,6 +80,8 @@ export type {
 } from "./ui";
 
 export { cn } from "./lib/cn.pure";
+export { CodeEditorCore } from "./code-editor";
+export { UnifiedDiffViewer } from "./unified-diff-viewer";
 export {
   buildChangesTree,
   collectChangesTreeFolderPaths,
@@ -147,6 +150,9 @@ export {
   resolvePath,
   trimTrailingSlash,
 } from "./lib/quickEdit.pure";
+export { parseUnifiedDiffLines } from "./lib/unifiedDiff.pure";
+export type { ParsedDiffLine } from "./lib/unifiedDiff.pure";
+export { formatMessageTime, formatRelativeAge, formatTimestamp } from "./lib/dateTime.pure";
 export { getErrorMessage } from "./lib/errors.pure";
 export { renderTemplateCommand } from "./lib/templateRendering.pure";
 export { notifyCommandFinished } from "./service/notifications.service";
@@ -176,11 +182,17 @@ export {
 
 export {
   DEFAULT_APP_SETTINGS,
+  DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS,
+  DEFAULT_MAX_STAGE_TABS,
   DEFAULT_TMUX_HISTORY_LIMIT,
+  MAX_MAX_STAGE_TABS,
+  MIN_MAX_STAGE_TABS,
   SETTINGS_STORAGE_KEY,
   SETTINGS_UPDATED_EVENT,
   normalizeAppSettings,
+  normalizeCommandCenterExcludePatterns,
   normalizeCustomAgentModels,
+  normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
   type AppSettings,
   type CustomAgentModels,

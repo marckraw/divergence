@@ -1,6 +1,12 @@
 use super::provider_registry::build_gemini_command;
 use super::*;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GeminiCliFailure {
+    user_message: String,
+    debug_details: Option<String>,
+}
+
 impl AgentRuntimeState {
     pub(super) async fn run_gemini_turn_process(
         &self,
@@ -97,15 +103,21 @@ impl AgentRuntimeState {
 
         if !status.success() {
             let exit_code = status.code().unwrap_or_default();
-            let message = if stderr_output.trim().is_empty() {
-                format!("Gemini CLI exited with code {exit_code}.")
-            } else {
-                format!(
-                    "Gemini CLI exited with code {exit_code}: {}",
-                    stderr_output.trim()
-                )
-            };
-            return Err(message);
+            let failure = classify_gemini_cli_failure(exit_code, &stderr_output);
+            if failure.debug_details.is_some() {
+                let snapshot = self.mutate_session(session_id, |session| {
+                    push_runtime_event(
+                        session,
+                        "Provider failure",
+                        &failure.user_message,
+                        failure.debug_details.clone(),
+                    );
+                    session.updated_at_ms = now_ms();
+                    Ok(())
+                })?;
+                self.emit_snapshot_update(app, &snapshot);
+            }
+            return Err(failure.user_message);
         }
 
         let snapshot = self.mutate_session(session_id, |current_session| {
@@ -296,5 +308,169 @@ fn build_gemini_prompt(prompt: &str, attachment_paths: &[PathBuf]) -> String {
         attachment_directives
     } else {
         format!("{attachment_directives}\n\n{}", prompt.trim())
+    }
+}
+
+fn classify_gemini_cli_failure(exit_code: i32, stderr_output: &str) -> GeminiCliFailure {
+    let trimmed = stderr_output.trim();
+    let lowercase = trimmed.to_ascii_lowercase();
+    let debug_details = (!trimmed.is_empty()).then(|| truncate_details(trimmed));
+
+    if lowercase.contains("resource_exhausted")
+        || lowercase.contains("rate limit")
+        || lowercase.contains("quota")
+        || lowercase.contains("429")
+    {
+        let retry_hint = extract_gemini_retry_delay(trimmed)
+            .map(|delay| format!(" Retry in about {delay}."))
+            .unwrap_or_else(|| " Retry after a short wait.".to_string());
+        return GeminiCliFailure {
+            user_message: format!(
+                "Gemini hit a rate limit before it produced a response.{retry_hint} You can also switch models or accounts and try again."
+            ),
+            debug_details,
+        };
+    }
+
+    if lowercase.contains("unauthenticated")
+        || lowercase.contains("auth")
+        || lowercase.contains("login")
+        || lowercase.contains("credential")
+        || lowercase.contains("permission_denied")
+        || lowercase.contains("api key not valid")
+    {
+        return GeminiCliFailure {
+            user_message: "Gemini CLI is not authenticated. Run the Gemini login/setup flow, then try again."
+                .to_string(),
+            debug_details,
+        };
+    }
+
+    if lowercase.contains("not found")
+        || lowercase.contains("enoent")
+        || lowercase.contains("command not found")
+        || lowercase.contains("no such file")
+        || lowercase.contains("failed to spawn")
+    {
+        return GeminiCliFailure {
+            user_message:
+                "Gemini CLI is not available in this environment. Check the Gemini installation/setup and try again."
+                    .to_string(),
+            debug_details,
+        };
+    }
+
+    GeminiCliFailure {
+        user_message: format!(
+            "Gemini CLI failed before it produced a response (exit code {exit_code}). Check Runtime Debug for provider details."
+        ),
+        debug_details,
+    }
+}
+
+fn extract_gemini_retry_delay(stderr_output: &str) -> Option<String> {
+    for marker in ["retryDelay", "retry_delay"] {
+        let Some(index) = stderr_output.find(marker) else {
+            continue;
+        };
+        let suffix = &stderr_output[index + marker.len()..];
+        if let Some(delay) = extract_delay_token(suffix) {
+            return Some(delay);
+        }
+    }
+
+    None
+}
+
+fn extract_delay_token(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut start = None;
+
+    for (index, byte) in bytes.iter().enumerate() {
+        let is_digit = byte.is_ascii_digit();
+        if start.is_none() {
+            if is_digit {
+                start = Some(index);
+            }
+            continue;
+        }
+
+        if is_digit || *byte == b'.' {
+            continue;
+        }
+
+        let unit_start = index;
+        let mut unit_end = index;
+        while unit_end < bytes.len()
+            && (bytes[unit_end] as char).is_ascii_alphabetic()
+        {
+            unit_end += 1;
+        }
+
+        if unit_end > unit_start {
+            let start = start?;
+            return Some(input[start..unit_end].trim_matches(|char: char| {
+                char == '"' || char == '\'' || char == ':' || char.is_whitespace()
+            }).to_string());
+        }
+
+        break;
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_gemini_cli_failure, extract_gemini_retry_delay};
+
+    #[test]
+    fn classifies_rate_limit_failures_without_leaking_raw_stderr() {
+        let failure = classify_gemini_cli_failure(
+            1,
+            r#"Error: RESOURCE_EXHAUSTED: 429 quota exceeded {"retryDelay":"52s"} at /Users/test/node_modules/foo/index.js:12:34"#,
+        );
+
+        assert_eq!(
+            failure.user_message,
+            "Gemini hit a rate limit before it produced a response. Retry in about 52s. You can also switch models or accounts and try again."
+        );
+        assert!(failure.debug_details.as_deref().is_some_and(|details| details.contains("RESOURCE_EXHAUSTED")));
+        assert!(!failure.user_message.contains("/Users/test"));
+    }
+
+    #[test]
+    fn extracts_retry_delay_from_gemini_stderr() {
+        assert_eq!(
+            extract_gemini_retry_delay(r#"blah "retryDelay":"52s" more blah"#).as_deref(),
+            Some("52s")
+        );
+        assert_eq!(
+            extract_gemini_retry_delay(r#"blah retry_delay: 1.5s more blah"#).as_deref(),
+            Some("1.5s")
+        );
+    }
+
+    #[test]
+    fn classifies_auth_failures() {
+        let failure = classify_gemini_cli_failure(
+            1,
+            "UNAUTHENTICATED: please login to Gemini CLI before continuing",
+        );
+
+        assert_eq!(
+            failure.user_message,
+            "Gemini CLI is not authenticated. Run the Gemini login/setup flow, then try again."
+        );
+    }
+
+    #[test]
+    fn falls_back_to_generic_provider_failure_message() {
+        let failure = classify_gemini_cli_failure(17, "Unhandled provider transport failure");
+
+        assert_eq!(
+            failure.user_message,
+            "Gemini CLI failed before it produced a response (exit code 17). Check Runtime Debug for provider details."
+        );
     }
 }

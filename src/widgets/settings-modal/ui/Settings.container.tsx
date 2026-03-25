@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   DEFAULT_APP_SETTINGS,
+  normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
   loadAppSettings,
   refreshAgentRuntimeCapabilities,
@@ -20,6 +21,7 @@ import type {
 
 const defaultSettings: SettingsState = {
   ...DEFAULT_APP_SETTINGS,
+  commandCenterExcludePatterns: [...DEFAULT_APP_SETTINGS.commandCenterExcludePatterns],
   divergenceBasePath: "",
   claudeOAuthToken: "",
   githubToken: "",
@@ -80,6 +82,7 @@ function SettingsContainer({
     const normalized = {
       ...settings,
       tmuxHistoryLimit: normalizeTmuxHistoryLimit(settings.tmuxHistoryLimit),
+      maxStageTabs: normalizeMaxStageTabs(settings.maxStageTabs),
     };
     const saved = saveAppSettings(normalized);
     broadcastAppSettings(saved);

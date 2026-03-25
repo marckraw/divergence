@@ -10,6 +10,21 @@ import type { AgentRuntimeProvider } from "../api/agentRuntime.types";
 export const SETTINGS_STORAGE_KEY = "divergence-settings";
 export const SETTINGS_UPDATED_EVENT = "divergence-settings-updated";
 export const DEFAULT_TMUX_HISTORY_LIMIT = 50000;
+export const DEFAULT_MAX_STAGE_TABS = 20;
+export const MIN_MAX_STAGE_TABS = 1;
+export const MAX_MAX_STAGE_TABS = 20;
+export const DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS: string[] = [
+  "*.lock",
+  "*.lockb",
+  "*.log",
+  ".env",
+  ".env.*",
+  ".DS_Store",
+  "*.map",
+  "*.min.js",
+  "*.min.css",
+  "*.tsbuildinfo",
+];
 const MIN_TMUX_HISTORY_LIMIT = 1000;
 const MAX_TMUX_HISTORY_LIMIT = 500000;
 const AGENT_RUNTIME_PROVIDERS: AgentRuntimeProvider[] = ["claude", "codex", "cursor", "gemini"];
@@ -22,7 +37,10 @@ export interface AppSettings {
   editorThemeForLightMode: EditorThemeId;
   editorThemeForDarkMode: EditorThemeId;
   tmuxHistoryLimit: number;
+  maxStageTabs: number;
   restoreTabsOnRestart: boolean;
+  commandCenterExcludePatterns: string[];
+  commandCenterRespectGitignore: boolean;
   divergenceBasePath?: string;
   agentCommandClaude: string;
   agentCommandCodex: string;
@@ -43,7 +61,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   editorThemeForLightMode: DEFAULT_EDITOR_THEME_LIGHT,
   editorThemeForDarkMode: DEFAULT_EDITOR_THEME_DARK,
   tmuxHistoryLimit: DEFAULT_TMUX_HISTORY_LIMIT,
+  maxStageTabs: DEFAULT_MAX_STAGE_TABS,
   restoreTabsOnRestart: false,
+  commandCenterExcludePatterns: [...DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS],
+  commandCenterRespectGitignore: true,
   divergenceBasePath: "",
   agentCommandClaude: "claude -p \"$(cat '{briefPath}')\" --dangerously-skip-permissions",
   agentCommandCodex:
@@ -106,6 +127,19 @@ export function normalizeTmuxHistoryLimit(
   return Math.min(Math.max(rounded, MIN_TMUX_HISTORY_LIMIT), MAX_TMUX_HISTORY_LIMIT);
 }
 
+export function normalizeMaxStageTabs(
+  value: unknown,
+  fallback: number = DEFAULT_MAX_STAGE_TABS,
+): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const rounded = Math.round(parsed);
+  return Math.min(Math.max(rounded, MIN_MAX_STAGE_TABS), MAX_MAX_STAGE_TABS);
+}
+
 function normalizeCustomAgentModelList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -140,6 +174,28 @@ export function normalizeCustomAgentModels(value: unknown): CustomAgentModels {
       normalized[provider] = models;
     }
   });
+  return normalized;
+}
+
+export function normalizeCommandCenterExcludePatterns(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [...DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS];
+  }
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  value.forEach((entry) => {
+    if (typeof entry !== "string") {
+      return;
+    }
+    const trimmed = entry.trim();
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  });
+
   return normalized;
 }
 
@@ -194,12 +250,17 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     ? input.cloudApiToken
     : "";
   const restoreTabsOnRestart = input?.restoreTabsOnRestart === true;
+  const commandCenterExcludePatterns = normalizeCommandCenterExcludePatterns(
+    input?.commandCenterExcludePatterns
+  );
+  const commandCenterRespectGitignore = input?.commandCenterRespectGitignore !== false;
   const customAgentModels = normalizeCustomAgentModels(input?.customAgentModels);
 
   return {
     ...DEFAULT_APP_SETTINGS,
     ...input,
     tmuxHistoryLimit: normalizeTmuxHistoryLimit(input?.tmuxHistoryLimit),
+    maxStageTabs: normalizeMaxStageTabs(input?.maxStageTabs),
     restoreTabsOnRestart,
     editorThemeForLightMode,
     editorThemeForDarkMode,
@@ -211,6 +272,8 @@ export function normalizeAppSettings(input?: Partial<AppSettings> | null): AppSe
     linearApiToken,
     cloudApiBaseUrl,
     cloudApiToken,
+    commandCenterExcludePatterns,
+    commandCenterRespectGitignore,
     customAgentModels,
   };
 }

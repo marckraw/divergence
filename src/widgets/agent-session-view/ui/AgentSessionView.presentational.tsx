@@ -78,7 +78,7 @@ function AgentSessionViewPresentational({
   );
 
   return (
-    <main className="flex-1 min-w-0 h-full bg-main flex flex-col relative">
+    <main className="@container/session flex-1 min-w-0 h-full bg-main flex flex-col relative">
       <div className="h-10 bg-sidebar border-b border-surface flex items-center px-2 gap-1">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
@@ -95,7 +95,7 @@ function AgentSessionViewPresentational({
           </div>
         </div>
         <ToolbarButton
-          className="xl:hidden"
+          className="@4xl/session:hidden"
           iconOnly
           onClick={onToggleChangesSidebar}
           title={changesSidebarVisible ? "Hide sidebar" : "Show sidebar"}
@@ -123,7 +123,7 @@ function AgentSessionViewPresentational({
           />
 
           {pendingRequest?.kind === "approval" && pendingRequest.options && (
-            <div className="border-b border-surface bg-sidebar/40 px-5 py-4">
+            <div className="border-b border-surface bg-sidebar/40 px-3 py-3 sm:px-5 sm:py-4">
               <div className="mx-auto mt-0 w-full max-w-5xl">
                 <div className="flex flex-wrap gap-2">
                   {pendingRequest.options.map((option) => (
@@ -145,7 +145,7 @@ function AgentSessionViewPresentational({
           )}
 
           {pendingRequest?.kind === "user-input" && pendingRequest.questions && (
-            <div className="border-b border-surface bg-sidebar/40 px-5 py-4">
+            <div className="border-b border-surface bg-sidebar/40 px-3 py-3 sm:px-5 sm:py-4">
               <div className="mx-auto mt-0 w-full max-w-5xl space-y-3">
                 {pendingRequest.questions.map((question, index) => (
                   <div key={question.id} className="rounded-xl border border-surface bg-main/60 px-3 py-3">
@@ -209,7 +209,7 @@ function AgentSessionViewPresentational({
           />
         </div>
 
-        <aside className="hidden xl:flex xl:flex-col xl:min-h-0 xl:min-w-[20rem] xl:w-80 xl:border-l xl:border-surface">
+        <aside className="hidden @4xl/session:flex @4xl/session:flex-col @4xl/session:min-h-0 @4xl/session:min-w-[20rem] @4xl/session:w-80 @4xl/session:border-l @4xl/session:border-surface">
           {sidebarTabBar}
           {sidebarContent}
         </aside>
@@ -218,7 +218,7 @@ function AgentSessionViewPresentational({
           {changesSidebarVisible && (
             <ModalShell
               onRequestClose={onCloseChangesSidebar}
-              overlayClassName="xl:hidden z-40 items-stretch justify-end bg-black/40 backdrop-blur-[2px]"
+              overlayClassName="@4xl/session:hidden z-40 items-stretch justify-end bg-black/40 backdrop-blur-[2px]"
               panelClassName="h-full w-full max-w-[20rem] rounded-none border-l border-surface shadow-2xl"
               size="xl"
             >

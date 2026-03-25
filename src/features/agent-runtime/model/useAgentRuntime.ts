@@ -18,6 +18,7 @@ import {
   stopAgentRuntimeSessionState,
   updateAgentRuntimeSessionState,
   useAgentRuntimeCapabilitiesState,
+  useAgentRuntimeReadyState,
   useAgentRuntimeSessionState,
   useOrderedAgentRuntimeSessions,
   useOrderedOpenAgentRuntimeSessions,
@@ -29,6 +30,7 @@ interface UseAgentRuntimeInput {
 
 interface UseAgentRuntimeResult {
   capabilities: AgentRuntimeCapabilities | null;
+  hasLoadedInitialSessions: boolean;
   agentSessions: Map<string, AgentSessionSnapshot>;
   openAgentSessions: Map<string, AgentSessionSnapshot>;
   getSession: (sessionId: string) => Promise<AgentSessionSnapshot | null>;
@@ -90,6 +92,7 @@ export function useAgentRuntime({
   claudeOAuthToken,
 }: UseAgentRuntimeInput): UseAgentRuntimeResult {
   const capabilities = useAgentRuntimeCapabilitiesState();
+  const hasLoadedInitialSessions = useAgentRuntimeReadyState();
   const orderedAgentSessions = useOrderedAgentRuntimeSessions();
   const orderedOpenAgentSessions = useOrderedOpenAgentRuntimeSessions();
 
@@ -205,6 +208,7 @@ export function useAgentRuntime({
 
   return {
     capabilities,
+    hasLoadedInitialSessions,
     agentSessions,
     openAgentSessions,
     getSession,

@@ -1,5 +1,136 @@
 # divergence
 
+## 0.45.5
+
+### Patch Changes
+
+- a6a1980: Bound editor file loads so hung reads surface a retry instead of leaving the spinner stuck forever.
+
+  Editor sessions now time out stalled file reads, ignore stale load results after retries or closes, preserve already-loaded content on reload failures, and show a retry action when a file load fails.
+
+## 0.45.4
+
+### Patch Changes
+
+- 440f4b8: Align sidebar project and divergence clicks with the "Needs You" reveal behavior.
+
+  Selecting those items now reuses an already open stage session when possible and only opens a new tab when the session is not visible, instead of always replacing the focused pane.
+
+## 0.45.3
+
+### Patch Changes
+
+- 68c6f3e: Collapse folders by default in the agent session changed-files tree and cap the panel with internal scrolling for long file lists.
+
+## 0.45.2
+
+### Patch Changes
+
+- e76573b: Sanitize Gemini CLI failures before they reach the normal agent conversation UI.
+
+  Gemini provider process errors now show concise, actionable user-facing messages instead of dumping raw CLI stderr, stack traces, and local filesystem paths into assistant transcript bubbles. Rate-limit failures include retry guidance when Gemini reports a retry delay, and raw provider diagnostics remain available only in runtime debug details.
+
+## 0.45.1
+
+### Patch Changes
+
+- 3e63ce9: fix: "Open on GitHub" button in pull request view now correctly opens the PR in the system browser using the Tauri shell plugin instead of `window.open`
+
+## 0.45.0
+
+### Minor Changes
+
+- 98d8547: Add configurable command center file exclusions with built-in noise filtering, user-defined exclude patterns, and optional `.gitignore` support. This also adds Settings controls for managing the exclusion list and gitignore behavior.
+
+### Patch Changes
+
+- 5bd95bd: Improve Command Center search with fuzzy matching, per-category result ranking, and visible match highlighting.
+
+  - support non-contiguous and multi-word fuzzy queries for files, sessions, and navigation results
+  - rank stronger matches ahead of weaker ones while preserving category grouping
+  - highlight matched characters in the primary result label so the match reason is visible
+
+## 0.44.1
+
+### Patch Changes
+
+- 7744942: Improve Command Center responsiveness in large projects by debouncing search input, capping visible results, and reducing result-list animation churn. The modal now also shows when results are truncated so users can narrow their query instead of rendering thousands of matches.
+
+## 0.44.0
+
+### Minor Changes
+
+- f895e50: Unified Command Center: replace Quick Switcher, File Quick Switcher, and Pending Stage Pane inline picker with a single mode-driven Command Center modal.
+
+  - New `src/features/command-center/` feature slice with keyboard-first search across projects, files, sessions, and create actions
+  - Four modes: `replace` (Cmd+K), `reveal` (Cmd+Shift+K), `open-file` (Cmd+Shift+O), `open-in-pane` (Cmd+D split)
+  - Cmd+D / Cmd+Shift+D now immediately opens Command Center targeting the new pane after split
+  - PendingStagePane simplified to a lightweight placeholder with "Open something here" CTA
+  - Deleted `features/quick-switcher/` and `features/file-quick-switcher/` (replaced)
+  - Deleted `pendingStagePane.pure.ts` (logic moved to `commandCenterActions.pure.ts`)
+  - Cleaned up dead props (`showFileQuickSwitcher`, `onCloseFileQuickSwitcher`, `onReplacePaneRef`, `onCreatePendingSession`) from StageView and StageSidebar
+  - `handleSplitPane` now returns the new pane ID to support post-split Command Center targeting
+
+## 0.43.1
+
+### Patch Changes
+
+- 83ad321: Use real git changes in agent session header instead of parsing model activities
+
+## 0.43.0
+
+### Minor Changes
+
+- 7c93157: Add first-class editor sessions, shared code editing and diff primitives, and project-wide search that opens matches directly in editor tabs.
+
+## 0.42.0
+
+### Minor Changes
+
+- 5cb6419: Add timestamp display for all assistant messages in the agent session timeline. Shows compact time (HH:MM for today, "Yesterday HH:MM", or "Mon D, HH:MM" for older) next to each message status badge. Timestamps are provider-agnostic, using the existing `createdAtMs` field already set by the Rust agent runtime.
+
+### Patch Changes
+
+- ac7503d: Improve responsive design of agent session conversation view using CSS container queries. The sidebar now shows/hides based on actual container width instead of viewport width, and header, timeline, and composer layouts gracefully adapt to narrow split panes.
+
+## 0.41.2
+
+### Patch Changes
+
+- ab4681a: Increase the configurable layout tab limit to default to 20, expose the cap in Settings > General, and show a toast when new tab creation is blocked by the configured limit.
+
+## 0.41.1
+
+### Patch Changes
+
+- ec8e299: cmd + b open pane improvements
+
+## 0.41.0
+
+### Minor Changes
+
+- 0120566: Add persistent layout tabs so each tab owns its own pane group and users can switch workspaces without disturbing existing pane arrangements. This also adds a stage tab bar, tab-focused keyboard shortcuts, and quick switcher support for opening selections in a new tab.
+
+## 0.40.0
+
+### Minor Changes
+
+- 8d57455: Introduce a persistent stage layout that lets terminal and agent sessions share split panes, swap the focused pane's content through search, and reuse pane-aware sidebars and shortcuts across session types.
+
+## 0.39.0
+
+### Minor Changes
+
+- 25634ea: Show changed files in agent conversation session header as a collapsible tree view, extracted from session edit activities
+
+## 0.38.1
+
+### Patch Changes
+
+- 0892b15: fix: show individual files inside new folders in agent session changes tab
+
+  Previously, when a new folder with new files was created, only the folder was displayed in the changes tree without its child files. This was because `git status --porcelain=v2` defaults to showing untracked directories as a single entry. Adding `--untracked-files=all` ensures git reports each individual untracked file, allowing the changes tree to display a full expandable hierarchy.
+
 ## 0.38.0
 
 ### Minor Changes

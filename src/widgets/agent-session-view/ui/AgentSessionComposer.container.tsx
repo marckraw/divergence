@@ -609,7 +609,7 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
   );
 
   return (
-    <div className="border-t border-surface bg-sidebar/70 px-5 py-4">
+    <div className="border-t border-surface bg-sidebar/70 px-3 py-3 sm:px-5 sm:py-4">
       <div className="mx-auto w-full max-w-5xl space-y-3">
         {!session.pendingRequest && (
           <>

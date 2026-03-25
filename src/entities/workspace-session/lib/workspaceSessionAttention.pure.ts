@@ -1,6 +1,6 @@
 import type { AgentProposedPlan, AgentSessionSnapshot } from "../../agent-session";
 import type { WorkspaceSession } from "../model/workspaceSession.types";
-import { isAgentSession } from "./workspaceSession.pure";
+import { isAgentSession, isEditorSession } from "./workspaceSession.pure";
 
 export type WorkspaceSessionAttentionKind =
   | "approval-required"
@@ -74,6 +74,9 @@ export function getWorkspaceSessionAttentionKey(
   options?: Omit<WorkspaceSessionAttentionOptions, "isActive" | "dismissedAttentionKey">,
 ): string | null {
   if (!isAgentSession(session)) {
+    if (isEditorSession(session)) {
+      return null;
+    }
     if (!options?.hasIdleAttention) {
       return null;
     }

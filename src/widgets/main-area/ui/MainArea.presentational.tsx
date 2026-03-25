@@ -5,7 +5,7 @@ import FileExplorer from "./FileExplorer.container";
 import ChangesPanel from "./ChangesPanel.container";
 import TmuxPanel from "./TmuxPanel.container";
 import QuickEditDrawer from "./QuickEditDrawer.container";
-import FileQuickSwitcher from "../../../features/file-quick-switcher";
+
 import { ReviewDraftPanel } from "../../../features/diff-review";
 import { PromptQueuePanel } from "../../../features/prompt-queue";
 import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
@@ -35,8 +35,6 @@ function MainAreaPresentational({
   divergencesByProject,
   projectsLoading,
   divergencesLoading,
-  showFileQuickSwitcher,
-  onCloseFileQuickSwitcher,
   isSidebarOpen,
   onToggleSidebar,
   isRightPanelOpen,
@@ -515,18 +513,6 @@ function MainAreaPresentational({
         onSave={onSaveFile}
         onClose={onCloseDrawer}
       />
-      <AnimatePresence>
-        {showFileQuickSwitcher && activeRootPath && (
-          <FileQuickSwitcher
-            rootPath={activeRootPath}
-            onSelect={(path) => {
-              onOpenFile(path);
-              onCloseFileQuickSwitcher();
-            }}
-            onClose={onCloseFileQuickSwitcher}
-          />
-        )}
-      </AnimatePresence>
     </main>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { getBranchDiff, getWorkingDiff } from "../api/git.api";
-import { readTextFile, writeTextFile } from "../api/fs.api";
+import { readTextFileWithTimeout, writeTextFile } from "../api/fs.api";
 import type { ChangesMode, GitChangeEntry } from "../lib/gitChanges.pure";
 import { joinPath } from "../lib/pathJoin.pure";
 import { formatFileSize } from "../lib/quickEdit.pure";
@@ -60,7 +60,7 @@ export function useFileEditor({ activeRootPath }: UseFileEditorParams) {
     setIsLoadingFile(true);
 
     try {
-      const content = await readTextFile(path);
+      const content = await readTextFileWithTimeout(path);
       setOpenFileContent(content);
       setOpenFileInitial(content);
 
@@ -206,6 +206,30 @@ export function useFileEditor({ activeRootPath }: UseFileEditorParams) {
     }
   }, [activeRootPath, isReadOnly, isSavingFile, openDiff, openDiffMode, openFileContent, openFilePath]);
 
+  const handleLoadDiffForCurrentFile = useCallback(async (mode: ChangesMode) => {
+    if (!activeRootPath || !openFilePath) {
+      return;
+    }
+
+    setDrawerTab("diff");
+    setAllowEdit(mode === "working" && !isReadOnly);
+    setOpenDiff(null);
+    setOpenDiffMode(mode);
+    setDiffLoading(true);
+    setDiffError(null);
+
+    try {
+      const diff = mode === "branch"
+        ? await getBranchDiff(activeRootPath, openFilePath)
+        : await getWorkingDiff(activeRootPath, openFilePath);
+      setOpenDiff({ text: diff.diff, isBinary: diff.isBinary });
+    } catch (error) {
+      setDiffError(error instanceof Error ? error.message : "Failed to load diff.");
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [activeRootPath, isReadOnly, openFilePath]);
+
   const handleChangeContent = useCallback((next: string) => {
     setOpenFileContent(next);
     if (fileSaveError) {
@@ -253,6 +277,7 @@ export function useFileEditor({ activeRootPath }: UseFileEditorParams) {
     handleOpenChange,
     handleCloseDrawer,
     handleSaveFile,
+    handleLoadDiffForCurrentFile,
     handleChangeContent,
     resetFileEditor,
   };

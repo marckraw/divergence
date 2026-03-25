@@ -26,7 +26,10 @@ export interface SettingsState {
   editorThemeForDarkMode: EditorThemeId;
   divergenceBasePath: string;
   tmuxHistoryLimit: number;
+  maxStageTabs: number;
   restoreTabsOnRestart: boolean;
+  commandCenterExcludePatterns: string[];
+  commandCenterRespectGitignore: boolean;
   agentCommandClaude: string;
   agentCommandCodex: string;
   claudeOAuthToken: string;

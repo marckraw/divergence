@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_APP_SETTINGS,
+  DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS,
+  DEFAULT_MAX_STAGE_TABS,
   DEFAULT_TMUX_HISTORY_LIMIT,
   normalizeAppSettings,
+  normalizeCommandCenterExcludePatterns,
   normalizeCustomAgentModels,
+  normalizeMaxStageTabs,
   normalizeTmuxHistoryLimit,
 } from "./appSettings.pure";
 
@@ -20,7 +24,30 @@ describe("normalizeTmuxHistoryLimit", () => {
   });
 });
 
+describe("normalizeMaxStageTabs", () => {
+  it("uses fallback for invalid values", () => {
+    expect(normalizeMaxStageTabs("abc", 12)).toBe(12);
+    expect(normalizeMaxStageTabs(undefined)).toBe(DEFAULT_MAX_STAGE_TABS);
+  });
+
+  it("rounds and clamps values", () => {
+    expect(normalizeMaxStageTabs(11.6)).toBe(12);
+    expect(normalizeMaxStageTabs(0)).toBe(1);
+    expect(normalizeMaxStageTabs(999)).toBe(20);
+  });
+});
+
 describe("normalizeAppSettings", () => {
+  it("normalizes command center exclude patterns directly", () => {
+    expect(normalizeCommandCenterExcludePatterns([
+      " *.log ",
+      ".env",
+      ".env",
+      "",
+      4,
+    ])).toEqual(["*.log", ".env"]);
+  });
+
   it("normalizes custom agent models directly", () => {
     expect(normalizeCustomAgentModels({
       codex: ["gpt-5.1", "gpt-5.1", "o3"],
@@ -177,6 +204,18 @@ describe("normalizeAppSettings", () => {
     expect(normalized.restoreTabsOnRestart).toBe(false);
   });
 
+  it("defaults maxStageTabs to 20", () => {
+    const normalized = normalizeAppSettings();
+    expect(normalized.maxStageTabs).toBe(20);
+  });
+
+  it("normalizes maxStageTabs within bounds", () => {
+    expect(normalizeAppSettings({ maxStageTabs: 17 }).maxStageTabs).toBe(17);
+    expect(normalizeAppSettings({ maxStageTabs: 0 }).maxStageTabs).toBe(1);
+    expect(normalizeAppSettings({ maxStageTabs: 999 }).maxStageTabs).toBe(20);
+    expect(normalizeAppSettings({ maxStageTabs: "12" as never }).maxStageTabs).toBe(12);
+  });
+
   it("preserves boolean restoreTabsOnRestart", () => {
     const normalized = normalizeAppSettings({
       restoreTabsOnRestart: true,
@@ -216,5 +255,44 @@ describe("normalizeAppSettings", () => {
     expect(normalized.customAgentModels).toEqual({
       cursor: ["gpt-5"],
     });
+  });
+
+  it("defaults command center exclusions and gitignore behavior", () => {
+    const normalized = normalizeAppSettings();
+
+    expect(normalized.commandCenterExcludePatterns).toEqual(DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS);
+    expect(normalized.commandCenterRespectGitignore).toBe(true);
+  });
+
+  it("normalizes command center exclude patterns from settings", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterExcludePatterns: [" *.log ", ".env", ".env", ""],
+    });
+
+    expect(normalized.commandCenterExcludePatterns).toEqual(["*.log", ".env"]);
+  });
+
+  it("allows clearing command center exclude patterns", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterExcludePatterns: [],
+    });
+
+    expect(normalized.commandCenterExcludePatterns).toEqual([]);
+  });
+
+  it("falls back to default command center exclude patterns for invalid values", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterExcludePatterns: "not-an-array" as never,
+    });
+
+    expect(normalized.commandCenterExcludePatterns).toEqual(DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS);
+  });
+
+  it("preserves explicit command center gitignore preference", () => {
+    const normalized = normalizeAppSettings({
+      commandCenterRespectGitignore: false,
+    });
+
+    expect(normalized.commandCenterRespectGitignore).toBe(false);
   });
 });
