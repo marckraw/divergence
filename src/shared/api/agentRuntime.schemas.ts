@@ -8,7 +8,7 @@ import type {
   AgentSkillDescriptor,
 } from "./agentRuntime.types";
 
-const providerSchema = z.enum(["claude", "codex", "cursor", "gemini"]);
+const providerSchema = z.enum(["claude", "codex", "cursor", "gemini", "opencode"]);
 const sessionRoleSchema = z.enum(["default", "review-agent", "manual"]);
 const nameModeSchema = z.enum(["default", "auto", "manual"]);
 const targetTypeSchema = z.enum(["project", "divergence", "workspace", "workspace_divergence"]);

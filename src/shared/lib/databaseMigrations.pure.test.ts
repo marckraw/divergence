@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getMigration13RecoveryAction } from "./databaseMigrations.pure";
+import { getMigration13RecoveryAction, getMigration14RecoveryAction } from "./databaseMigrations.pure";
 
 describe("databaseMigrations.pure", () => {
   it("does nothing when already migrated", () => {
@@ -40,5 +40,25 @@ describe("databaseMigrations.pure", () => {
         hasAutomationsV13: false,
       })
     ).toBe("none");
+  });
+
+  it("renames partial v14 table when the source table is gone", () => {
+    expect(
+      getMigration14RecoveryAction({
+        currentVersion: 13,
+        hasAutomations: false,
+        hasAutomationsV14: true,
+      })
+    ).toBe("rename_v14_to_automations_and_mark_complete");
+  });
+
+  it("drops stale v14 temp table when both tables exist", () => {
+    expect(
+      getMigration14RecoveryAction({
+        currentVersion: 13,
+        hasAutomations: true,
+        hasAutomationsV14: true,
+      })
+    ).toBe("drop_stale_v14");
   });
 });

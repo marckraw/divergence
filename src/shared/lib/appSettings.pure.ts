@@ -27,7 +27,7 @@ export const DEFAULT_COMMAND_CENTER_EXCLUDE_PATTERNS: string[] = [
 ];
 const MIN_TMUX_HISTORY_LIMIT = 1000;
 const MAX_TMUX_HISTORY_LIMIT = 500000;
-const AGENT_RUNTIME_PROVIDERS: AgentRuntimeProvider[] = ["claude", "codex", "cursor", "gemini"];
+const AGENT_RUNTIME_PROVIDERS: AgentRuntimeProvider[] = ["claude", "codex", "cursor", "gemini", "opencode"];
 
 export type CustomAgentModels = Partial<Record<AgentRuntimeProvider, string[]>>;
 

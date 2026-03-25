@@ -81,6 +81,22 @@ function formatCustomModelList(models: string[] | undefined): string {
   return (models ?? []).join("\n");
 }
 
+function getCustomModelHint(providerId: string): string {
+  if (providerId === "opencode") {
+    return "Use provider/model IDs, for example anthropic/claude-sonnet-4-5.";
+  }
+
+  return "One slug per line. These are merged after detected provider models.";
+}
+
+function getCustomModelPlaceholder(providerId: string): string {
+  if (providerId === "opencode") {
+    return "anthropic/claude-sonnet-4-5\nopenrouter/deepseek/deepseek-r1";
+  }
+
+  return "gpt-5.1\nclaude-opus-4.2";
+}
+
 function parseCustomModelList(value: string): string[] {
   const seen = new Set<string>();
   const next: string[] = [];
@@ -452,7 +468,7 @@ function SettingsPresentational({
                                   Custom model slugs
                                 </label>
                                 <p className="mt-1 text-[11px] text-subtext">
-                                  One slug per line. These are merged after detected provider models.
+                                  {getCustomModelHint(provider.id)}
                                 </p>
                               </div>
                               <Textarea
@@ -467,7 +483,7 @@ function SettingsPresentational({
                                   }
                                   onUpdateSetting("customAgentModels", nextCustomModels);
                                 }}
-                                placeholder="gpt-5.1\nclaude-opus-4.2"
+                                placeholder={getCustomModelPlaceholder(provider.id)}
                                 className="min-h-[92px]"
                               />
                             </div>
