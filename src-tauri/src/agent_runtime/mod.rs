@@ -2,6 +2,7 @@ mod claude;
 mod codex;
 mod cursor;
 mod gemini;
+mod opencode;
 mod provider_registry;
 pub mod skills;
 
@@ -32,6 +33,7 @@ const DEFAULT_CLAUDE_MODEL: &str = "sonnet";
 const DEFAULT_CODEX_MODEL: &str = "gpt-5.4";
 const DEFAULT_CURSOR_MODEL: &str = "auto";
 const DEFAULT_GEMINI_MODEL: &str = "gemini-2.5-pro";
+const DEFAULT_OPENCODE_MODEL: &str = "default";
 
 type PendingResponseSender = oneshot::Sender<Result<Value, String>>;
 type PendingResponseRegistry = Arc<Mutex<HashMap<String, PendingResponseSender>>>;
@@ -127,6 +129,7 @@ pub enum AgentProvider {
     Codex,
     Cursor,
     Gemini,
+    Opencode,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -162,7 +165,7 @@ pub enum AgentSessionStatus {
     Busy,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentRuntimeStatus {
     Idle,
@@ -532,6 +535,7 @@ enum RunningTransport {
     Claude,
     Cursor,
     Gemini,
+    OpenCodeServer,
     CodexAppServer {
         writer: mpsc::UnboundedSender<String>,
     },
@@ -554,6 +558,14 @@ enum PendingRequestTransport {
         session_id: String,
         json_rpc_id: Value,
         question_ids: Vec<String>,
+    },
+    OpenCodePermission {
+        session_id: String,
+        opencode_session_id: String,
+        permission_id: String,
+        directory: String,
+        base_url: String,
+        decisions: HashMap<String, String>,
     },
 }
 
@@ -805,7 +817,10 @@ impl AgentRuntimeState {
                 interaction_mode: Some(interaction_mode),
                 attachments: (!attachments.is_empty()).then_some(attachments.clone()),
             });
-            if !matches!(session.provider, AgentProvider::Codex) {
+            if !matches!(
+                session.provider,
+                AgentProvider::Codex | AgentProvider::Opencode
+            ) {
                 session.messages.push(AgentMessage {
                     id: format!("message-{}", Uuid::new_v4()),
                     role: AgentMessageRole::Assistant,
@@ -919,7 +934,7 @@ impl AgentRuntimeState {
             ) && (has_model_update || has_effort_update)
             {
                 return Err(
-                    "Cannot change model or effort while an agent turn is running.".to_string()
+                    "Cannot change model or effort while an agent turn is running.".to_string(),
                 );
             }
 
@@ -1031,6 +1046,38 @@ impl AgentRuntimeState {
                 )?;
                 self.resolve_pending_request(app, &session_id)
             }
+            PendingRequestTransport::OpenCodePermission {
+                session_id,
+                opencode_session_id,
+                permission_id,
+                directory,
+                base_url,
+                decisions,
+            } => {
+                if session_id != input.session_id {
+                    return Err(
+                        "Pending approval request does not belong to this session.".to_string()
+                    );
+                }
+                let Some(decision_id) = input.decision.as_deref() else {
+                    return Err("decision is required for approval requests.".to_string());
+                };
+                let decision = decisions
+                    .get(decision_id)
+                    .cloned()
+                    .ok_or_else(|| format!("Unknown approval decision: {decision_id}"))?;
+                tauri::async_runtime::block_on(async {
+                    opencode::respond_to_opencode_permission(
+                        &base_url,
+                        &directory,
+                        &opencode_session_id,
+                        &permission_id,
+                        &decision,
+                    )
+                    .await
+                })?;
+                self.resolve_pending_request(app, &session_id)
+            }
         }?;
 
         Ok(snapshot)
@@ -1067,6 +1114,10 @@ impl AgentRuntimeState {
             }
             AgentProvider::Gemini => {
                 self.run_gemini_turn_process(app, &session, session_id, turn)
+                    .await
+            }
+            AgentProvider::Opencode => {
+                self.run_opencode_turn_process(app, &session, session_id, turn)
                     .await
             }
         }
@@ -1242,6 +1293,10 @@ impl AgentRuntimeState {
                 | PendingRequestTransport::CodexUserInput {
                     session_id: pending_session_id,
                     ..
+                }
+                | PendingRequestTransport::OpenCodePermission {
+                    session_id: pending_session_id,
+                    ..
                 } => pending_session_id != session_id,
             });
         }
@@ -1261,7 +1316,10 @@ impl AgentRuntimeState {
         };
         match &handle.transport {
             RunningTransport::CodexAppServer { writer } => Ok(writer.clone()),
-            RunningTransport::Claude | RunningTransport::Cursor | RunningTransport::Gemini => {
+            RunningTransport::Claude
+            | RunningTransport::Cursor
+            | RunningTransport::Gemini
+            | RunningTransport::OpenCodeServer => {
                 Err("This pending request is not backed by Codex App Server.".to_string())
             }
         }
@@ -1427,6 +1485,7 @@ fn validate_turn_attachments_for_provider(
                 attachment.kind,
                 AgentAttachmentKind::Image | AgentAttachmentKind::Pdf
             ),
+            AgentProvider::Opencode => false,
         };
         if is_supported {
             continue;
@@ -1437,6 +1496,7 @@ fn validate_turn_attachments_for_provider(
             AgentProvider::Codex => "Codex",
             AgentProvider::Cursor => "Cursor",
             AgentProvider::Gemini => "Gemini",
+            AgentProvider::Opencode => "OpenCode",
         };
 
         let kind_label = match attachment.kind {
@@ -1529,11 +1589,8 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
     if session.model.trim().is_empty() {
         session.model = default_model_for_provider(&session.provider).to_string();
     }
-    session.effort = normalize_agent_effort(
-        &session.provider,
-        &session.model,
-        session.effort.as_deref(),
-    );
+    session.effort =
+        normalize_agent_effort(&session.provider, &session.model, session.effort.as_deref());
     if matches!(
         session.session_role,
         AgentSessionRole::ReviewAgent | AgentSessionRole::Manual
@@ -2303,9 +2360,9 @@ mod tests {
         apply_session_failure, complete_activity, create_activity, derive_activity_metadata,
         split_provider_output_chunks, strip_shell_wrapper, AgentActivityStatus, AgentMessage,
         AgentMessageRole, AgentMessageStatus, AgentProvider, AgentRequest, AgentRequestKind,
-        AgentRequestStatus, AgentRuntimeState, SessionFailureState,
-        AgentRuntimeDebugEvent, AgentRuntimeStatus, AgentSessionNameMode, AgentSessionRole,
-        AgentSessionSnapshot, AgentSessionStatus, AgentTargetType, ProviderOutputChunk,
+        AgentRequestStatus, AgentRuntimeDebugEvent, AgentRuntimeState, AgentRuntimeStatus,
+        AgentSessionNameMode, AgentSessionRole, AgentSessionSnapshot, AgentSessionStatus,
+        AgentTargetType, ProviderOutputChunk, SessionFailureState,
     };
     use serde_json::Value;
     use tokio::time::Duration;
@@ -2423,7 +2480,10 @@ mod tests {
             ProviderOutputChunk::Json(_) => panic!("expected trailing assistant text chunk"),
         }
     }
-    fn make_test_session(session_id: &str, pending_request: Option<AgentRequest>) -> AgentSessionSnapshot {
+    fn make_test_session(
+        session_id: &str,
+        pending_request: Option<AgentRequest>,
+    ) -> AgentSessionSnapshot {
         AgentSessionSnapshot {
             id: session_id.to_string(),
             provider: AgentProvider::Codex,
@@ -2471,11 +2531,9 @@ mod tests {
             .wait_for_pending_request_resolution(session_id)
             .await
             .expect("wait should succeed");
-        assert!(
-            !runtime
-                .session_has_pending_request(session_id)
-                .expect("pending request state")
-        );
+        assert!(!runtime
+            .session_has_pending_request(session_id)
+            .expect("pending request state"));
     }
 
     #[tokio::test]
@@ -2521,11 +2579,9 @@ mod tests {
             .wait_for_pending_request_resolution(session_id)
             .await
             .expect("wait should succeed");
-        assert!(
-            !runtime
-                .session_has_pending_request(session_id)
-                .expect("pending request state")
-        );
+        assert!(!runtime
+            .session_has_pending_request(session_id)
+            .expect("pending request state"));
     }
 
     #[test]

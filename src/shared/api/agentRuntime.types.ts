@@ -1,4 +1,4 @@
-export type AgentRuntimeProvider = "claude" | "codex" | "cursor" | "gemini";
+export type AgentRuntimeProvider = "claude" | "codex" | "cursor" | "gemini" | "opencode";
 
 export type AgentRuntimeSessionRole = "default" | "review-agent" | "manual";
 export type AgentRuntimeSessionNameMode = "default" | "auto" | "manual";

@@ -152,13 +152,43 @@ describe("agentRuntime.schemas", () => {
             providerExtras: true,
           },
         },
+        {
+          id: "opencode",
+          label: "OpenCode",
+          transport: "appServer",
+          defaultModel: "default",
+          modelOptions: [{ slug: "default", label: "Configured default" }],
+          readiness: {
+            status: "partial",
+            summary: "OpenCode CLI detected.",
+            details: [
+              "Use provider/model values like anthropic/claude-sonnet-4-5.",
+            ],
+            binaryCandidates: ["opencode"],
+            detectedCommand: "opencode",
+            detectedVersion: "0.6.1",
+            authStatus: "unknown",
+          },
+          features: {
+            streaming: true,
+            resume: true,
+            structuredRequests: true,
+            planMode: true,
+            attachmentKinds: [],
+            structuredPlanUi: false,
+            usageInspection: false,
+            providerExtras: true,
+          },
+        },
       ],
     });
 
     expect(parsed.providers[0]?.transport).toBe("cli-headless");
     expect(parsed.providers[1]?.transport).toBe("app-server");
+    expect(parsed.providers[2]?.id).toBe("opencode");
     expect(parsed.providers[0]?.readiness.detectedVersion).toBe("2.1.78 (Claude Code)");
     expect(parsed.providers[1]?.readiness.detectedVersion).toBe("codex-cli 0.115.0");
+    expect(parsed.providers[2]?.readiness.detectedCommand).toBe("opencode");
   });
 
   it("accepts lightweight runtime session summaries", () => {

@@ -131,6 +131,32 @@ const capabilities: AgentRuntimeCapabilities = {
         providerExtras: true,
       },
     },
+    {
+      id: "opencode",
+      label: "OpenCode",
+      transport: "app-server",
+      defaultModel: "default",
+      modelOptions: [{ slug: "default", label: "Configured default" }],
+      readiness: {
+        status: "partial",
+        summary: "Installed",
+        details: [],
+        binaryCandidates: ["opencode"],
+        detectedCommand: "opencode",
+        detectedVersion: "0.1.0",
+        authStatus: "unknown",
+      },
+      features: {
+        streaming: true,
+        resume: true,
+        structuredRequests: true,
+        planMode: true,
+        attachmentKinds: [],
+        structuredPlanUi: false,
+        usageInspection: false,
+        providerExtras: true,
+      },
+    },
   ],
 };
 
@@ -139,6 +165,7 @@ describe("agentProviders.pure", () => {
     expect(getAgentProviderLabel("cursor")).toBe("Cursor");
     expect(getAgentProviderBadgeClass("gemini")).toContain("emerald");
     expect(getAgentProviderIconClass("codex")).toContain("accent");
+    expect(getAgentProviderLabel("opencode")).toBe("OpenCode");
   });
 
   it("returns the shared default provider", () => {
@@ -155,6 +182,7 @@ describe("agentProviders.pure", () => {
   it("returns descriptors and model options", () => {
     expect(getAgentRuntimeProviderDescriptor(capabilities, "codex")?.transport).toBe("app-server");
     expect(getAgentRuntimeProviderModelOptions(capabilities, "cursor")).toHaveLength(1);
+    expect(getAgentRuntimeProviderDescriptor(capabilities, "opencode")?.transport).toBe("app-server");
   });
 
   it("merges built-in and custom model options without duplicates", () => {
@@ -196,6 +224,7 @@ describe("agentProviders.pure", () => {
     expect(normalizeAgentRuntimeEffort("codex", "gpt-5.3-codex", "none")).toBe("medium");
     expect(normalizeAgentRuntimeEffort("claude", "opus", "max")).toBe("max");
     expect(normalizeAgentRuntimeEffort("cursor", "auto", "medium")).toBeUndefined();
+    expect(normalizeAgentRuntimeEffort("opencode", "anthropic/claude-sonnet-4-5", "medium")).toBeUndefined();
     expect(getAgentRuntimeEffortLabel("xhigh")).toBe("X-High");
   });
 
@@ -205,6 +234,7 @@ describe("agentProviders.pure", () => {
       "codex",
       "cursor",
       "gemini",
+      "opencode",
     ]);
   });
 

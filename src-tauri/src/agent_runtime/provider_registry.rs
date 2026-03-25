@@ -147,6 +147,27 @@ pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
                 provider_extras: true,
             },
         },
+        AgentRuntimeProviderDescriptor {
+            id: "opencode".to_string(),
+            label: "OpenCode".to_string(),
+            transport: AgentRuntimeProviderTransport::AppServer,
+            default_model: DEFAULT_OPENCODE_MODEL.to_string(),
+            model_options: vec![AgentRuntimeModelOption {
+                slug: DEFAULT_OPENCODE_MODEL.to_string(),
+                label: "Configured default".to_string(),
+            }],
+            readiness: provider_readiness(&AgentProvider::Opencode),
+            features: AgentRuntimeProviderFeatures {
+                streaming: true,
+                resume: true,
+                structured_requests: true,
+                plan_mode: true,
+                attachment_kinds: vec![],
+                structured_plan_ui: false,
+                usage_inspection: false,
+                provider_extras: true,
+            },
+        },
     ];
     descriptors.sort_by(|left, right| left.label.cmp(&right.label));
     descriptors
@@ -158,6 +179,7 @@ pub(super) fn default_model_for_provider(provider: &AgentProvider) -> &'static s
         AgentProvider::Codex => DEFAULT_CODEX_MODEL,
         AgentProvider::Cursor => DEFAULT_CURSOR_MODEL,
         AgentProvider::Gemini => DEFAULT_GEMINI_MODEL,
+        AgentProvider::Opencode => DEFAULT_OPENCODE_MODEL,
     }
 }
 
@@ -191,7 +213,10 @@ pub(super) fn normalize_agent_effort(
         .map(str::to_ascii_lowercase);
 
     if let Some(effort) = normalized_effort {
-        if supported_efforts.iter().any(|candidate| *candidate == effort) {
+        if supported_efforts
+            .iter()
+            .any(|candidate| *candidate == effort)
+        {
             return Some(effort);
         }
     }
@@ -221,7 +246,11 @@ pub(super) fn build_claude_command(
     if !session.model.trim().is_empty() {
         command.arg("--model").arg(session.model.trim());
     }
-    if let Some(effort) = session.effort.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(effort) = session
+        .effort
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         command.arg("--effort").arg(effort);
     }
     if let Some(thread_id) = session.thread_id.as_deref() {
@@ -306,7 +335,10 @@ fn gemini_approval_args(interaction_mode: AgentInteractionMode) -> &'static [&'s
     }
 }
 
-fn supported_efforts_for_provider_model(provider: &AgentProvider, model: &str) -> &'static [&'static str] {
+fn supported_efforts_for_provider_model(
+    provider: &AgentProvider,
+    model: &str,
+) -> &'static [&'static str] {
     match provider {
         AgentProvider::Claude => {
             if is_claude_opus_model(model) {
@@ -317,12 +349,10 @@ fn supported_efforts_for_provider_model(provider: &AgentProvider, model: &str) -
         }
         AgentProvider::Codex => match normalize_model_alias(model).as_str() {
             "gpt-5.4" | "gpt-5.2" => NONE_TO_XHIGH_EFFORTS,
-            "gpt-5.3-codex" | "gpt-5.3-codex-spark" | "gpt-5.2-codex" => {
-                LOW_TO_XHIGH_EFFORTS
-            }
+            "gpt-5.3-codex" | "gpt-5.3-codex-spark" | "gpt-5.2-codex" => LOW_TO_XHIGH_EFFORTS,
             _ => LOW_MEDIUM_HIGH_EFFORTS,
         },
-        AgentProvider::Cursor | AgentProvider::Gemini => &[],
+        AgentProvider::Cursor | AgentProvider::Gemini | AgentProvider::Opencode => &[],
     }
 }
 
@@ -478,14 +508,18 @@ fi
 
     for shell in login_shell_candidates() {
         let mut command = StdCommand::new(&shell);
-        command.args(["-l", "-c", PROBE_SCRIPT, "divergence-agent-runtime", candidate]);
-        let output = match run_std_command_with_timeout(
-            &mut command,
-            LOGIN_SHELL_BINARY_PROBE_TIMEOUT,
-        ) {
-            Ok(output) => output,
-            Err(_) => continue,
-        };
+        command.args([
+            "-l",
+            "-c",
+            PROBE_SCRIPT,
+            "divergence-agent-runtime",
+            candidate,
+        ]);
+        let output =
+            match run_std_command_with_timeout(&mut command, LOGIN_SHELL_BINARY_PROBE_TIMEOUT) {
+                Ok(output) => output,
+                Err(_) => continue,
+            };
         if !output.status.success() {
             continue;
         }
@@ -535,7 +569,13 @@ fn resolve_binary_in_fnm_installations(candidate: &str) -> Option<String> {
 
         let mut candidate_paths = entries
             .filter_map(Result::ok)
-            .map(|entry| entry.path().join("installation").join("bin").join(candidate))
+            .map(|entry| {
+                entry
+                    .path()
+                    .join("installation")
+                    .join("bin")
+                    .join(candidate)
+            })
             .collect::<Vec<_>>();
         candidate_paths.sort();
         candidate_paths.reverse();
@@ -596,10 +636,7 @@ fn run_std_command_with_timeout(
                 let _ = child.wait();
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
-                    format!(
-                        "Command timed out after {}ms",
-                        timeout.as_millis()
-                    ),
+                    format!("Command timed out after {}ms", timeout.as_millis()),
                 ));
             }
             None => thread::sleep(Duration::from_millis(10)),
@@ -677,9 +714,9 @@ fn strip_ansi_sequences(input: &str) -> String {
 mod tests {
     use super::{
         build_claude_command, default_effort_for_provider_model, gemini_approval_args,
-        normalize_agent_effort, read_cli_version_line, AgentInteractionMode, AgentProvider, AgentRuntimeStatus,
-        AgentSessionNameMode, AgentSessionRole, AgentSessionSnapshot, AgentSessionStatus,
-        AgentTargetType,
+        normalize_agent_effort, read_cli_version_line, AgentInteractionMode, AgentProvider,
+        AgentRuntimeStatus, AgentSessionNameMode, AgentSessionRole, AgentSessionSnapshot,
+        AgentSessionStatus, AgentTargetType,
     };
     use std::path::PathBuf;
 
@@ -749,8 +786,7 @@ mod tests {
             Some("medium")
         );
         assert_eq!(
-            normalize_agent_effort(&AgentProvider::Codex, "gpt-5.3-codex", Some("none"))
-                .as_deref(),
+            normalize_agent_effort(&AgentProvider::Codex, "gpt-5.3-codex", Some("none")).as_deref(),
             Some("medium")
         );
         assert_eq!(
@@ -796,6 +832,10 @@ fn detect_cursor_binary() -> Option<String> {
 
 fn detect_gemini_binary() -> Option<String> {
     detect_binary(&["gemini"])
+}
+
+pub(super) fn detect_opencode_binary() -> Option<String> {
+    detect_binary(&["opencode"])
 }
 
 fn read_cli_version_line(output: &str) -> Option<String> {
@@ -1031,6 +1071,37 @@ fn provider_readiness(provider: &AgentProvider) -> AgentRuntimeProviderReadiness
                         "Install Gemini CLI and authenticate it locally before using Gemini sessions.".to_string(),
                     ],
                     binary_candidates: vec!["gemini".to_string()],
+                    detected_command: None,
+                    detected_version: None,
+                    auth_status: AgentRuntimeProviderAuthStatus::Missing,
+                }
+            }
+        }
+        AgentProvider::Opencode => {
+            let detected = detect_opencode_binary();
+            if let Some(command) = detected {
+                let version = read_cli_version(&command);
+                AgentRuntimeProviderReadiness {
+                    status: AgentRuntimeProviderReadinessStatus::Partial,
+                    summary: "OpenCode CLI detected. Provider auth is managed through local OpenCode config and credentials.".to_string(),
+                    details: vec![
+                        "Run `opencode auth login` to add provider credentials, or provide them through env vars or your project `.env`.".to_string(),
+                        "Use model strings in the form `provider/model`, for example `anthropic/claude-sonnet-4-5`.".to_string(),
+                        "Divergence talks to OpenCode through `opencode serve` and its HTTP + SSE API.".to_string(),
+                    ],
+                    binary_candidates: vec!["opencode".to_string()],
+                    detected_command: Some(command),
+                    detected_version: version,
+                    auth_status: AgentRuntimeProviderAuthStatus::Unknown,
+                }
+            } else {
+                AgentRuntimeProviderReadiness {
+                    status: AgentRuntimeProviderReadinessStatus::SetupRequired,
+                    summary: "OpenCode CLI not found.".to_string(),
+                    details: vec![
+                        "Install OpenCode and configure at least one provider with `opencode auth login` before using OpenCode sessions.".to_string(),
+                    ],
+                    binary_candidates: vec!["opencode".to_string()],
                     detected_command: None,
                     detected_version: None,
                     auth_status: AgentRuntimeProviderAuthStatus::Missing,

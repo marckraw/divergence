@@ -235,12 +235,14 @@ describe("normalizeAppSettings", () => {
       customAgentModels: {
         codex: ["gpt-5.1", "gpt-5.1", "o3"],
         claude: ["  sonnet-4.5  ", "", "opus-4.1"],
+        opencode: [" anthropic/claude-sonnet-4-5 ", "anthropic/claude-sonnet-4-5", "openrouter/deepseek/deepseek-r1"],
       },
     });
 
     expect(normalized.customAgentModels).toEqual({
       codex: ["gpt-5.1", "o3"],
       claude: ["sonnet-4.5", "opus-4.1"],
+      opencode: ["anthropic/claude-sonnet-4-5", "openrouter/deepseek/deepseek-r1"],
     });
   });
 

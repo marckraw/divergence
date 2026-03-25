@@ -13,6 +13,7 @@ export const AGENT_PROVIDER_ORDER: AgentRuntimeProvider[] = [
   "codex",
   "cursor",
   "gemini",
+  "opencode",
 ];
 
 export const DEFAULT_AGENT_PROVIDER: AgentRuntimeProvider = AGENT_PROVIDER_ORDER[0];
@@ -22,6 +23,7 @@ const PROVIDER_LABELS: Record<AgentRuntimeProvider, string> = {
   codex: "Codex",
   cursor: "Cursor",
   gemini: "Gemini",
+  opencode: "OpenCode",
 };
 
 const PROVIDER_BADGE_CLASSES: Record<AgentRuntimeProvider, string> = {
@@ -29,6 +31,7 @@ const PROVIDER_BADGE_CLASSES: Record<AgentRuntimeProvider, string> = {
   codex: "bg-accent/20 text-accent",
   cursor: "bg-blue-400/20 text-blue-300",
   gemini: "bg-emerald-400/20 text-emerald-300",
+  opencode: "bg-orange-500/20 text-orange-200",
 };
 
 const PROVIDER_ICON_CLASSES: Record<AgentRuntimeProvider, string> = {
@@ -36,6 +39,7 @@ const PROVIDER_ICON_CLASSES: Record<AgentRuntimeProvider, string> = {
   codex: "text-accent",
   cursor: "text-blue-300",
   gemini: "text-emerald-300",
+  opencode: "text-orange-200",
 };
 
 const EFFORT_LABELS: Record<AgentRuntimeEffort, string> = {
@@ -164,6 +168,7 @@ export function getAgentRuntimeProviderEffortOptions(
       return buildEffortOptions(getCodexEfforts(model));
     case "cursor":
     case "gemini":
+    case "opencode":
     default:
       return [];
   }
