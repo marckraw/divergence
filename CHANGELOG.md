@@ -1,5 +1,13 @@
 # divergence
 
+## 0.45.4
+
+### Patch Changes
+
+- 440f4b8: Align sidebar project and divergence clicks with the "Needs You" reveal behavior.
+
+  Selecting those items now reuses an already open stage session when possible and only opens a new tab when the session is not visible, instead of always replacing the focused pane.
+
 ## 0.45.3
 
 ### Patch Changes
