@@ -182,7 +182,7 @@ function AgentSessionChangedFilesPresentational({
             <span>
               {loading && fileCount === 0
                 ? "Loading..."
-                : `${fileCount} file${fileCount === 1 ? "" : "s"} modified in this session`}
+                : `${fileCount} file${fileCount === 1 ? "" : "s"} changed in the working directory`}
             </span>
           </span>
         </summary>
