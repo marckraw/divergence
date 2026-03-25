@@ -1,4 +1,4 @@
-import type { AgentSessionSnapshot } from "../../agent-session";
+import type { AgentProposedPlan, AgentSessionSnapshot } from "../../agent-session";
 import type { WorkspaceSession } from "../model/workspaceSession.types";
 import { isAgentSession, isEditorSession } from "./workspaceSession.pure";
 
@@ -24,14 +24,19 @@ export interface WorkspaceSessionAttentionOptions {
   dismissedAttentionKey?: string | null;
 }
 
-function getLatestAssistantMessage(session: AgentSessionSnapshot) {
-  for (let index = session.messages.length - 1; index >= 0; index -= 1) {
-    const message = session.messages[index];
-    if (message?.role === "assistant") {
-      return message;
+function getLatestProposedPlan(session: AgentSessionSnapshot): AgentProposedPlan | null {
+  let latestPlan: AgentProposedPlan | null = null;
+  session.proposedPlans.forEach((plan) => {
+    if (plan.status !== "proposed") {
+      return;
     }
-  }
-  return null;
+
+    if (!latestPlan || plan.updatedAtMs > latestPlan.updatedAtMs) {
+      latestPlan = plan;
+    }
+  });
+
+  return latestPlan;
 }
 
 function isPlanReady(session: AgentSessionSnapshot): boolean {
@@ -43,12 +48,7 @@ function isPlanReady(session: AgentSessionSnapshot): boolean {
     return false;
   }
 
-  const latestAssistantMessage = getLatestAssistantMessage(session);
-  const latestAssistantInteractionMode = latestAssistantMessage?.interactionMode
-    ?? session.latestAssistantMessageInteractionMode;
-  const latestAssistantStatus = latestAssistantMessage?.status
-    ?? session.latestAssistantMessageStatus;
-  return latestAssistantInteractionMode === "plan" && latestAssistantStatus === "done";
+  return getLatestProposedPlan(session) !== null;
 }
 
 const ATTENTION_PRIORITY: Record<WorkspaceSessionAttentionKind, number> = {
@@ -95,8 +95,9 @@ export function getWorkspaceSessionAttentionKey(
     return `error:${session.lastRuntimeEventAtMs ?? session.updatedAtMs}:${session.errorMessage ?? ""}`;
   }
 
-  if (isPlanReady(session)) {
-    return `plan-ready:${session.lastRuntimeEventAtMs ?? session.updatedAtMs}`;
+  const latestProposedPlan = getLatestProposedPlan(session);
+  if (latestProposedPlan) {
+    return `plan-ready:${latestProposedPlan.id}:${latestProposedPlan.updatedAtMs}`;
   }
 
   const lastRuntimeEventAtMs = session.lastRuntimeEventAtMs;

@@ -38,6 +38,7 @@ function AgentSessionViewPresentational({
   onCloseChangesSidebar,
   onSidebarTabChange,
   onOpenChangedFile,
+  onImplementProposedPlan,
   onSendPrompt,
   onStageAttachment,
   onDiscardAttachment,
@@ -194,6 +195,7 @@ function AgentSessionViewPresentational({
           <AgentSessionTimelineContainer
             session={session}
             timelineItems={timelineItems}
+            onImplementProposedPlan={onImplementProposedPlan}
           />
 
           <AgentSessionComposerContainer

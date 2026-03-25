@@ -24,6 +24,7 @@ const activityStatusSchema = z.enum(["running", "completed", "error"]);
 const effortSchema = z.enum(["none", "low", "medium", "high", "xhigh", "max"]);
 const requestKindSchema = z.enum(["approval", "user-input"]);
 const requestStatusSchema = z.enum(["open", "resolved"]);
+const proposedPlanStatusSchema = z.enum(["proposed", "implemented", "dismissed"]);
 const providerTransportSchema = z
   .enum(["cli-headless", "app-server", "cliHeadless", "appServer"])
   .transform((value) => {
@@ -108,6 +109,19 @@ const agentRuntimeAttachmentSchema = z.object({
   kind: attachmentKindSchema,
 });
 
+const agentRuntimeProposedPlanSchema = z.object({
+  id: z.string(),
+  sourceMessageId: z.string().nullable().optional(),
+  sourceTurnInteractionMode: z.literal("plan"),
+  title: z.string().nullable().optional(),
+  planMarkdown: z.string(),
+  status: proposedPlanStatusSchema,
+  createdAtMs: z.number(),
+  updatedAtMs: z.number(),
+  implementedAtMs: z.number().nullable().optional(),
+  implementationSessionId: z.string().nullable().optional(),
+});
+
 const agentRuntimeMessageSchema = z.object({
   id: z.string(),
   role: messageRoleSchema,
@@ -187,6 +201,7 @@ export const agentRuntimeSessionSnapshotSchema = z.object({
   runtimeEvents: z.array(agentRuntimeDebugEventSchema),
   messages: z.array(agentRuntimeMessageSchema),
   activities: z.array(agentRuntimeActivitySchema),
+  proposedPlans: z.array(agentRuntimeProposedPlanSchema).default([]),
   pendingRequest: agentRuntimeRequestSchema.nullable(),
   errorMessage: z.string().nullable().optional(),
 });
@@ -214,6 +229,7 @@ export const agentRuntimeSessionSummarySchema = z.object({
   currentTurnStartedAtMs: z.number().nullable().optional(),
   lastRuntimeEventAtMs: z.number().nullable().optional(),
   runtimePhase: z.string().nullable().optional(),
+  proposedPlans: z.array(agentRuntimeProposedPlanSchema).default([]),
   pendingRequest: agentRuntimeRequestSchema.nullable(),
   errorMessage: z.string().nullable().optional(),
   latestAssistantMessageInteractionMode: optionalNullToUndefined(interactionModeSchema),

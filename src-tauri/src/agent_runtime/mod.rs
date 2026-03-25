@@ -242,6 +242,57 @@ pub struct AgentAttachment {
     pub kind: AgentAttachmentKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgentProposedPlanStatus {
+    Proposed,
+    Implemented,
+    Dismissed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentProposedPlan {
+    pub id: String,
+    #[serde(default)]
+    pub source_message_id: Option<String>,
+    pub source_turn_interaction_mode: AgentInteractionMode,
+    #[serde(default)]
+    pub title: Option<String>,
+    pub plan_markdown: String,
+    pub status: AgentProposedPlanStatus,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
+    #[serde(default)]
+    pub implemented_at_ms: Option<i64>,
+    #[serde(default)]
+    pub implementation_session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRuntimeCodexTurnOptions {
+    #[serde(default)]
+    pub fast_mode: Option<bool>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRuntimeEmptyTurnOptions {}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRuntimeProviderTurnOptions {
+    #[serde(default)]
+    pub codex: Option<AgentRuntimeCodexTurnOptions>,
+    #[serde(default)]
+    pub claude: Option<AgentRuntimeEmptyTurnOptions>,
+    #[serde(default)]
+    pub cursor: Option<AgentRuntimeEmptyTurnOptions>,
+    #[serde(default)]
+    pub gemini: Option<AgentRuntimeEmptyTurnOptions>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentMessage {
@@ -380,6 +431,8 @@ pub struct AgentSessionSnapshot {
     pub runtime_events: Vec<AgentRuntimeDebugEvent>,
     pub messages: Vec<AgentMessage>,
     pub activities: Vec<AgentActivity>,
+    #[serde(default)]
+    pub proposed_plans: Vec<AgentProposedPlan>,
     pub pending_request: Option<AgentRequest>,
     pub error_message: Option<String>,
 }
@@ -409,6 +462,7 @@ pub struct AgentSessionSummary {
     pub current_turn_started_at_ms: Option<i64>,
     pub last_runtime_event_at_ms: Option<i64>,
     pub runtime_phase: Option<String>,
+    pub proposed_plans: Vec<AgentProposedPlan>,
     pub pending_request: Option<AgentRequest>,
     pub error_message: Option<String>,
     pub latest_assistant_message_interaction_mode: Option<AgentInteractionMode>,
@@ -440,6 +494,10 @@ pub struct StartAgentTurnInput {
     pub interaction_mode: Option<AgentInteractionMode>,
     #[serde(default)]
     pub attachments: Option<Vec<AgentAttachment>>,
+    #[serde(default)]
+    pub source_proposed_plan_id: Option<String>,
+    #[serde(default)]
+    pub provider_turn_options: Option<AgentRuntimeProviderTurnOptions>,
     pub claude_oauth_token: Option<String>,
     pub automation_mode: Option<bool>,
 }
@@ -458,6 +516,7 @@ pub(super) struct AgentTurnInvocation {
     pub prompt: String,
     pub attachments: Vec<AgentAttachment>,
     pub interaction_mode: AgentInteractionMode,
+    pub provider_turn_options: AgentRuntimeProviderTurnOptions,
     pub claude_oauth_token: String,
     pub automation_mode: bool,
 }
@@ -519,6 +578,7 @@ fn summarize_session(session: &AgentSessionSnapshot) -> AgentSessionSummary {
         current_turn_started_at_ms: session.current_turn_started_at_ms,
         last_runtime_event_at_ms: session.last_runtime_event_at_ms,
         runtime_phase: session.runtime_phase.clone(),
+        proposed_plans: session.proposed_plans.clone(),
         pending_request: session.pending_request.clone(),
         error_message: session.error_message.clone(),
         latest_assistant_message_interaction_mode: latest_assistant_message
@@ -700,6 +760,7 @@ impl AgentRuntimeState {
             runtime_events: Vec::new(),
             messages: Vec::new(),
             activities: Vec::new(),
+            proposed_plans: Vec::new(),
             pending_request: None,
             error_message: None,
         };
@@ -772,10 +833,16 @@ impl AgentRuntimeState {
             .interaction_mode
             .unwrap_or(AgentInteractionMode::Default);
         let attachments = input.attachments.unwrap_or_default();
+        let source_proposed_plan_id = input
+            .source_proposed_plan_id
+            .map(|plan_id| plan_id.trim().to_string())
+            .filter(|plan_id| !plan_id.is_empty());
+        let provider_turn_options = input.provider_turn_options.unwrap_or_default();
         let turn = AgentTurnInvocation {
             prompt: prompt.clone(),
             attachments: attachments.clone(),
             interaction_mode,
+            provider_turn_options,
             claude_oauth_token: input.claude_oauth_token.unwrap_or_default(),
             automation_mode: input.automation_mode.unwrap_or(false),
         };
@@ -784,6 +851,12 @@ impl AgentRuntimeState {
         let snapshot = self.mutate_session(&session_id, |session| {
             if matches!(session.runtime_status, AgentRuntimeStatus::Running) {
                 return Err("This agent session is already running.".to_string());
+            }
+
+            if !matches!(interaction_mode, AgentInteractionMode::Plan) {
+                if let Some(plan_id) = source_proposed_plan_id.as_deref() {
+                    mark_proposed_plan_implemented(session, plan_id)?;
+                }
             }
 
             let now = now_ms();
@@ -812,7 +885,7 @@ impl AgentRuntimeState {
                     content: String::new(),
                     status: AgentMessageStatus::Streaming,
                     created_at_ms: now,
-                    interaction_mode: None,
+                    interaction_mode: Some(interaction_mode),
                     attachments: None,
                 });
             }
@@ -1554,6 +1627,9 @@ fn normalize_persisted_session(mut session: AgentSessionSnapshot) -> AgentSessio
             }
         }
     }
+    session
+        .proposed_plans
+        .retain(|plan| !plan.plan_markdown.trim().is_empty());
     if matches!(
         session.runtime_status,
         AgentRuntimeStatus::Running | AgentRuntimeStatus::Waiting
@@ -1966,6 +2042,98 @@ fn last_assistant_message_index(session: &AgentSessionSnapshot) -> Option<usize>
         .rev()
         .find(|(_, message)| matches!(message.role, AgentMessageRole::Assistant))
         .map(|(index, _)| index)
+}
+
+fn latest_user_interaction_mode(session: &AgentSessionSnapshot) -> Option<AgentInteractionMode> {
+    session
+        .messages
+        .iter()
+        .rev()
+        .find(|message| matches!(message.role, AgentMessageRole::User))
+        .and_then(|message| message.interaction_mode)
+}
+
+fn derive_proposed_plan_title(plan_markdown: &str) -> Option<String> {
+    plan_markdown
+        .lines()
+        .map(str::trim)
+        .find_map(|line| {
+            let trimmed = line
+                .trim_start_matches('#')
+                .trim_start_matches('-')
+                .trim_start_matches('*')
+                .trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+}
+
+fn upsert_proposed_plan_from_turn(session: &mut AgentSessionSnapshot) {
+    if !matches!(
+        latest_user_interaction_mode(session),
+        Some(AgentInteractionMode::Plan)
+    ) {
+        return;
+    }
+
+    let Some(message_index) = last_assistant_message_index(session) else {
+        return;
+    };
+    let Some(message) = session.messages.get(message_index) else {
+        return;
+    };
+    if !matches!(message.status, AgentMessageStatus::Done) {
+        return;
+    }
+
+    let plan_markdown = message.content.trim();
+    if plan_markdown.is_empty() {
+        return;
+    }
+
+    let updated_at_ms = now_ms();
+    if let Some(existing_plan) = session.proposed_plans.iter_mut().find(|plan| {
+        plan.source_message_id.as_deref() == Some(message.id.as_str())
+    }) {
+        existing_plan.title = derive_proposed_plan_title(plan_markdown);
+        existing_plan.plan_markdown = plan_markdown.to_string();
+        existing_plan.status = AgentProposedPlanStatus::Proposed;
+        existing_plan.updated_at_ms = updated_at_ms;
+        existing_plan.implemented_at_ms = None;
+        existing_plan.implementation_session_id = None;
+        return;
+    }
+
+    session.proposed_plans.push(AgentProposedPlan {
+        id: format!("proposed-plan-{}", Uuid::new_v4()),
+        source_message_id: Some(message.id.clone()),
+        source_turn_interaction_mode: AgentInteractionMode::Plan,
+        title: derive_proposed_plan_title(plan_markdown),
+        plan_markdown: plan_markdown.to_string(),
+        status: AgentProposedPlanStatus::Proposed,
+        created_at_ms: message.created_at_ms,
+        updated_at_ms,
+        implemented_at_ms: None,
+        implementation_session_id: None,
+    });
+}
+
+fn mark_proposed_plan_implemented(
+    session: &mut AgentSessionSnapshot,
+    plan_id: &str,
+) -> Result<(), String> {
+    let Some(plan) = session.proposed_plans.iter_mut().find(|plan| plan.id == plan_id) else {
+        return Err(format!("Proposed plan not found: {plan_id}"));
+    };
+    if !matches!(plan.status, AgentProposedPlanStatus::Proposed) {
+        return Err(format!("Proposed plan is no longer actionable: {plan_id}"));
+    }
+
+    let implemented_at_ms = now_ms();
+    plan.status = AgentProposedPlanStatus::Implemented;
+    plan.updated_at_ms = implemented_at_ms;
+    plan.implemented_at_ms = Some(implemented_at_ms);
+    plan.implementation_session_id = Some(session.id.clone());
+    Ok(())
 }
 
 fn has_activity_after_assistant_message(

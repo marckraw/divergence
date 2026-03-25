@@ -4,6 +4,7 @@ import type {
   AgentRuntimeAttachment,
   AgentRuntimeCapabilities,
   AgentRuntimeInteractionMode,
+  AgentRuntimeProviderTurnOptions,
   CreateAgentSessionInput,
 } from "../../../shared";
 import {
@@ -41,6 +42,8 @@ interface UseAgentRuntimeResult {
       automationMode?: boolean;
       interactionMode?: AgentRuntimeInteractionMode;
       attachments?: AgentRuntimeAttachment[];
+      sourceProposedPlanId?: string;
+      providerTurnOptions?: AgentRuntimeProviderTurnOptions;
     }
   ) => Promise<void>;
   stageAttachment: (input: {
@@ -119,6 +122,8 @@ export function useAgentRuntime({
       automationMode?: boolean;
       interactionMode?: AgentRuntimeInteractionMode;
       attachments?: AgentRuntimeAttachment[];
+      sourceProposedPlanId?: string;
+      providerTurnOptions?: AgentRuntimeProviderTurnOptions;
     }
   ): Promise<void> => {
     if (!prompt.trim()) {
@@ -130,6 +135,8 @@ export function useAgentRuntime({
       prompt,
       interactionMode: options?.interactionMode,
       attachments: options?.attachments,
+      sourceProposedPlanId: options?.sourceProposedPlanId,
+      providerTurnOptions: options?.providerTurnOptions,
       claudeOAuthToken,
       automationMode: options?.automationMode,
     });

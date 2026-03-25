@@ -126,6 +126,7 @@ impl AgentRuntimeState {
                     message.status = AgentMessageStatus::Done;
                 }
             }
+            upsert_proposed_plan_from_turn(current_session);
             current_session.status = AgentSessionStatus::Active;
             current_session.runtime_status = AgentRuntimeStatus::Idle;
             push_runtime_event(

@@ -29,10 +29,7 @@ import {
   isTerminalSession,
 } from "../../../entities";
 import type {
-  AgentRuntimeAttachment,
   AgentRuntimeCapabilities,
-  AgentRuntimeEffort,
-  AgentRuntimeInteractionMode,
   AppSettings,
   EditorThemeId,
 } from "../../../shared";
@@ -40,7 +37,12 @@ import { ToolbarButton } from "../../../shared";
 import { UsageLimitsButton } from "../../../features/usage-limits";
 import StageTabBar from "../../../widgets/stage-tab-bar";
 import WorkspaceSessionTabsPresentational from "../../../widgets/workspace-session-tabs";
-import type { AgentSessionComposerHandle } from "../../../widgets/agent-session-view/ui/AgentSessionView.types";
+import type {
+  AgentSessionComposerHandle,
+  AgentSessionTerminalContext,
+  AgentSessionViewProps,
+} from "../../../widgets/agent-session-view/ui/AgentSessionView.types";
+import type { TerminalContextSelectionRequest } from "../../../widgets/main-area";
 import AgentStagePane from "./AgentStagePane.container";
 import EditorStagePane from "./EditorStagePane.container";
 import PendingStagePane from "./PendingStagePane.container";
@@ -50,6 +52,11 @@ import type {
   EditorSessionRuntimeState,
   EditorSessionViewState,
 } from "../../model/useEditorSessionManagement";
+
+interface PendingTerminalContextInjection {
+  targetSessionId: string;
+  context: AgentSessionTerminalContext;
+}
 
 interface StageViewProps {
   tabs: StageTab[];
@@ -68,6 +75,8 @@ interface StageViewProps {
   terminalSessions: TerminalSession[];
   divergencesByProject: Map<number, Divergence[]>;
   workspaceMembersByWorkspaceId: Map<number, WorkspaceMember[]>;
+  pendingTerminalContext: PendingTerminalContextInjection | null;
+  onConsumePendingTerminalContext: (contextId: string) => void;
   splitBySessionId: Map<string, SplitSessionState>;
   reconnectBySessionId: Map<string, number>;
   globalTmuxHistoryLimit: number;
@@ -124,6 +133,7 @@ interface StageViewProps {
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
   onRegisterTerminalCommand: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterTerminalCommand: (sessionId: string) => void;
+  onAddTerminalContextRequest: (selection: TerminalContextSelectionRequest) => void;
   onFocusSplitPane: (sessionId: string, paneId: import("../../../entities").SplitPaneId) => void;
   onResizeSplitPanes: (sessionId: string, paneSizes: number[]) => void;
   onReconnectSession: (sessionId: string) => void;
@@ -135,30 +145,11 @@ interface StageViewProps {
     briefMarkdown: string;
   }) => Promise<void>;
   onSendPromptToSession: (sessionId: string, prompt: string) => Promise<void>;
-  onUpdateSessionSettings: (sessionId: string, input: {
-    model?: string;
-    effort?: AgentRuntimeEffort;
-  }) => Promise<void>;
-  onSendPrompt: (
-    sessionId: string,
-    prompt: string,
-    options?: {
-      interactionMode?: AgentRuntimeInteractionMode;
-      attachments?: AgentRuntimeAttachment[];
-    }
-  ) => Promise<void>;
-  onStageAttachment: (input: {
-    sessionId: string;
-    name: string;
-    mimeType: string;
-    base64Content: string;
-  }) => Promise<AgentRuntimeAttachment>;
-  onDiscardAttachment: (sessionId: string, attachmentId: string) => Promise<void>;
-  onRespondToRequest: (
-    sessionId: string,
-    requestId: string,
-    input: { decision?: string; answers?: string[] }
-  ) => Promise<void>;
+  onUpdateSessionSettings: AgentSessionViewProps["onUpdateSessionSettings"];
+  onSendPrompt: AgentSessionViewProps["onSendPrompt"];
+  onStageAttachment: AgentSessionViewProps["onStageAttachment"];
+  onDiscardAttachment: AgentSessionViewProps["onDiscardAttachment"];
+  onRespondToRequest: AgentSessionViewProps["onRespondToRequest"];
   onStopSession: (sessionId: string) => Promise<void>;
 }
 
@@ -177,6 +168,8 @@ function StageView({
   terminalSessions,
   divergencesByProject,
   workspaceMembersByWorkspaceId,
+  pendingTerminalContext,
+  onConsumePendingTerminalContext,
   splitBySessionId,
   reconnectBySessionId,
   globalTmuxHistoryLimit,
@@ -217,6 +210,7 @@ function StageView({
   onStatusChange,
   onRegisterTerminalCommand,
   onUnregisterTerminalCommand,
+  onAddTerminalContextRequest,
   onFocusSplitPane,
   onResizeSplitPanes,
   onReconnectSession,
@@ -514,6 +508,7 @@ function StageView({
                             onStatusChange={onStatusChange}
                             onRegisterTerminalCommand={onRegisterTerminalCommand}
                             onUnregisterTerminalCommand={onUnregisterTerminalCommand}
+                            onAddTerminalContextRequest={onAddTerminalContextRequest}
                             onFocusSplitPane={onFocusSplitPane}
                             onResizeSplitPanes={onResizeSplitPanes}
                             onReconnectSession={onReconnectSession}
@@ -523,6 +518,10 @@ function StageView({
                             sessionId={session.id}
                             composerRef={getComposerRef(session.id)}
                             capabilities={capabilities}
+                            pendingTerminalContext={pendingTerminalContext?.targetSessionId === session.id
+                              ? pendingTerminalContext.context
+                              : null}
+                            onConsumePendingTerminalContext={onConsumePendingTerminalContext}
                             onUpdateSessionSettings={onUpdateSessionSettings}
                             onSendPrompt={onSendPrompt}
                             onStageAttachment={onStageAttachment}

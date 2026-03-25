@@ -42,6 +42,12 @@ interface TerminalProps {
   onRegisterCommand?: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterCommand?: (sessionId: string) => void;
   onStatusChange?: (status: "idle" | "active" | "busy") => void;
+  onAddTerminalContextRequest?: (selection: {
+    text: string;
+    lineStart?: number | null;
+    lineEnd?: number | null;
+    createdAtMs: number;
+  }) => void;
   onReconnect?: () => void;
   onClose?: () => void;
 }
@@ -56,6 +62,53 @@ interface PerformanceWithMemory extends Performance {
     jsHeapSizeLimit: number;
     totalJSHeapSize: number;
     usedJSHeapSize: number;
+  };
+}
+
+interface TerminalSelectionOverlayState {
+  text: string;
+  lineStart?: number | null;
+  lineEnd?: number | null;
+  createdAtMs: number;
+  left: number;
+  top: number;
+}
+
+function normalizeSelectionRows(selectionPosition: unknown): {
+  lineStart?: number | null;
+  lineEnd?: number | null;
+} {
+  if (!selectionPosition || typeof selectionPosition !== "object") {
+    return {};
+  }
+
+  const candidate = selectionPosition as {
+    start?: { y?: unknown };
+    end?: { y?: unknown };
+    startRow?: unknown;
+    endRow?: unknown;
+  };
+
+  let startRow: number | null = null;
+  let endRow: number | null = null;
+
+  if (typeof candidate.start?.y === "number" && typeof candidate.end?.y === "number") {
+    startRow = candidate.start.y;
+    endRow = candidate.end.y;
+  } else if (typeof candidate.startRow === "number" && typeof candidate.endRow === "number") {
+    startRow = candidate.startRow;
+    endRow = candidate.endRow;
+  }
+
+  if (startRow === null || endRow === null) {
+    return {};
+  }
+
+  const normalizedStart = Math.min(startRow, endRow) + 1;
+  const normalizedEnd = Math.max(startRow, endRow) + 1;
+  return {
+    lineStart: normalizedStart,
+    lineEnd: normalizedEnd,
   };
 }
 
@@ -82,6 +135,7 @@ function Terminal({
   onRegisterCommand,
   onUnregisterCommand,
   onStatusChange,
+  onAddTerminalContextRequest,
   onReconnect,
   onClose,
 }: TerminalProps) {
@@ -108,12 +162,15 @@ function Terminal({
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const terminalSelectionDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const lastSelectionPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const hasReceivedDataRef = useRef(false);
   const hasLoggedFirstOutputRef = useRef(false);
   const spawnStartedAtRef = useRef<number | null>(null);
   const statusRef = useRef<"idle" | "active" | "busy">("idle");
   const lastActiveUpdateRef = useRef(0);
   const themeModeRef = useRef<"dark" | "light">(themeMode);
+  const [selectionOverlay, setSelectionOverlay] = useState<TerminalSelectionOverlayState | null>(null);
 
   useEffect(() => {
     themeModeRef.current = themeMode;
@@ -186,11 +243,63 @@ function Terminal({
     }
   }, [logTerminalDebugEvent]);
 
+  const updateSelectionOverlay = useCallback(() => {
+    const terminal = terminalRef.current;
+    const container = containerRef.current;
+    if (!terminal || !container) {
+      setSelectionOverlay(null);
+      return;
+    }
+
+    const selectedText = terminal.getSelection().trim();
+    if (!selectedText) {
+      setSelectionOverlay(null);
+      return;
+    }
+
+    const rect = container.getBoundingClientRect();
+    const pointer = lastSelectionPointerRef.current;
+    const left = pointer ? pointer.clientX - rect.left : rect.width - 140;
+    const top = pointer ? pointer.clientY - rect.top : 24;
+    const rows = normalizeSelectionRows(
+      (terminal as unknown as { getSelectionPosition?: () => unknown }).getSelectionPosition?.(),
+    );
+
+    setSelectionOverlay({
+      text: selectedText,
+      lineStart: rows.lineStart ?? null,
+      lineEnd: rows.lineEnd ?? null,
+      createdAtMs: Date.now(),
+      left: Math.min(Math.max(16, left), Math.max(16, rect.width - 132)),
+      top: Math.min(Math.max(18, top - 18), Math.max(18, rect.height - 18)),
+    });
+  }, []);
+
+  const handleSendSelectionToAgent = useCallback(() => {
+    if (!selectionOverlay || !onAddTerminalContextRequest) {
+      return;
+    }
+
+    onAddTerminalContextRequest({
+      text: selectionOverlay.text,
+      lineStart: selectionOverlay.lineStart ?? null,
+      lineEnd: selectionOverlay.lineEnd ?? null,
+      createdAtMs: selectionOverlay.createdAtMs,
+    });
+    setSelectionOverlay(null);
+    const maybeClearSelection = (
+      terminalRef.current as unknown as { clearSelection?: () => void } | null
+    )?.clearSelection;
+    maybeClearSelection?.();
+    terminalRef.current?.focus();
+  }, [onAddTerminalContextRequest, selectionOverlay]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container || initializedRef.current) return;
     isDisposedRef.current = false;
     let handleResize: (() => void) | null = null;
+    let handleSelectionMouseUp: ((event: MouseEvent) => void) | null = null;
     let resizeObserver: ResizeObserver | null = null;
 
     const initTerminal = () => {
@@ -239,6 +348,20 @@ function Terminal({
       terminal.open(container);
       fitAddon.fit();
       terminal.write("\x1b[90mConnecting...\x1b[0m");
+      terminalSelectionDisposableRef.current = terminal.onSelectionChange(() => {
+        updateSelectionOverlay();
+      });
+
+      handleSelectionMouseUp = (event: MouseEvent) => {
+        lastSelectionPointerRef.current = {
+          clientX: event.clientX,
+          clientY: event.clientY,
+        };
+        window.setTimeout(() => {
+          updateSelectionOverlay();
+        }, 0);
+      };
+      container.addEventListener("mouseup", handleSelectionMouseUp);
 
       if (typeof ResizeObserver !== "undefined") {
         resizeObserver = new ResizeObserver(() => {
@@ -558,6 +681,9 @@ function Terminal({
       if (handleResize) {
         window.removeEventListener("resize", handleResize);
       }
+      if (handleSelectionMouseUp) {
+        container.removeEventListener("mouseup", handleSelectionMouseUp);
+      }
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
@@ -582,8 +708,11 @@ function Terminal({
       ptyExitDisposableRef.current = null;
       terminalDataDisposableRef.current?.dispose();
       terminalDataDisposableRef.current = null;
+      terminalSelectionDisposableRef.current?.dispose();
+      terminalSelectionDisposableRef.current = null;
       terminalResizeDisposableRef.current?.dispose();
       terminalResizeDisposableRef.current = null;
+      setSelectionOverlay(null);
       onUnregisterCommand?.(sessionId);
       ptyRef.current?.kill();
       terminalRef.current?.dispose();
@@ -598,6 +727,7 @@ function Terminal({
     cwd,
     sessionId,
     updateStatus,
+    updateSelectionOverlay,
     useTmux,
     tmuxSessionName,
     portEnv,
@@ -689,6 +819,29 @@ function Terminal({
               {isRestartingApp ? "Restarting..." : "Restart app"}
             </Button>
           </div>
+        </div>
+      )}
+      {selectionOverlay && onAddTerminalContextRequest && (
+        <div
+          className="absolute z-20"
+          style={{
+            left: selectionOverlay.left,
+            top: selectionOverlay.top,
+            transform: "translate(-50%, -100%)",
+          }}
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-8 rounded-full px-3 text-[11px]"
+            onMouseDown={(event) => {
+              event.preventDefault();
+            }}
+            onClick={handleSendSelectionToAgent}
+          >
+            Send To Agent
+          </Button>
         </div>
       )}
       <div

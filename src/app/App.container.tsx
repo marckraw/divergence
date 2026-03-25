@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import Sidebar from "../widgets/sidebar";
+import type { TerminalContextSelectionRequest } from "../widgets/main-area";
 import { InboxPanel } from "../features/inbox";
 import { AutomationsPanel } from "../features/automations";
 import { useAgentRuntime } from "../features/agent-runtime";
@@ -52,6 +53,7 @@ import type {
   StagePaneRef,
   StageTab,
   StageTabId,
+  TerminalSession,
   Workspace,
   WorkspaceDivergence,
   WorkspaceSession,
@@ -93,6 +95,40 @@ import {
   buildWorkspaceTerminalSession,
 } from "./lib/sessionBuilder.pure";
 import StageView from "./ui/stage-view/StageView.container";
+
+interface PendingTerminalContextInjection {
+  targetSessionId: string;
+  context: {
+    id: string;
+    sourceSessionId: string;
+    sourceSessionName: string;
+    lineStart?: number | null;
+    lineEnd?: number | null;
+    text: string;
+    createdAtMs: number;
+  };
+}
+
+interface TerminalContextPickerState {
+  selection: TerminalContextSelectionRequest;
+  candidateSessionIds: string[];
+}
+
+function buildPendingTerminalContext(
+  selection: TerminalContextSelectionRequest,
+): PendingTerminalContextInjection["context"] {
+  return {
+    id: typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `terminal-context-${selection.sourceSessionId}-${selection.createdAtMs}`,
+    sourceSessionId: selection.sourceSessionId,
+    sourceSessionName: selection.sourceSessionName,
+    lineStart: selection.lineStart ?? null,
+    lineEnd: selection.lineEnd ?? null,
+    text: selection.text,
+    createdAtMs: selection.createdAtMs,
+  };
+}
 
 function App() {
   const updater = useUpdater(true);
@@ -793,6 +829,42 @@ function App() {
     showEditorSessionInStage,
   ]);
 
+  const agentProviders = useMemo(() => {
+    const available = getAvailableAgentProviders(agentRuntimeCapabilities);
+    return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
+  }, [agentRuntimeCapabilities]);
+  const defaultTerminalContextProvider = useMemo(
+    () => (
+      agentProviders.includes("codex")
+        ? "codex"
+        : agentProviders[0]
+    ),
+    [agentProviders],
+  );
+  const [pendingTerminalContextInjection, setPendingTerminalContextInjection] = useState<PendingTerminalContextInjection | null>(null);
+  const [terminalContextPickerState, setTerminalContextPickerState] = useState<TerminalContextPickerState | null>(null);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+    if (workspaceSessions.has(activeSessionId)) {
+      return;
+    }
+    const nextActiveSessionId = workspaceSessions.keys().next().value ?? null;
+    setActiveSessionId(nextActiveSessionId);
+  }, [activeSessionId, setActiveSessionId, workspaceSessions]);
+
+  useEffect(() => {
+    if (activeSessionId || !appSettings.restoreTabsOnRestart || sessions.size > 0 || openAgentSessions.size === 0) {
+      return;
+    }
+    const nextActiveSessionId = openAgentSessions.keys().next().value ?? null;
+    if (nextActiveSessionId) {
+      setActiveSessionId(nextActiveSessionId);
+    }
+  }, [activeSessionId, appSettings.restoreTabsOnRestart, openAgentSessions, sessions.size, setActiveSessionId]);
+
   const createTargetedAgentSession = useCallback(async (input: {
     provider: AgentProvider;
     type: "project" | "divergence" | "workspace" | "workspace_divergence";
@@ -844,6 +916,115 @@ function App() {
     const session = await createTargetedAgentSession(input);
     setActiveSessionId(session.id);
   }, [createTargetedAgentSession, setActiveSessionId]);
+
+  const findSuitableAgentSessionsForTerminal = useCallback((sourceSession: TerminalSession) => {
+    const defaultAgentSessions = Array.from(agentSessions.values()).filter(
+      (session) => session.sessionRole === "default",
+    );
+    const exactWorkspaceMatches = defaultAgentSessions.filter(
+      (session) => session.workspaceKey === sourceSession.workspaceKey,
+    );
+    if (exactWorkspaceMatches.length > 0) {
+      return exactWorkspaceMatches;
+    }
+
+    if (sourceSession.type === "project" || sourceSession.type === "divergence") {
+      return defaultAgentSessions.filter((session) => (
+        session.projectId === sourceSession.projectId
+        && (session.targetType === "project" || session.targetType === "divergence")
+      ));
+    }
+
+    const workspaceScopeId = sourceSession.workspaceOwnerId ?? sourceSession.targetId;
+    return defaultAgentSessions.filter((session) => {
+      if (session.targetType !== "workspace" && session.targetType !== "workspace_divergence") {
+        return false;
+      }
+
+      const sessionWorkspaceScopeId = session.workspaceOwnerId ?? session.targetId;
+      return sessionWorkspaceScopeId === workspaceScopeId;
+    });
+  }, [agentSessions]);
+
+  const resolveTerminalContextCreateTarget = useCallback((sourceSession: TerminalSession) => {
+    switch (sourceSession.type) {
+      case "project": {
+        const project = projectById.get(sourceSession.targetId);
+        return project
+          ? { provider: defaultTerminalContextProvider, type: "project" as const, item: project }
+          : null;
+      }
+      case "divergence": {
+        const divergence = divergenceById.get(sourceSession.targetId);
+        return divergence
+          ? { provider: defaultTerminalContextProvider, type: "divergence" as const, item: divergence }
+          : null;
+      }
+      case "workspace": {
+        const workspace = workspaceById.get(sourceSession.targetId);
+        return workspace
+          ? { provider: defaultTerminalContextProvider, type: "workspace" as const, item: workspace }
+          : null;
+      }
+      case "workspace_divergence": {
+        const workspaceDivergence = workspaceDivergenceById.get(sourceSession.targetId);
+        return workspaceDivergence
+          ? {
+            provider: defaultTerminalContextProvider,
+            type: "workspace_divergence" as const,
+            item: workspaceDivergence,
+          }
+          : null;
+      }
+      default:
+        return null;
+    }
+  }, [
+    defaultTerminalContextProvider,
+    divergenceById,
+    projectById,
+    workspaceById,
+    workspaceDivergenceById,
+  ]);
+
+  const routeTerminalContextToAgentSession = useCallback(async (
+    sessionId: string,
+    selection: TerminalContextSelectionRequest,
+  ) => {
+    const existingSession = agentSessions.get(sessionId);
+    if (existingSession && !existingSession.isOpen) {
+      try {
+        await openAgentSession(sessionId);
+      } catch (error) {
+        console.warn("Failed to open target agent session for terminal context:", error);
+        return;
+      }
+    }
+
+    setPendingTerminalContextInjection({
+      targetSessionId: sessionId,
+      context: buildPendingTerminalContext(selection),
+    });
+    setActiveSessionId(sessionId);
+  }, [agentSessions, openAgentSession, setActiveSessionId]);
+
+  const handleAddTerminalContextRequest = useCallback(async (selection: TerminalContextSelectionRequest) => {
+    const sourceSession = sessions.get(selection.sourceSessionId);
+    if (!sourceSession) {
+      return;
+    }
+
+    const candidateSessions = findSuitableAgentSessionsForTerminal(sourceSession);
+    if (candidateSessions.length === 1) {
+      await routeTerminalContextToAgentSession(candidateSessions[0].id, selection);
+      return;
+    }
+
+    setTerminalContextPickerState({
+      selection,
+      candidateSessionIds: candidateSessions.map((session) => session.id),
+    });
+  }, [findSuitableAgentSessionsForTerminal, routeTerminalContextToAgentSession, sessions]);
 
   const handleSelectWorkspaceSession = useCallback(async (sessionId: string) => {
     if (workspaceSessions.has(sessionId)) {
@@ -1291,6 +1472,80 @@ function App() {
     stageLayout,
   ]);
 
+  const handleConsumePendingTerminalContext = useCallback((contextId: string) => {
+    setPendingTerminalContextInjection((previous) => {
+      if (!previous || previous.context.id !== contextId) {
+        return previous;
+      }
+      return null;
+    });
+  }, []);
+
+  const terminalContextCandidateSessions = useMemo(
+    () => (
+      terminalContextPickerState
+        ? terminalContextPickerState.candidateSessionIds
+          .map((sessionId) => agentSessions.get(sessionId) ?? null)
+          .filter((session): session is NonNullable<typeof session> => session !== null)
+        : []
+    ),
+    [agentSessions, terminalContextPickerState],
+  );
+
+  const canCreateTerminalContextSession = useMemo(() => {
+    if (!terminalContextPickerState) {
+      return false;
+    }
+
+    const sourceSession = sessions.get(terminalContextPickerState.selection.sourceSessionId);
+    return sourceSession ? resolveTerminalContextCreateTarget(sourceSession) !== null : false;
+  }, [resolveTerminalContextCreateTarget, sessions, terminalContextPickerState]);
+
+  const handleSelectTerminalContextTarget = useCallback(async (targetSessionId: string) => {
+    if (!terminalContextPickerState) {
+      return;
+    }
+
+    setTerminalContextPickerState(null);
+    await routeTerminalContextToAgentSession(
+      targetSessionId,
+      terminalContextPickerState.selection,
+    );
+  }, [routeTerminalContextToAgentSession, terminalContextPickerState]);
+
+  const handleCreateTerminalContextSession = useCallback(async () => {
+    if (!terminalContextPickerState) {
+      return;
+    }
+
+    const sourceSession = sessions.get(terminalContextPickerState.selection.sourceSessionId);
+    if (!sourceSession) {
+      setTerminalContextPickerState(null);
+      return;
+    }
+
+    const createTarget = resolveTerminalContextCreateTarget(sourceSession);
+    if (!createTarget) {
+      setTerminalContextPickerState(null);
+      return;
+    }
+
+    setTerminalContextPickerState(null);
+    const createdSession = await createTargetedAgentSession(createTarget);
+    setActiveSessionId(createdSession.id);
+    await routeTerminalContextToAgentSession(
+      createdSession.id,
+      terminalContextPickerState.selection,
+    );
+  }, [
+    createTargetedAgentSession,
+    resolveTerminalContextCreateTarget,
+    routeTerminalContextToAgentSession,
+    sessions,
+    setActiveSessionId,
+    terminalContextPickerState,
+  ]);
+
   const handleCloseWorkspaceSession = (sessionId: string) => {
     if (editorSessions.has(sessionId)) {
       const closed = closeEditorSession(sessionId);
@@ -1486,10 +1741,6 @@ function App() {
   const [dismissedAttentionKeyBySessionId, setDismissedAttentionKeyBySessionId] = useState<Map<string, string>>(
     () => new Map(),
   );
-  const agentProviders = useMemo(() => {
-    const available = getAvailableAgentProviders(agentRuntimeCapabilities);
-    return available.length > 0 ? available : AGENT_PROVIDER_ORDER;
-  }, [agentRuntimeCapabilities]);
   const renamingAgentSessionIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -1769,6 +2020,8 @@ function App() {
           terminalSessions={Array.from(sessions.values())}
           divergencesByProject={divergencesByProject}
           workspaceMembersByWorkspaceId={membersByWorkspaceId}
+          pendingTerminalContext={pendingTerminalContextInjection}
+          onConsumePendingTerminalContext={handleConsumePendingTerminalContext}
           splitBySessionId={splitBySessionId}
           reconnectBySessionId={reconnectBySessionId}
           globalTmuxHistoryLimit={appSettings.tmuxHistoryLimit}
@@ -1817,6 +2070,9 @@ function App() {
           onStatusChange={handleSessionStatusChange}
           onRegisterTerminalCommand={handleRegisterTerminalCommand}
           onUnregisterTerminalCommand={handleUnregisterTerminalCommand}
+          onAddTerminalContextRequest={(selection) => {
+            void handleAddTerminalContextRequest(selection);
+          }}
           onFocusSplitPane={handleFocusSplitPane}
           onResizeSplitPanes={handleResizeSplitPanes}
           onReconnectSession={handleReconnectSession}
@@ -1907,6 +2163,86 @@ function App() {
             />
           );
         })()}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {terminalContextPickerState && (
+          <ModalShell
+            onRequestClose={() => setTerminalContextPickerState(null)}
+            size="md"
+            surface="main"
+            panelClassName="w-full max-w-lg mx-4"
+          >
+            <div className="p-4 border-b border-surface">
+              <h2 className="text-lg font-semibold text-text">Send Terminal Context</h2>
+              <p className="mt-1 text-xs text-subtext">
+                Choose an agent session for the selected terminal output.
+              </p>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div className="rounded-xl border border-surface bg-sidebar/40 px-3 py-3">
+                <p className="text-[10px] uppercase tracking-[0.18em] text-subtext">Selection</p>
+                <p className="mt-1 text-sm text-text">{terminalContextPickerState.selection.sourceSessionName}</p>
+                <p className="mt-2 text-xs leading-5 text-subtext whitespace-pre-wrap break-words">
+                  {terminalContextPickerState.selection.text}
+                </p>
+              </div>
+
+              {terminalContextCandidateSessions.length > 0 ? (
+                <div className="space-y-2">
+                  {terminalContextCandidateSessions.map((session) => (
+                    <Button
+                      key={session.id}
+                      type="button"
+                      variant="ghost"
+                      size="md"
+                      className="h-auto w-full rounded-xl border border-surface bg-sidebar/40 px-3 py-3 text-left transition-colors hover:border-accent/40 hover:bg-accent/10"
+                      onClick={() => {
+                        void handleSelectTerminalContextTarget(session.id);
+                      }}
+                    >
+                      <p className="text-sm font-medium text-text">{session.name}</p>
+                      <p className="mt-1 text-xs text-subtext">
+                        {session.provider} • {session.targetType.replace(/_/g, " ")} • {session.isOpen ? "Open" : "Closed"}
+                      </p>
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-surface bg-sidebar/25 px-3 py-4">
+                  <p className="text-sm text-text">No matching agent sessions are open for this workspace yet.</p>
+                  <p className="mt-1 text-xs text-subtext">
+                    Create a new {defaultTerminalContextProvider} session and seed its composer with this terminal context.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <ModalFooter className="p-4">
+              <Button
+                type="button"
+                variant="ghost"
+                size="md"
+                onClick={() => setTerminalContextPickerState(null)}
+              >
+                Cancel
+              </Button>
+              {canCreateTerminalContextSession && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  onClick={() => {
+                    void handleCreateTerminalContextSession();
+                  }}
+                >
+                  Create {defaultTerminalContextProvider}
+                </Button>
+              )}
+            </ModalFooter>
+          </ModalShell>
+        )}
       </AnimatePresence>
 
       <AnimatePresence>

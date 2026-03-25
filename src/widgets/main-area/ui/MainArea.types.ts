@@ -24,6 +24,15 @@ import type {
 } from "../../../features/linear-task-queue";
 import type { LinearWorkflowState } from "../../../shared";
 
+export interface TerminalContextSelectionRequest {
+  sourceSessionId: string;
+  sourceSessionName: string;
+  lineStart?: number | null;
+  lineEnd?: number | null;
+  text: string;
+  createdAtMs: number;
+}
+
 export interface MainAreaProps {
   projects: Project[];
   sessions: Map<string, WorkspaceSession>;
@@ -64,6 +73,7 @@ export interface MainAreaProps {
   isRightPanelOpen: boolean;
   onToggleRightPanel: () => void;
   onSendPromptToSession: (sessionId: string, prompt: string) => Promise<void>;
+  onAddTerminalContextRequest?: (selection: TerminalContextSelectionRequest) => void;
   workspaceMembersByWorkspaceId: Map<number, WorkspaceMember[]>;
 }
 

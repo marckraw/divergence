@@ -4,6 +4,7 @@ import type {
   AgentRuntimeDebugEvent,
   AgentRuntimeEffort,
   AgentRuntimeInteractionMode,
+  AgentRuntimeProposedPlan,
   AgentRuntimeProvider,
   AgentRuntimeSessionNameMode,
 } from "../../../shared";
@@ -31,6 +32,7 @@ export type AgentMessageRole = "user" | "assistant" | "system";
 export type AgentMessageStatus = "streaming" | "done" | "error";
 
 export type AgentActivityStatus = "running" | "completed" | "error";
+export type AgentProposedPlan = AgentRuntimeProposedPlan;
 
 export interface AgentMessage {
   id: string;
@@ -117,6 +119,7 @@ export interface AgentSessionSnapshot extends AgentSession {
   runtimeEvents: AgentRuntimeDebugEvent[];
   messages: AgentMessage[];
   activities: AgentActivity[];
+  proposedPlans: AgentProposedPlan[];
   pendingRequest: AgentRequest | null;
   errorMessage?: string | null;
 }

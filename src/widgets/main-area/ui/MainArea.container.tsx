@@ -59,6 +59,7 @@ function MainAreaContainer({
   onResizeSplitPanes,
   onReconnectSession,
   onSendPromptToSession,
+  onAddTerminalContextRequest,
   workspaceMembersByWorkspaceId,
   ...props
 }: MainAreaProps) {
@@ -363,6 +364,18 @@ function MainAreaContainer({
                   portEnv={session.portEnv}
                   isFocused={isFocusedPane}
                   onStatusChange={isSplit ? handleSplitStatusChange(session.id, paneId) : handleStatusChange(session.id)}
+                  onAddTerminalContextRequest={onAddTerminalContextRequest
+                    ? (selection) => {
+                      onAddTerminalContextRequest({
+                        sourceSessionId: session.id,
+                        sourceSessionName: isSplit ? `${session.name} (${paneId})` : session.name,
+                        lineStart: selection.lineStart ?? null,
+                        lineEnd: selection.lineEnd ?? null,
+                        text: selection.text,
+                        createdAtMs: selection.createdAtMs,
+                      });
+                    }
+                    : undefined}
                   onReconnect={() => onReconnectSession(session.id)}
                   onRegisterCommand={onRegisterTerminalCommand}
                   onUnregisterCommand={onUnregisterTerminalCommand}
@@ -401,6 +414,7 @@ function MainAreaContainer({
     onRegisterTerminalCommand,
     onUnregisterTerminalCommand,
     onFocusSplitPane,
+    onAddTerminalContextRequest,
     reconnectBySessionId,
     splitBySessionId,
   ]);
@@ -423,6 +437,7 @@ function MainAreaContainer({
       reconnectBySessionId={reconnectBySessionId}
       onReconnectSession={onReconnectSession}
       onSendPromptToSession={onSendPromptToSession}
+      onAddTerminalContextRequest={onAddTerminalContextRequest}
       workspaceMembersByWorkspaceId={workspaceMembersByWorkspaceId}
       sessionList={sessionList}
       activeProject={activeProject}

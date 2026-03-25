@@ -21,6 +21,10 @@ export {
   ModalShell,
   Panel,
   PanelHeader,
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
   ProgressBar,
   SectionHeader,
   SegmentedControl,
@@ -242,6 +246,12 @@ export {
   type GithubRepositoryRef,
 } from "./api/github.api";
 export {
+  readDir,
+  readTextFile,
+  remove,
+  writeTextFile,
+} from "./api/fs.api";
+export {
   fetchLinearProjectIssues,
   fetchLinearWorkflowStates,
   getProjectLinearRef,
@@ -297,11 +307,14 @@ export type {
   AgentRuntimeMessage,
   AgentRuntimeMessageRole,
   AgentRuntimeMessageStatus,
+  AgentRuntimeProposedPlan,
+  AgentRuntimeProposedPlanStatus,
   AgentRuntimeProvider,
   AgentRuntimeProviderDescriptor,
   AgentRuntimeProviderFeatures,
   AgentRuntimeProviderReadiness,
   AgentRuntimeProviderReadinessStatus,
+  AgentRuntimeProviderTurnOptions,
   AgentRuntimeProviderTransport,
   AgentRuntimeRequest,
   AgentRuntimeRequestKind,

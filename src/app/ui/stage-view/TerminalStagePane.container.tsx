@@ -16,6 +16,7 @@ import {
   resizeSplitPaneSizes,
 } from "../../../entities";
 import { buildSplitTmuxSessionName } from "../../../entities/terminal-session";
+import type { TerminalContextSelectionRequest } from "../../../widgets/main-area";
 import Terminal from "../../../widgets/main-area/ui/Terminal.container";
 import { getAggregatedTerminalStatus } from "../../../widgets/main-area/lib/mainArea.pure";
 
@@ -28,6 +29,7 @@ interface TerminalStagePaneProps {
   onStatusChange: (sessionId: string, status: TerminalSession["status"]) => void;
   onRegisterTerminalCommand: (sessionId: string, sendCommand: (command: string) => void) => void;
   onUnregisterTerminalCommand: (sessionId: string) => void;
+  onAddTerminalContextRequest?: (selection: TerminalContextSelectionRequest) => void;
   onFocusSplitPane: (sessionId: string, paneId: SplitPaneId) => void;
   onResizeSplitPanes: (sessionId: string, paneSizes: number[]) => void;
   onReconnectSession: (sessionId: string) => void;
@@ -42,6 +44,7 @@ function TerminalStagePane({
   onStatusChange,
   onRegisterTerminalCommand,
   onUnregisterTerminalCommand,
+  onAddTerminalContextRequest,
   onFocusSplitPane,
   onResizeSplitPanes,
   onReconnectSession,
@@ -190,6 +193,15 @@ function TerminalStagePane({
                 onReconnect={() => onReconnectSession(session.id)}
                 onRegisterCommand={onRegisterTerminalCommand}
                 onUnregisterCommand={onUnregisterTerminalCommand}
+                onAddTerminalContextRequest={onAddTerminalContextRequest
+                  ? (selection) => {
+                    onAddTerminalContextRequest({
+                      sourceSessionId: session.id,
+                      sourceSessionName: session.name,
+                      ...selection,
+                    });
+                  }
+                  : undefined}
                 onClose={() => onCloseSession(session.id)}
               />
             </div>

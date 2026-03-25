@@ -51,6 +51,7 @@ describe("mapAgentRuntimeSnapshot", () => {
           completedAtMs: 16,
         },
       ],
+      proposedPlans: [],
       pendingRequest: null,
       errorMessage: null,
     });
@@ -99,6 +100,20 @@ describe("mapAgentRuntimeSessionSummary", () => {
       errorMessage: null,
       latestAssistantMessageInteractionMode: "plan",
       latestAssistantMessageStatus: "done",
+      proposedPlans: [
+        {
+          id: "plan-1",
+          sourceMessageId: "assistant-1",
+          sourceTurnInteractionMode: "plan",
+          title: "Plan",
+          planMarkdown: "1. Ship it",
+          status: "proposed",
+          createdAtMs: 118,
+          updatedAtMs: 119,
+          implementedAtMs: null,
+          implementationSessionId: null,
+        },
+      ],
     });
 
     expect(summary.hydrationState).toBe("summary");
@@ -107,5 +122,6 @@ describe("mapAgentRuntimeSessionSummary", () => {
     expect(summary.effort).toBeUndefined();
     expect(summary.latestAssistantMessageInteractionMode).toBe("plan");
     expect(summary.latestAssistantMessageStatus).toBe("done");
+    expect(summary.proposedPlans).toHaveLength(1);
   });
 });

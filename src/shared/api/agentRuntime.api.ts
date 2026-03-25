@@ -84,6 +84,8 @@ export async function startAgentRuntimeTurn(
       prompt: input.prompt,
       interactionMode: input.interactionMode,
       attachments: input.attachments,
+      sourceProposedPlanId: input.sourceProposedPlanId,
+      providerTurnOptions: input.providerTurnOptions,
       claudeOAuthToken: input.claudeOAuthToken,
       automationMode: input.automationMode,
     },

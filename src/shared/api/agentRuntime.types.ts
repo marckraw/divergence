@@ -29,6 +29,7 @@ export type AgentRuntimeEffort = "none" | "low" | "medium" | "high" | "xhigh" | 
 export type AgentRuntimeRequestKind = "approval" | "user-input";
 
 export type AgentRuntimeRequestStatus = "open" | "resolved";
+export type AgentRuntimeProposedPlanStatus = "proposed" | "implemented" | "dismissed";
 
 export interface AgentRuntimeRequestOption {
   id: string;
@@ -152,6 +153,30 @@ export interface AgentRuntimeAttachment {
   kind: AgentRuntimeAttachmentKind;
 }
 
+export interface AgentRuntimeProposedPlan {
+  id: string;
+  sourceMessageId?: string | null;
+  sourceTurnInteractionMode: "plan";
+  title?: string | null;
+  planMarkdown: string;
+  status: AgentRuntimeProposedPlanStatus;
+  createdAtMs: number;
+  updatedAtMs: number;
+  implementedAtMs?: number | null;
+  implementationSessionId?: string | null;
+}
+
+export interface AgentRuntimeCodexTurnOptions {
+  fastMode?: boolean;
+}
+
+export interface AgentRuntimeProviderTurnOptions {
+  codex?: AgentRuntimeCodexTurnOptions;
+  claude?: Record<string, never>;
+  cursor?: Record<string, never>;
+  gemini?: Record<string, never>;
+}
+
 export interface AgentRuntimeSessionSnapshot {
   id: string;
   provider: AgentRuntimeProvider;
@@ -179,6 +204,7 @@ export interface AgentRuntimeSessionSnapshot {
   runtimeEvents: AgentRuntimeDebugEvent[];
   messages: AgentRuntimeMessage[];
   activities: AgentRuntimeActivity[];
+  proposedPlans: AgentRuntimeProposedPlan[];
   pendingRequest: AgentRuntimeRequest | null;
   errorMessage?: string | null;
 }
@@ -206,6 +232,7 @@ export interface AgentRuntimeSessionSummary {
   currentTurnStartedAtMs?: number | null;
   lastRuntimeEventAtMs?: number | null;
   runtimePhase?: string | null;
+  proposedPlans: AgentRuntimeProposedPlan[];
   pendingRequest: AgentRuntimeRequest | null;
   errorMessage?: string | null;
   latestAssistantMessageInteractionMode?: AgentRuntimeInteractionMode;
@@ -232,6 +259,8 @@ export interface StartAgentTurnInput {
   prompt: string;
   interactionMode?: AgentRuntimeInteractionMode;
   attachments?: AgentRuntimeAttachment[];
+  sourceProposedPlanId?: string;
+  providerTurnOptions?: AgentRuntimeProviderTurnOptions;
   claudeOAuthToken?: string;
   automationMode?: boolean;
 }

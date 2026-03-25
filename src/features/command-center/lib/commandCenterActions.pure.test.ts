@@ -53,6 +53,7 @@ function makeAgentSession(partial: Partial<AgentSessionSnapshot> = {}): AgentSes
     runtimeEvents: partial.runtimeEvents ?? [],
     messages: partial.messages ?? [],
     activities: partial.activities ?? [],
+    proposedPlans: partial.proposedPlans ?? [],
     pendingRequest: partial.pendingRequest ?? null,
     errorMessage: partial.errorMessage ?? null,
     threadId: partial.threadId,

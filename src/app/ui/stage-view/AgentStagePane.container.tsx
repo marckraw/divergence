@@ -1,49 +1,29 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type RefObject } from "react";
 import { useAgentRuntimeSession } from "../../../features/agent-runtime";
-import { buildAgentSessionSettingsPatch } from "../../../entities";
+import { buildAgentSessionSettingsPatch, type AgentProposedPlan } from "../../../entities";
 import { buildAgentTimeline } from "../../../widgets/agent-session-view/lib/agentTimeline.pure";
 import AgentSessionComposerContainer from "../../../widgets/agent-session-view/ui/AgentSessionComposer.container";
 import AgentSessionHeaderContainer from "../../../widgets/agent-session-view/ui/AgentSessionHeader.container";
 import AgentSessionTimelineContainer from "../../../widgets/agent-session-view/ui/AgentSessionTimeline.container";
 import type {
   AgentSessionComposerHandle,
+  AgentSessionTerminalContext,
+  AgentSessionViewProps,
 } from "../../../widgets/agent-session-view/ui/AgentSessionView.types";
-import type {
-  AgentRuntimeAttachment,
-  AgentRuntimeCapabilities,
-  AgentRuntimeEffort,
-  AgentRuntimeInteractionMode,
-} from "../../../shared";
+import type { AgentRuntimeCapabilities, AgentRuntimeEffort } from "../../../shared";
 import { Button, Textarea } from "../../../shared";
 
 interface AgentStagePaneProps {
   sessionId: string;
   composerRef: RefObject<AgentSessionComposerHandle>;
   capabilities: AgentRuntimeCapabilities | null;
-  onUpdateSessionSettings: (sessionId: string, input: {
-    model?: string;
-    effort?: AgentRuntimeEffort;
-  }) => Promise<void>;
-  onSendPrompt: (
-    sessionId: string,
-    prompt: string,
-    options?: {
-      interactionMode?: AgentRuntimeInteractionMode;
-      attachments?: AgentRuntimeAttachment[];
-    }
-  ) => Promise<void>;
-  onStageAttachment: (input: {
-    sessionId: string;
-    name: string;
-    mimeType: string;
-    base64Content: string;
-  }) => Promise<AgentRuntimeAttachment>;
-  onDiscardAttachment: (sessionId: string, attachmentId: string) => Promise<void>;
-  onRespondToRequest: (
-    sessionId: string,
-    requestId: string,
-    input: { decision?: string; answers?: string[] }
-  ) => Promise<void>;
+  pendingTerminalContext?: AgentSessionTerminalContext | null;
+  onConsumePendingTerminalContext?: (contextId: string) => void;
+  onUpdateSessionSettings: AgentSessionViewProps["onUpdateSessionSettings"];
+  onSendPrompt: AgentSessionViewProps["onSendPrompt"];
+  onStageAttachment: AgentSessionViewProps["onStageAttachment"];
+  onDiscardAttachment: AgentSessionViewProps["onDiscardAttachment"];
+  onRespondToRequest: AgentSessionViewProps["onRespondToRequest"];
   onStopSession: (sessionId: string) => Promise<void>;
 }
 
@@ -51,6 +31,8 @@ function AgentStagePane({
   sessionId,
   composerRef,
   capabilities,
+  pendingTerminalContext,
+  onConsumePendingTerminalContext,
   onUpdateSessionSettings,
   onSendPrompt,
   onStageAttachment,
@@ -69,11 +51,24 @@ function AgentStagePane({
     [session?.activities, session?.messages],
   );
 
+  const handleImplementProposedPlan = useCallback((plan: AgentProposedPlan) => {
+    composerRef.current?.queueProposedPlan(plan);
+  }, [composerRef]);
+
   useEffect(() => {
     const questions = session?.pendingRequest?.questions ?? [];
     setRequestAnswers(questions.map(() => ""));
     setIsResolvingRequest(false);
   }, [session?.pendingRequest?.id, session?.pendingRequest?.questions]);
+
+  useEffect(() => {
+    if (!session || !pendingTerminalContext) {
+      return;
+    }
+
+    composerRef.current?.addTerminalContext(pendingTerminalContext);
+    onConsumePendingTerminalContext?.(pendingTerminalContext.id);
+  }, [composerRef, onConsumePendingTerminalContext, pendingTerminalContext, session]);
 
   const handleRequestAnswerChange = useCallback((index: number, value: string) => {
     setRequestAnswers((previous: string[]) => {
@@ -253,6 +248,7 @@ function AgentStagePane({
       <AgentSessionTimelineContainer
         session={session}
         timelineItems={timelineItems}
+        onImplementProposedPlan={handleImplementProposedPlan}
       />
 
       <AgentSessionComposerContainer
