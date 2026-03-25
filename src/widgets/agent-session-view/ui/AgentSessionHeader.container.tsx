@@ -25,6 +25,7 @@ import {
   buildAgentRuntimeTelemetrySummary,
   formatRuntimeEventOffset,
 } from "../lib/agentRuntimeTelemetry.pure";
+import AgentModelPickerContainer from "./AgentModelPicker.container";
 import AgentSessionChangedFilesPresentational from "./AgentSessionChangedFiles.presentational";
 import type { AgentSessionHeaderProps } from "./AgentSessionView.types";
 
@@ -114,28 +115,18 @@ function AgentSessionHeaderContainer({
         <p className="text-xs text-subtext truncate">{session.path}</p>
         <div className="flex flex-wrap items-center gap-2">
           {modelOptions.length > 0 ? (
-            <Select
+            <AgentModelPickerContainer
               value={session.model}
-              onValueChange={(value) => {
-                void onModelChange(value);
-              }}
+              options={modelOptions}
               disabled={
                 isUpdatingSessionSettings
                 || session.runtimeStatus === "running"
                 || session.runtimeStatus === "waiting"
               }
-            >
-              <SelectTrigger className="h-7 w-auto min-w-0 bg-main/60 text-xs">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelOptions.map((option) => (
-                  <SelectItem key={option.slug} value={option.slug}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(value) => {
+                void onModelChange(value);
+              }}
+            />
           ) : null}
           {effortOptions.length > 0 && selectedEffort ? (
             <Select
