@@ -63,7 +63,7 @@ function AgentSessionHeaderContainer({
   const isRunning = session.runtimeStatus === "running" || session.runtimeStatus === "waiting";
   const { treeNodes: changesTreeNodes, loading: changesLoading } = useChangesTree({
     rootPath: session.path,
-    initialMode: "branch",
+    initialMode: "working",
     pollWhileActive: isRunning,
   });
   const hasRuntimeTelemetry = session.runtimeEvents.length > 0;
