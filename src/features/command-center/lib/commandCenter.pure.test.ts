@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Divergence, Project, StageTab, WorkspaceSession } from "../../../entities";
+import type { Divergence, Project, WorkspaceSession } from "../../../entities";
 import type { CommandCenterMode } from "../ui/CommandCenter.types";
 import {
   MAX_VISIBLE_RESULTS,
@@ -51,40 +51,6 @@ const sessions = new Map<string, WorkspaceSession>([
   }],
 ]);
 
-const stageTabs: StageTab[] = [
-  {
-    id: "stage-tab-1",
-    label: "Tab 1",
-    layout: {
-      orientation: "vertical",
-      panes: [
-        {
-          id: "stage-pane-1",
-          ref: { kind: "terminal", sessionId: "divergence-10" },
-        },
-      ],
-      paneSizes: [1],
-      focusedPaneId: "stage-pane-1",
-    },
-  },
-  {
-    id: "stage-tab-2",
-    label: "PR Review",
-    layout: {
-      orientation: "vertical",
-      panes: [
-        {
-          id: "stage-pane-1",
-          ref: { kind: "pending" },
-        },
-      ],
-      paneSizes: [1],
-      focusedPaneId: "stage-pane-1",
-    },
-  },
-];
-
-const replaceMode: CommandCenterMode = { kind: "replace", targetPaneId: "stage-pane-1" };
 const revealMode: CommandCenterMode = { kind: "reveal" };
 const openFileMode: CommandCenterMode = { kind: "open-file", rootPath: "/alpha" };
 const openInPaneMode: CommandCenterMode = { kind: "open-in-pane", targetPaneId: "stage-pane-2" };
@@ -98,38 +64,29 @@ describe("commandCenter.pure", () => {
   });
 
   describe("buildCommandCenterSearchResults", () => {
-    it("builds results for replace mode with all categories", () => {
-      const items = buildCommandCenterSearchResults(replaceMode, {
-        projects,
-        divergencesByProject: divergences,
-        sessions,
-        workspaces: [],
-        files: ["src/main.ts", "README.md"],
-        agentProviders: ["claude"],
-        sourceSession: sessions.get("divergence-10") ?? null,
-      });
-
-      expect(items.some((r) => r.type === "session")).toBe(true);
-      expect(items.some((r) => r.type === "file")).toBe(true);
-      expect(items.some((r) => r.type === "project")).toBe(true);
-      expect(items.some((r) => r.type === "divergence")).toBe(true);
-      expect(items.some((r) => r.type === "create_action")).toBe(true);
-    });
-
-    it("builds results for reveal mode with sessions, stage tabs, and workspaces", () => {
+    it("builds results for reveal mode with sessions and target navigation", () => {
       const items = buildCommandCenterSearchResults(revealMode, {
         projects,
         divergencesByProject: divergences,
         sessions,
-        stageTabs,
         workspaces: [{ id: 1, name: "WS1", slug: "ws1", description: null, folderPath: "/ws1", createdAtMs: 1, updatedAtMs: 1 }],
+        workspaceDivergences: [{
+          id: 12,
+          workspaceId: 1,
+          name: "WS Div",
+          branch: "feat/ws",
+          folderPath: "/ws1/feat-ws",
+          createdAtMs: 1,
+        }],
       });
 
       expect(items.some((r) => r.type === "session")).toBe(true);
-      expect(items.some((r) => r.type === "stage_tab")).toBe(true);
+      expect(items.some((r) => r.type === "project")).toBe(true);
+      expect(items.some((r) => r.type === "divergence")).toBe(true);
       expect(items.some((r) => r.type === "workspace")).toBe(true);
-      expect(items.some((r) => r.type === "project")).toBe(false);
+      expect(items.some((r) => r.type === "workspace_divergence")).toBe(true);
       expect(items.some((r) => r.type === "file")).toBe(false);
+      expect(items.some((r) => r.type === "create_action")).toBe(false);
     });
 
     it("builds results for open-file mode with files only", () => {
@@ -163,7 +120,7 @@ describe("commandCenter.pure", () => {
 
   describe("filterCommandCenterSearchResults", () => {
     it("returns all items when query is empty", () => {
-      const items = buildCommandCenterSearchResults(replaceMode, {
+      const items = buildCommandCenterSearchResults(revealMode, {
         projects,
         divergencesByProject: divergences,
         sessions,
@@ -172,7 +129,7 @@ describe("commandCenter.pure", () => {
     });
 
     it("filters by text query", () => {
-      const items = buildCommandCenterSearchResults(replaceMode, {
+      const items = buildCommandCenterSearchResults(revealMode, {
         projects,
         divergencesByProject: divergences,
         sessions,
@@ -215,7 +172,7 @@ describe("commandCenter.pure", () => {
     });
 
     it("filters by category", () => {
-      const items = buildCommandCenterSearchResults(replaceMode, {
+      const items = buildCommandCenterSearchResults(openInPaneMode, {
         projects,
         divergencesByProject: divergences,
         sessions,
@@ -230,19 +187,19 @@ describe("commandCenter.pure", () => {
       expect(createOnly.every((r) => r.type === "create_action")).toBe(true);
     });
 
-    it("filters stage tabs by label in reveal mode", () => {
+    it("filters reveal results by target labels in reveal mode", () => {
       const items = buildCommandCenterSearchResults(revealMode, {
         projects,
         divergencesByProject: divergences,
         sessions,
-        stageTabs,
+        workspaces: [{ id: 1, name: "WS1", slug: "ws1", description: null, folderPath: "/ws1", createdAtMs: 1, updatedAtMs: 1 }],
       });
-      const filtered = filterCommandCenterSearchResults(items, "pr review");
-      expect(filtered.some((r) => r.type === "stage_tab")).toBe(true);
+      const filtered = filterCommandCenterSearchResults(items, "ws1");
+      expect(filtered.some((r) => r.type === "workspace")).toBe(true);
     });
 
     it("sorts results by score within each category when a query is present", () => {
-      const items = buildCommandCenterSearchResults(replaceMode, {
+      const items = buildCommandCenterSearchResults(openInPaneMode, {
         projects,
         divergencesByProject: divergences,
         sessions,
@@ -307,7 +264,6 @@ describe("commandCenter.pure", () => {
 
   describe("getModeBadgeLabel", () => {
     it("returns correct labels for each mode", () => {
-      expect(getModeBadgeLabel(replaceMode)).toBe("Replace");
       expect(getModeBadgeLabel(revealMode)).toBe("Reveal");
       expect(getModeBadgeLabel(openInPaneMode)).toBe("Open");
       expect(getModeBadgeLabel(openFileMode)).toBe("File");
@@ -321,13 +277,13 @@ describe("commandCenter.pure", () => {
 
     it("returns session name when available", () => {
       const session = sessions.get("divergence-10")!;
-      expect(getCommandCenterContextLabel(replaceMode, session)).toBe("Alpha Div");
+      expect(getCommandCenterContextLabel(openInPaneMode, session)).toBe("Alpha Div");
     });
   });
 
   describe("groupResultsByCategory", () => {
     it("groups results in correct order", () => {
-      const items = buildCommandCenterSearchResults(replaceMode, {
+      const items = buildCommandCenterSearchResults(openInPaneMode, {
         projects,
         divergencesByProject: divergences,
         sessions,
@@ -337,7 +293,7 @@ describe("commandCenter.pure", () => {
       });
       const groups = groupResultsByCategory(items);
       const categoryOrder = groups.map((g) => g.category);
-      expect(categoryOrder).toEqual(["recent", "files", "navigation", "create"]);
+      expect(categoryOrder).toEqual(["recent", "files", "create"]);
     });
 
     it("omits empty categories", () => {

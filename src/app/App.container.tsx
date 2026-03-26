@@ -66,7 +66,6 @@ import type {
   GitChangeEntry,
   StagePaneId,
   StagePaneRef,
-  StageTab,
   StageTabId,
   Workspace,
   WorkspaceDivergence,
@@ -1177,23 +1176,14 @@ function App() {
         | "divergence"
         | "session"
         | "workspace"
-        | "workspace_divergence"
-        | "stage_tab",
+        | "workspace_divergence",
       item:
         | Project
         | Divergence
         | WorkspaceSession
         | Workspace
         | WorkspaceDivergence
-        | StageTab
     ) => {
-      if (type === "stage_tab") {
-        setSidebarMode("projects");
-        handleFocusStageTab((item as StageTab).id);
-        setCommandCenterMode(null);
-        return;
-      }
-
       const revealItem = item as
         | Project
         | Divergence
@@ -1214,7 +1204,6 @@ function App() {
     },
     [
       handleOpenQuickSwitcherSelectionInNewTab,
-      handleFocusStageTab,
       handleRevealStageSession,
       resolveQuickSwitcherSelectionRef,
       setSidebarMode,
@@ -1384,7 +1373,7 @@ function App() {
       if (session) return session;
     }
 
-    // Target pane's session (e.g. replace mode when focused pane is pending)
+    // Target pane's session when pane-local command center is open from a pending pane
     if (
       commandCenterMode &&
       "targetPaneId" in commandCenterMode &&
@@ -1429,15 +1418,13 @@ function App() {
           | "divergence"
           | "session"
           | "workspace"
-          | "workspace_divergence"
-          | "stage_tab",
+          | "workspace_divergence",
           result.item as
           | Project
           | Divergence
           | WorkspaceSession
           | Workspace
           | WorkspaceDivergence
-          | StageTab
         );
         return;
       }
@@ -1500,18 +1487,10 @@ function App() {
         setCommandCenterMode(null);
         return;
       }
-
-      if (result.type === "stage_tab") {
-        setSidebarMode("projects");
-        handleFocusStageTab((result.item as StageTab).id);
-        setCommandCenterMode(null);
-        return;
-      }
     },
     [
       commandCenterMode,
       handleCreatePendingPaneSession,
-      handleFocusStageTab,
       handleOpenOrFocusEditorFile,
       handleRevealQuickSwitcherSelection,
       handleSelectDivergence,
@@ -2106,7 +2085,6 @@ function App() {
             projects={projects}
             divergencesByProject={divergencesByProject}
             sessions={workspaceSessions}
-            stageTabs={tabGroup?.tabs ?? []}
             workspaces={workspaceList}
             workspaceDivergences={Array.from(
               workspaceDivergencesByWorkspaceId.values()

@@ -4,14 +4,12 @@ import type {
   Divergence,
   Project,
   StagePaneId,
-  StageTab,
   Workspace,
   WorkspaceDivergence,
   WorkspaceSession,
 } from "../../../entities";
 
 export type CommandCenterMode =
-  | { kind: "replace"; targetPaneId: StagePaneId }
   | { kind: "reveal" }
   | { kind: "open-in-pane"; targetPaneId: StagePaneId; sourceSessionId?: string }
   | { kind: "open-file"; targetPaneId?: StagePaneId; rootPath: string };
@@ -24,7 +22,6 @@ export type CommandCenterResultType =
   | "session"
   | "workspace"
   | "workspace_divergence"
-  | "stage_tab"
   | "file"
   | "create_action";
 
@@ -49,7 +46,7 @@ export interface CreateAction {
 export interface CommandCenterSearchResult {
   type: CommandCenterResultType;
   item: Project | Divergence | WorkspaceSession | Workspace
-    | WorkspaceDivergence | StageTab | FileResult | CreateAction;
+    | WorkspaceDivergence | FileResult | CreateAction;
   projectName?: string;
   workspaceName?: string;
   detail?: string;
@@ -63,7 +60,6 @@ export interface CommandCenterProps {
   projects: Project[];
   divergencesByProject: Map<number, Divergence[]>;
   sessions: Map<string, WorkspaceSession>;
-  stageTabs: StageTab[];
   workspaces: Workspace[];
   workspaceDivergences: WorkspaceDivergence[];
   agentProviders: AgentProvider[];

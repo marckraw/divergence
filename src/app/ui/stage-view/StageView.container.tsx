@@ -25,6 +25,7 @@ import {
   MAX_STAGE_PANES,
   buildWorkspaceSessionAttentionStateMap,
   getFocusedPane,
+  getStageTabDisplayLabel,
   isAgentSession,
   isEditorSession,
   isTerminalSession,
@@ -247,6 +248,13 @@ function StageView({
     () => (layout && layout.panes.length > 0 ? getFocusedPane(layout) : null),
     [layout],
   );
+  const displayTabs = useMemo(
+    () => tabs.map((tab) => ({
+      ...tab,
+      label: getStageTabDisplayLabel(tab, workspaceSessions),
+    })),
+    [tabs, workspaceSessions],
+  );
   const focusedSession = useMemo(() => {
     if (!focusedPane) return null;
 
@@ -401,7 +409,7 @@ function StageView({
   return (
     <main className="flex flex-1 min-w-0 h-full bg-main flex-col">
       <StageTabBar
-        tabs={tabs}
+        tabs={displayTabs}
         activeTabId={activeTabId}
         attentionTabIds={attentionTabIds}
         maxStageTabs={maxStageTabs}

@@ -1,10 +1,12 @@
-import { buildSinglePaneLayout, focusPane, getPaneBySessionId } from "./stageLayout.pure";
+import { buildSinglePaneLayout, focusPane, getFocusedPane, getPaneBySessionId } from "./stageLayout.pure";
 import type { StageLayout, StagePaneRef } from "../model/stageLayout.types";
 import type { StageTab, StageTabGroup } from "../model/stageTab.types";
+import type { WorkspaceSession } from "../../workspace-session";
 import {
   MAX_STAGE_TABS,
   STAGE_TAB_IDS,
   getDefaultStageTabLabel,
+  isDefaultStageTabLabel,
   type StageTabId,
 } from "./stageTabId.pure";
 
@@ -220,4 +222,46 @@ export function revealSessionInTabGroup(group: StageTabGroup, sessionId: string)
     ? group
     : updateTabLayout(group, targetTab.id, nextLayout);
   return focusTab(nextGroup, targetTab.id);
+}
+
+function getStageTabPrimarySession(
+  tab: StageTab,
+  workspaceSessions: Map<string, WorkspaceSession>,
+): WorkspaceSession | null {
+  const focusedPane = getFocusedPane(tab.layout);
+  if (focusedPane.ref.kind !== "pending") {
+    return workspaceSessions.get(focusedPane.ref.sessionId) ?? null;
+  }
+
+  for (const pane of tab.layout.panes) {
+    if (pane.ref.kind === "pending") {
+      continue;
+    }
+
+    const session = workspaceSessions.get(pane.ref.sessionId);
+    if (session) {
+      return session;
+    }
+  }
+
+  return null;
+}
+
+export function getStageTabDisplayLabel(
+  tab: StageTab,
+  workspaceSessions: Map<string, WorkspaceSession>,
+): string {
+  if (!isDefaultStageTabLabel(tab.id, tab.label)) {
+    return tab.label;
+  }
+
+  const primarySession = getStageTabPrimarySession(tab, workspaceSessions);
+  if (!primarySession) {
+    return tab.label;
+  }
+
+  const additionalPaneCount = Math.max(0, tab.layout.panes.length - 1);
+  return additionalPaneCount > 0
+    ? `${primarySession.name} +${additionalPaneCount}`
+    : primarySession.name;
 }

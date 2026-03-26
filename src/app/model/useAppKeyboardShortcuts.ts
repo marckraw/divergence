@@ -149,11 +149,6 @@ export function useAppKeyboardShortcuts({
     e.preventDefault();
 
     switch (action.type) {
-      case "toggle_quick_switcher":
-        onSetCommandCenterMode((prev) =>
-          prev?.kind === "replace" ? null : { kind: "replace", targetPaneId: currentFocusedPaneId },
-        );
-        return;
       case "toggle_quick_switcher_reveal":
         onSetCommandCenterMode((prev) =>
           prev?.kind === "reveal" ? null : { kind: "reveal" },
