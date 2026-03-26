@@ -1,5 +1,11 @@
 # divergence
 
+## 0.45.9
+
+### Patch Changes
+
+- 3817063: refactor folder files structure
+
 ## 0.45.8
 
 ### Patch Changes
