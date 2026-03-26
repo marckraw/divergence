@@ -273,7 +273,12 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        bootstrap_auth_tables, constant_time_eq, create_session, generate_pairing_code,
+        get_remote_access_port, is_remote_access_enabled, now_millis, validate_session_token,
+        DEFAULT_PORT,
+    };
+    use rusqlite::Connection;
 
     fn setup_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

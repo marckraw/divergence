@@ -1,9 +1,26 @@
 use super::provider_registry::{apply_binary_dir_to_tokio_command, detect_opencode_binary};
-use super::*;
+use super::{
+    AgentActivityStatus, AgentInteractionMode, AgentMessageStatus, AgentRequest,
+    AgentRequestKind, AgentRequestOption, AgentRequestStatus, AgentRuntimeState,
+    AgentRuntimeStatus, AgentSessionSnapshot, AgentSessionStatus, AgentTurnInvocation,
+    PendingRequestTransport, RunningSessionHandle, RunningTransport, DEFAULT_OPENCODE_MODEL,
+    append_assistant_text, complete_activity, create_activity, ensure_assistant_message,
+    last_assistant_message_mut, now_ms, push_runtime_event, refresh_activity_metadata,
+    truncate_details, truncate_json_details,
+};
 use reqwest::{Client, Response, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::net::TcpListener;
+use std::path::Path;
+use std::process::Stdio;
+use std::sync::Arc;
+use tauri::AppHandle;
+use tokio::io::AsyncReadExt;
+use tokio::process::Command;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::time::Duration;
+use uuid::Uuid;
 
 #[derive(Default)]
 struct OpenCodeStreamState {

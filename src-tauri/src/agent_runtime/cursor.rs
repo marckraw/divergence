@@ -1,5 +1,19 @@
 use super::provider_registry::build_cursor_command;
-use super::*;
+use super::{
+    AgentActivityStatus, AgentMessageStatus, AgentRuntimeState, AgentRuntimeStatus,
+    AgentSessionSnapshot, AgentSessionStatus, AgentTurnInvocation, RunningSessionHandle,
+    RunningTransport, complete_activity, create_activity, ensure_assistant_message,
+    last_assistant_message_mut, now_ms, push_runtime_event, read_provider_activity_id,
+    read_provider_activity_title, read_provider_text_delta, read_provider_thread_id,
+    truncate_details, truncate_json_details,
+};
+use serde_json::Value;
+use std::process::Stdio;
+use std::sync::Arc;
+use tauri::AppHandle;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::sync::Mutex as AsyncMutex;
+use uuid::Uuid;
 
 impl AgentRuntimeState {
     pub(super) async fn run_cursor_turn_process(

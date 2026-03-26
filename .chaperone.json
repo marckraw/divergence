@@ -30,6 +30,62 @@
     "custom": [
       {
         "type": "regex",
+        "id": "no-use-super-glob-in-rust-backend",
+        "severity": "error",
+        "files": "src-tauri/src/**/*.rs",
+        "exclude": [
+          "src-tauri/src/**/tests.rs",
+          "src-tauri/src/**/*test*.rs"
+        ],
+        "pattern": "use\\s+super::\\*;",
+        "message": "Prefer explicit Rust imports over use super::* in non-test backend modules."
+      },
+      {
+        "type": "regex",
+        "id": "tauri-commands-only-in-command-boundaries",
+        "severity": "error",
+        "files": "src-tauri/src/**/*.rs",
+        "exclude": [
+          "src-tauri/src/commands.rs",
+          "src-tauri/src/**/commands.rs"
+        ],
+        "pattern": "#\\[tauri::command\\]",
+        "message": "Keep #[tauri::command] functions in commands.rs or feature-local commands.rs boundary files."
+      },
+      {
+        "type": "regex",
+        "id": "no-provider-runner-definitions-in-agent-runtime-mod",
+        "severity": "error",
+        "files": "src-tauri/src/agent_runtime/mod.rs",
+        "pattern": "(?:async\\s+)?fn\\s+run_(claude|codex|cursor|gemini|opencode)_turn_process\\b",
+        "message": "Keep provider turn-process implementations in dedicated agent_runtime provider modules, not mod.rs."
+      },
+      {
+        "type": "regex",
+        "id": "agent-runtime-mod-no-extracted-helper-definitions",
+        "severity": "error",
+        "files": "src-tauri/src/agent_runtime/mod.rs",
+        "pattern": "(?:pub(?:\\([^)]*\\))?\\s+)?(?:async\\s+)?fn\\s+(?:summarize_session|build_capabilities|default_persistence_path|load_persisted_sessions|normalize_persisted_session|default_attachment_base_dir|session_attachment_dir|resolve_staged_attachment_path|attachment_kind_from_mime_type|build_attachment_filename|read_provider_thread_id|read_provider_text_delta|read_provider_activity_id|read_provider_activity_title|split_provider_output_chunks|ensure_assistant_message|append_assistant_text|append_assistant_paragraph|assistant_message_text|complete_activity|create_activity|refresh_activity_metadata|derive_activity_metadata|truncate_details|truncate_json_details|push_runtime_event|apply_session_failure|now_ms)\\b",
+        "message": "Keep extracted agent_runtime helpers out of mod.rs; define them in focused backend modules instead."
+      },
+      {
+        "type": "regex",
+        "id": "no-serde-dtos-in-agent-runtime-provider-files",
+        "severity": "error",
+        "files": "src-tauri/src/agent_runtime/{claude,codex,cursor,gemini,opencode}.rs",
+        "pattern": "#\\[derive\\([^\\]]*(?:Serialize|Deserialize)[^\\]]*\\)\\]",
+        "message": "Keep serde DTOs out of provider runtime files; move shared API types to agent_runtime/types.rs."
+      },
+      {
+        "type": "regex",
+        "id": "provider-registry-no-runtime-mutation-imports",
+        "severity": "error",
+        "files": "src-tauri/src/agent_runtime/provider_registry.rs",
+        "pattern": "use\\s+.*\\b(?:AgentRuntimeState|append_assistant_text|append_assistant_paragraph|ensure_assistant_message|complete_activity|create_activity|push_runtime_event|apply_session_failure|session_attachment_dir|resolve_staged_attachment_path|load_persisted_sessions|mutate_session)\\b",
+        "message": "Keep provider_registry focused on readiness/model discovery, not runtime mutation or persistence helpers."
+      },
+      {
+        "type": "regex",
         "id": "no-side-effects-in-presentational",
         "severity": "error",
         "files": "src/**/*.presentational.tsx",
@@ -311,6 +367,7 @@
   },
   "include": [
     "src/**/*",
+    "src-tauri/src/**/*",
     "tests/**/*"
   ],
   "exclude": [

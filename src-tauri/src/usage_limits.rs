@@ -43,9 +43,8 @@ struct OAuthTokenResponse {
     access_token: String,
 }
 
-// ── Tauri commands ──────────────────────────────────────────────────────────
+// ── Public entrypoints ──────────────────────────────────────────────────────
 
-#[tauri::command]
 pub async fn fetch_codex_usage() -> Result<CodexUsageResult, String> {
     let auth_path = match get_codex_auth_path() {
         Some(p) if p.exists() => p,

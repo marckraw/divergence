@@ -6,6 +6,7 @@ use crate::agent_runtime::{
 };
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
+use crate::usage_limits::CodexUsageResult;
 use ignore::WalkBuilder;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
@@ -74,6 +75,11 @@ fn open_app_database(app_handle: &AppHandle) -> Result<Connection, String> {
             path_to_string(&db_path)
         )
     })
+}
+
+#[tauri::command]
+pub async fn fetch_codex_usage() -> Result<CodexUsageResult, String> {
+    crate::usage_limits::fetch_codex_usage().await
 }
 
 #[tauri::command]
