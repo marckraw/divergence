@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSessionSnapshot, TerminalSession } from "../../../entities";
 import {
+  buildWorkspaceSessionAttentionStateMap,
   compareWorkspaceSessionAttentionPriority,
   getWorkspaceSessionAttentionKey,
   getWorkspaceSessionAttentionPriority,
@@ -224,5 +225,34 @@ describe("workspaceSessionAttention.pure", () => {
 
     expect(isWorkspaceSessionNeedsAttention(working)).toBe(false);
     expect(isWorkspaceSessionNeedsAttention(input)).toBe(true);
+  });
+
+  it("builds attention states for a session collection once", () => {
+    const sessions = [
+      makeAgentSession({
+        id: "agent-a",
+        pendingRequest: {
+          id: "req-approval",
+          kind: "approval",
+          title: "Approve command",
+          status: "open",
+          openedAtMs: 2_000,
+        },
+      }),
+      makeTerminalSession({
+        id: "terminal-a",
+        lastActivity: new Date(9_000),
+      }),
+    ];
+
+    const attentionStateBySessionId = buildWorkspaceSessionAttentionStateMap(sessions, {
+      activeSessionId: null,
+      idleAttentionSessionIds: new Set(["terminal-a"]),
+      lastViewedRuntimeEventAtMsBySessionId: new Map(),
+      dismissedAttentionKeyBySessionId: new Map(),
+    });
+
+    expect(attentionStateBySessionId.get("agent-a")?.kind).toBe("approval-required");
+    expect(attentionStateBySessionId.get("terminal-a")?.kind).toBe("completed");
   });
 });

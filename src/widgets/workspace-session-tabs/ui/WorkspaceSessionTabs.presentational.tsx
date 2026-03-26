@@ -1,9 +1,9 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { WorkspaceSession } from "../../../entities";
 import {
-  getWorkspaceSessionAttentionState,
   isAgentSession,
   isEditorSession,
+  type WorkspaceSessionAttentionState,
 } from "../../../entities";
 import {
   FAST_EASE_OUT,
@@ -20,6 +20,7 @@ interface WorkspaceSessionTabsProps {
   idleAttentionSessionIds: Set<string>;
   lastViewedRuntimeEventAtMsBySessionId?: Map<string, number>;
   dismissedAttentionKeyBySessionId?: Map<string, string>;
+  attentionStateBySessionId?: Map<string, WorkspaceSessionAttentionState | null>;
   onSelectSession: (sessionId: string) => void;
   onDismissSessionAttention?: (sessionId: string) => void;
   onCloseSession: (sessionId: string) => void;
@@ -42,9 +43,7 @@ function getAttentionBadgeClass(tone: "danger" | "warning" | "accent" | "success
 function WorkspaceSessionTabsPresentational({
   sessionList,
   activeSessionId,
-  idleAttentionSessionIds,
-  lastViewedRuntimeEventAtMsBySessionId,
-  dismissedAttentionKeyBySessionId,
+  attentionStateBySessionId,
   onSelectSession,
   onDismissSessionAttention,
   onCloseSession,
@@ -62,12 +61,9 @@ function WorkspaceSessionTabsPresentational({
         const isActive = session.id === activeSessionId;
         const isAgent = isAgentSession(session);
         const isEditor = isEditorSession(session);
-        const attentionState = getWorkspaceSessionAttentionState(session, {
-          isActive,
-          hasIdleAttention: idleAttentionSessionIds.has(session.id),
-          lastViewedRuntimeEventAtMs: lastViewedRuntimeEventAtMsBySessionId?.get(session.id) ?? null,
-          dismissedAttentionKey: dismissedAttentionKeyBySessionId?.get(session.id) ?? null,
-        });
+        const attentionState = attentionStateBySessionId
+          ? attentionStateBySessionId.get(session.id) ?? null
+          : null;
         const needsAttention = attentionState?.kind === "completed";
 
         return (

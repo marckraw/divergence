@@ -3,6 +3,10 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   CodeEditorCore,
   DEFAULT_EDITOR_THEME,
+  DocumentPanelBannerStack,
+  DocumentPanelHeader,
+  DocumentPanelShell,
+  DocumentPanelTabs,
   FAST_EASE_OUT,
   SOFT_SPRING,
   Button,
@@ -15,14 +19,13 @@ import {
   type EditorThemeId,
   type ParsedDiffLine,
 } from "../../../shared";
-import { TabButton, Textarea, ToolbarButton } from "../../../shared";
+import { Textarea, ToolbarButton } from "../../../shared";
 import type { ChangesMode } from "../../../entities";
 import {
   buildAnchorLabel,
   type DiffReviewAnchor,
   type DiffReviewComment,
 } from "../../../features/diff-review";
-import QuickEditDrawerPresentational from "./QuickEditDrawer.presentational";
 
 interface QuickEditDrawerProps {
   isOpen: boolean;
@@ -53,6 +56,7 @@ interface QuickEditDrawerProps {
 function DiffViewer({
   filePath,
   diff,
+  lines,
   mode,
   reviewComments,
   onAddComment,
@@ -62,6 +66,7 @@ function DiffViewer({
 }: {
   filePath: string | null;
   diff: string | null;
+  lines: ParsedDiffLine[];
   mode: ChangesMode;
   reviewComments: DiffReviewComment[];
   onAddComment?: (anchor: DiffReviewAnchor, message: string) => void;
@@ -69,7 +74,6 @@ function DiffViewer({
   isLoading: boolean;
   error: string | null;
 }) {
-  const lines = useMemo(() => parseUnifiedDiffLines(diff), [diff]);
   const lineByIndex = useMemo(() => {
     const mapped = new Map<number, typeof lines[number]>();
     lines.forEach((line) => {
@@ -143,6 +147,7 @@ function DiffViewer({
   return (
     <UnifiedDiffViewer
       diff={diff}
+      lines={lines}
       isBinary={isBinary}
       isLoading={isLoading}
       error={error}
@@ -381,113 +386,113 @@ function QuickEditDrawer({
     : { type: "spring", stiffness: 240, damping: 30, mass: 0.8 };
   const contentKey = filePath ?? "empty";
   const contentVariantKey = `${contentKey}-${activeTab}`;
+  const tabItems = [
+    {
+      id: diffTabId,
+      panelId: diffPanelId,
+      label: "Diff",
+      active: activeTab === "diff",
+      onClick: () => setActiveTab("diff"),
+    },
+    allowEdit
+      ? {
+          id: editTabId,
+          panelId: editPanelId,
+          label: "Edit",
+          active: activeTab === "edit",
+          onClick: () => setActiveTab("edit"),
+        }
+      : null,
+    isMarkdownFile
+      ? {
+          id: viewTabId,
+          panelId: viewPanelId,
+          label: "View",
+          active: activeTab === "view",
+          onClick: () => setActiveTab("view"),
+        }
+      : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+  const bannerItems = [
+    largeFileWarning
+      ? {
+          id: "large-file-warning",
+          tone: "warning" as const,
+          message: largeFileWarning,
+        }
+      : null,
+    loadError
+      ? {
+          id: "load-error",
+          tone: "error" as const,
+          message: loadError,
+        }
+      : null,
+    saveError
+      ? {
+          id: "save-error",
+          tone: "error" as const,
+          message: saveError,
+        }
+      : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+  const parsedDiffLines = useMemo(
+    () => parseUnifiedDiffLines(diff?.text ?? null),
+    [diff?.text],
+  );
 
   return (
-    <QuickEditDrawerPresentational>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            className="absolute inset-x-0 bottom-0 h-[45%] bg-main border-t border-surface shadow-xl flex flex-col"
-            data-editor-root="true"
-            aria-hidden={!isOpen}
-            style={{ pointerEvents: isOpen ? "auto" : "none" }}
-            variants={drawerVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            transition={drawerTransition}
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="absolute inset-x-0 bottom-0 flex h-[45%] flex-col border-t border-surface bg-main shadow-xl"
+          data-editor-root="true"
+          aria-hidden={!isOpen}
+          style={{ pointerEvents: isOpen ? "auto" : "none" }}
+          variants={drawerVariants}
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          transition={drawerTransition}
+        >
+          <DocumentPanelShell
+            header={(
+              <DocumentPanelHeader
+                eyebrow="Quick Edit"
+                title={filePath ?? "No file selected"}
+                titleSuffix={isDirty ? <span className="text-accent"> *</span> : null}
+                actions={(
+                  <>
+                    {isReadOnly ? (
+                      <span className="rounded bg-surface px-2 py-1 text-[10px] text-subtext">
+                        Read-only
+                      </span>
+                    ) : null}
+                    {allowEdit ? (
+                      <ToolbarButton
+                        onClick={onSave}
+                        disabled={isSaving || isLoading || isReadOnly || !filePath}
+                      >
+                        {isSaving ? "Saving..." : "Save"}
+                      </ToolbarButton>
+                    ) : null}
+                    <ToolbarButton onClick={onClose}>Close</ToolbarButton>
+                  </>
+                )}
+              />
+            )}
+            tabs={
+              showTabBar ? (
+                <DocumentPanelTabs ariaLabel="Quick edit tabs" items={tabItems} />
+              ) : undefined
+            }
+            banners={
+              bannerItems.length > 0 ? (
+                <DocumentPanelBannerStack items={bannerItems} />
+              ) : undefined
+            }
           >
-            <div className="flex items-center justify-between gap-4 px-4 py-2 border-b border-surface">
-              <div className="min-w-0">
-                <p className="text-xs text-subtext/70">Quick Edit</p>
-                <p className="text-sm text-text truncate">
-                  {filePath ?? "No file selected"}
-                  {isDirty ? <span className="text-accent"> *</span> : null}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {isReadOnly && (
-                  <span className="text-[10px] px-2 py-1 rounded bg-surface text-subtext">
-                    Read-only
-                  </span>
-                )}
-                {allowEdit && (
-                  <ToolbarButton
-                    onClick={onSave}
-                    disabled={isSaving || isLoading || isReadOnly || !filePath}
-                  >
-                    {isSaving ? "Saving..." : "Save"}
-                  </ToolbarButton>
-                )}
-                <ToolbarButton
-                  onClick={onClose}
-                >
-                  Close
-                </ToolbarButton>
-              </div>
-            </div>
-            {showTabBar && (
-              <div
-                className="flex items-center border-b border-surface text-xs"
-                role="tablist"
-                aria-label="Quick edit tabs"
-              >
-                <TabButton
-                  active={activeTab === "diff"}
-                  role="tab"
-                  id={diffTabId}
-                  aria-selected={activeTab === "diff"}
-                  aria-controls={diffPanelId}
-                  tabIndex={activeTab === "diff" ? 0 : -1}
-                  onClick={() => setActiveTab("diff")}
-                >
-                  Diff
-                </TabButton>
-                {allowEdit && (
-                  <TabButton
-                    active={activeTab === "edit"}
-                    role="tab"
-                    id={editTabId}
-                    aria-selected={activeTab === "edit"}
-                    aria-controls={editPanelId}
-                    tabIndex={activeTab === "edit" ? 0 : -1}
-                    onClick={() => setActiveTab("edit")}
-                  >
-                    Edit
-                  </TabButton>
-                )}
-                {isMarkdownFile && (
-                  <TabButton
-                    active={activeTab === "view"}
-                    role="tab"
-                    id={viewTabId}
-                    aria-selected={activeTab === "view"}
-                    aria-controls={viewPanelId}
-                    tabIndex={activeTab === "view" ? 0 : -1}
-                    onClick={() => setActiveTab("view")}
-                  >
-                    View
-                  </TabButton>
-                )}
-              </div>
-            )}
-            {largeFileWarning && (
-              <div className="px-4 py-2 text-[11px] text-yellow-200/90 bg-yellow-400/10 border-b border-yellow-400/20">
-                {largeFileWarning}
-              </div>
-            )}
-            {loadError && (
-              <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
-                {loadError}
-              </div>
-            )}
-            {saveError && (
-              <div className="px-4 py-2 text-[11px] text-red-300/90 bg-red-500/10 border-b border-red-500/20">
-                {saveError}
-              </div>
-            )}
-            <div className="flex-1 min-h-0">
-              <AnimatePresence mode="wait" initial={false}>
+            <AnimatePresence mode="wait" initial={false}>
                 {activeTab === "view" && isMarkdownFile ? (
                   <motion.div
                     key="view"
@@ -521,6 +526,7 @@ function QuickEditDrawer({
                     <DiffViewer
                       filePath={filePath}
                       diff={diff?.text ?? null}
+                      lines={parsedDiffLines}
                       mode={diffMode}
                       reviewComments={reviewComments}
                       onAddComment={onAddDiffComment}
@@ -569,12 +575,11 @@ function QuickEditDrawer({
                     />
                   </motion.div>
                 )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </QuickEditDrawerPresentational>
+            </AnimatePresence>
+          </DocumentPanelShell>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 

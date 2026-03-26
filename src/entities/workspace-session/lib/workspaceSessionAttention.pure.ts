@@ -221,3 +221,31 @@ export function getWorkspaceSessionAttentionState(
 
   return null;
 }
+
+export function buildWorkspaceSessionAttentionStateMap(
+  sessions: Iterable<WorkspaceSession>,
+  input: {
+    activeSessionId: string | null;
+    idleAttentionSessionIds: Set<string>;
+    lastViewedRuntimeEventAtMsBySessionId?: Map<string, number>;
+    dismissedAttentionKeyBySessionId?: Map<string, string>;
+  },
+): Map<string, WorkspaceSessionAttentionState | null> {
+  const next = new Map<string, WorkspaceSessionAttentionState | null>();
+
+  for (const session of sessions) {
+    next.set(
+      session.id,
+      getWorkspaceSessionAttentionState(session, {
+        isActive: session.id === input.activeSessionId,
+        hasIdleAttention: input.idleAttentionSessionIds.has(session.id),
+        lastViewedRuntimeEventAtMs:
+          input.lastViewedRuntimeEventAtMsBySessionId?.get(session.id) ?? null,
+        dismissedAttentionKey:
+          input.dismissedAttentionKeyBySessionId?.get(session.id) ?? null,
+      }),
+    );
+  }
+
+  return next;
+}

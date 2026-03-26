@@ -5,13 +5,13 @@ import {
 import {
   AGENT_PROVIDER_ORDER,
   Button,
+  CheckboxRow,
   ErrorBanner,
   EmptyState,
+  FieldGroup,
   FormField,
+  FormModalShell,
   getAgentProviderLabel,
-  ModalFooter,
-  ModalHeader,
-  ModalShell,
   PanelHeader,
   Select,
   SelectContent,
@@ -82,231 +82,218 @@ function AutomationEditorModal({
   | "onCloseEditor"
 >) {
   return (
-    <ModalShell
+    <FormModalShell
       onRequestClose={onCloseEditor}
       size="lg"
       surface="sidebar"
       overlayClassName="z-50 p-4"
       panelClassName="w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-    >
-      <ModalHeader
-        title={form.id === null ? "New automation" : "Edit automation"}
-        description="Configure scheduled or event-triggered automation runs."
-        onClose={onCloseEditor}
-        closeDisabled={isSubmitting}
-      />
-
-      <div className="p-4 space-y-3">
-        <FormField label="Name" htmlFor="automation-form-name">
-          <TextInput
-            id="automation-form-name"
-            value={form.name}
-            onChange={(event) => onFormChange("name", event.target.value)}
-            placeholder="Daily repo audit"
-          />
-        </FormField>
-
-        <FormField label="Automation Type" htmlFor="automation-form-run-mode">
-          <Select value={form.runMode} onValueChange={(val) => onFormChange("runMode", val as typeof form.runMode)}>
-            <SelectTrigger id="automation-form-run-mode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="schedule">Scheduled</SelectItem>
-              <SelectItem value="event">GitHub PR merged</SelectItem>
-            </SelectContent>
-          </Select>
-        </FormField>
-
-        {form.runMode === "schedule" && (
-          <FormField label="Project" htmlFor="automation-form-project">
-            <Select
-              value={form.projectId != null ? String(form.projectId) : "__none__"}
-              onValueChange={(val) => {
-                if (val === "__none__") {
-                  onFormChange("projectId", null);
-                } else {
-                  const value = Number(val);
-                  onFormChange("projectId", Number.isFinite(value) ? value : null);
-                }
-              }}
-            >
-              <SelectTrigger id="automation-form-project">
-                <SelectValue placeholder="Select project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Select project</SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={String(project.id)}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      title={form.id === null ? "New automation" : "Edit automation"}
+      description="Configure scheduled or event-triggered automation runs."
+      closeDisabled={isSubmitting}
+      body={(
+        <div className="space-y-3">
+          <FormField label="Name" htmlFor="automation-form-name">
+            <TextInput
+              id="automation-form-name"
+              value={form.name}
+              onChange={(event) => onFormChange("name", event.target.value)}
+              placeholder="Daily repo audit"
+            />
           </FormField>
-        )}
 
-        {form.runMode === "event" && (
-          <>
-            <FormField label="Source Project" htmlFor="automation-form-source-project">
-              <Select
-                value={form.sourceProjectId != null ? String(form.sourceProjectId) : "__none__"}
-                onValueChange={(val) => {
-                  if (val === "__none__") {
-                    onFormChange("sourceProjectId", null);
-                  } else {
-                    const value = Number(val);
-                    onFormChange("sourceProjectId", Number.isFinite(value) ? value : null);
-                  }
-                }}
-              >
-                <SelectTrigger id="automation-form-source-project">
-                  <SelectValue placeholder="Select source project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select source project</SelectItem>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={String(project.id)}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
-
-            <FormField label="Target Project" htmlFor="automation-form-target-project">
-              <Select
-                value={form.targetProjectId != null ? String(form.targetProjectId) : "__none__"}
-                onValueChange={(val) => {
-                  if (val === "__none__") {
-                    onFormChange("targetProjectId", null);
-                  } else {
-                    const value = Number(val);
-                    onFormChange("targetProjectId", Number.isFinite(value) ? value : null);
-                  }
-                }}
-              >
-                <SelectTrigger id="automation-form-target-project">
-                  <SelectValue placeholder="Select target project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Select target project</SelectItem>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={String(project.id)}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </FormField>
-
-            <FormField
-              label="Base Branches (comma-separated)"
-              htmlFor="automation-form-base-branches"
-              labelClassName="text-xs text-subtext"
-            >
-              <TextInput
-                id="automation-form-base-branches"
-                value={form.baseBranches}
-                onChange={(event) => onFormChange("baseBranches", event.target.value)}
-                placeholder="stable, staging"
-              />
-            </FormField>
-          </>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Agent" htmlFor="automation-form-agent" labelClassName="text-xs text-subtext">
-            <Select value={form.agent} onValueChange={(val) => onFormChange("agent", val as typeof form.agent)}>
-              <SelectTrigger id="automation-form-agent">
+          <FormField label="Automation Type" htmlFor="automation-form-run-mode">
+            <Select value={form.runMode} onValueChange={(val) => onFormChange("runMode", val as typeof form.runMode)}>
+              <SelectTrigger id="automation-form-run-mode">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {AGENT_PROVIDER_ORDER.map((provider) => (
-                  <SelectItem key={provider} value={provider}>
-                    {getAgentProviderLabel(provider)}
-                  </SelectItem>
-                ))}
+                <SelectItem value="schedule">Scheduled</SelectItem>
+                <SelectItem value="event">GitHub PR merged</SelectItem>
               </SelectContent>
             </Select>
           </FormField>
-          {form.runMode === "schedule" ? (
-            <FormField label="Every (hours)" htmlFor="automation-form-interval" labelClassName="text-xs text-subtext">
-              <TextInput
-                id="automation-form-interval"
-                type="number"
-                min={1}
-                value={form.intervalHours}
-                onChange={(event) => onFormChange("intervalHours", Number(event.target.value))}
-              />
+
+          {form.runMode === "schedule" && (
+            <FormField label="Project" htmlFor="automation-form-project">
+              <Select
+                value={form.projectId != null ? String(form.projectId) : "__none__"}
+                onValueChange={(val) => {
+                  if (val === "__none__") {
+                    onFormChange("projectId", null);
+                  } else {
+                    const value = Number(val);
+                    onFormChange("projectId", Number.isFinite(value) ? value : null);
+                  }
+                }}
+              >
+                <SelectTrigger id="automation-form-project">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select project</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={String(project.id)}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </FormField>
-          ) : (
-            <div className="text-xs text-subtext border border-surface rounded-md px-3 py-2">
-              Triggered by merged pull requests.
-            </div>
           )}
-        </div>
 
-        <FormField label="Prompt" htmlFor="automation-form-prompt" labelClassName="text-xs text-subtext">
-          <Textarea
-            id="automation-form-prompt"
-            value={form.prompt}
-            onChange={(event) => onFormChange("prompt", event.target.value)}
-            className="min-h-[180px]"
-            placeholder="Audit this repository for important regressions and propose fixes."
-          />
-        </FormField>
+          {form.runMode === "event" && (
+            <FieldGroup title="GitHub PR Merge Trigger">
+              <FormField label="Source Project" htmlFor="automation-form-source-project">
+                <Select
+                  value={form.sourceProjectId != null ? String(form.sourceProjectId) : "__none__"}
+                  onValueChange={(val) => {
+                    if (val === "__none__") {
+                      onFormChange("sourceProjectId", null);
+                    } else {
+                      const value = Number(val);
+                      onFormChange("sourceProjectId", Number.isFinite(value) ? value : null);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="automation-form-source-project">
+                    <SelectValue placeholder="Select source project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select source project</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={String(project.id)}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
 
-        <label className="inline-flex items-center gap-2 text-xs text-subtext">
-          <input
-            type="checkbox"
-            checked={form.enabled}
-            onChange={(event) => onFormChange("enabled", event.target.checked)}
-            className="accent-primary"
-          />
-          Enabled
-        </label>
+              <FormField label="Target Project" htmlFor="automation-form-target-project">
+                <Select
+                  value={form.targetProjectId != null ? String(form.targetProjectId) : "__none__"}
+                  onValueChange={(val) => {
+                    if (val === "__none__") {
+                      onFormChange("targetProjectId", null);
+                    } else {
+                      const value = Number(val);
+                      onFormChange("targetProjectId", Number.isFinite(value) ? value : null);
+                    }
+                  }}
+                >
+                  <SelectTrigger id="automation-form-target-project">
+                    <SelectValue placeholder="Select target project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select target project</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={String(project.id)}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormField>
 
-        <div>
-          <label className="inline-flex items-center gap-2 text-xs text-text">
-            <input
-              type="checkbox"
-              checked={form.keepSessionAlive}
-              onChange={(event) => onFormChange("keepSessionAlive", event.target.checked)}
-              className="accent-primary"
-            />
-            Keep terminal session alive after completion
-          </label>
-          <div className="text-[11px] text-subtext ml-5 mt-1">
-            When enabled, the tmux session won&apos;t be killed after the agent finishes,
-            allowing you to attach and inspect the results.
+              <FormField
+                label="Base Branches (comma-separated)"
+                htmlFor="automation-form-base-branches"
+                labelClassName="text-xs text-subtext"
+              >
+                <TextInput
+                  id="automation-form-base-branches"
+                  value={form.baseBranches}
+                  onChange={(event) => onFormChange("baseBranches", event.target.value)}
+                  placeholder="stable, staging"
+                />
+              </FormField>
+            </FieldGroup>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Agent" htmlFor="automation-form-agent" labelClassName="text-xs text-subtext">
+              <Select value={form.agent} onValueChange={(val) => onFormChange("agent", val as typeof form.agent)}>
+                <SelectTrigger id="automation-form-agent">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {AGENT_PROVIDER_ORDER.map((provider) => (
+                    <SelectItem key={provider} value={provider}>
+                      {getAgentProviderLabel(provider)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormField>
+            {form.runMode === "schedule" ? (
+              <FormField label="Every (hours)" htmlFor="automation-form-interval" labelClassName="text-xs text-subtext">
+                <TextInput
+                  id="automation-form-interval"
+                  type="number"
+                  min={1}
+                  value={form.intervalHours}
+                  onChange={(event) => onFormChange("intervalHours", Number(event.target.value))}
+                />
+              </FormField>
+            ) : (
+              <div className="text-xs text-subtext border border-surface rounded-md px-3 py-2">
+                Triggered by merged pull requests.
+              </div>
+            )}
           </div>
+
+          <FormField label="Prompt" htmlFor="automation-form-prompt" labelClassName="text-xs text-subtext">
+            <Textarea
+              id="automation-form-prompt"
+              value={form.prompt}
+              onChange={(event) => onFormChange("prompt", event.target.value)}
+              className="min-h-[180px]"
+              placeholder="Audit this repository for important regressions and propose fixes."
+            />
+          </FormField>
+
+          <FieldGroup title="Execution Settings">
+            <CheckboxRow
+              label="Enabled"
+              checked={form.enabled}
+              onChange={(checked) => onFormChange("enabled", checked)}
+            />
+
+            <CheckboxRow
+              label="Keep terminal session alive after completion"
+              description="When enabled, the tmux session won't be killed after the agent finishes, allowing you to attach and inspect the results."
+              checked={form.keepSessionAlive}
+              onChange={(checked) => onFormChange("keepSessionAlive", checked)}
+            />
+          </FieldGroup>
+
+          {formError && <ErrorBanner>{formError}</ErrorBanner>}
         </div>
-
-        {formError && <ErrorBanner>{formError}</ErrorBanner>}
-      </div>
-
-      <ModalFooter className="justify-between">
-        <Button
-          onClick={onCloseEditor}
-          variant="secondary"
-          size="sm"
-          disabled={isSubmitting}
-        >
-          {cancelEditVisible ? "Cancel edit" : "Cancel"}
-        </Button>
-        <Button
-          onClick={() => {
-            void onSubmitForm();
-          }}
-          variant="primary"
-          size="sm"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Saving..." : submitLabel}
-        </Button>
-      </ModalFooter>
-    </ModalShell>
+      )}
+      footer={(
+        <>
+          <Button
+            onClick={onCloseEditor}
+            variant="secondary"
+            size="sm"
+            disabled={isSubmitting}
+          >
+            {cancelEditVisible ? "Cancel edit" : "Cancel"}
+          </Button>
+          <Button
+            onClick={() => {
+              void onSubmitForm();
+            }}
+            variant="primary"
+            size="sm"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Saving..." : submitLabel}
+          </Button>
+        </>
+      )}
+    />
   );
 }
 

@@ -28,6 +28,51 @@ interface UseChangesTreeResult {
   refresh: () => Promise<void>;
 }
 
+interface ChangesTreeCacheEntry {
+  changes: GitChangeEntry[];
+  baseRef: string | null;
+}
+
+const changesTreeResultCache = new Map<string, ChangesTreeCacheEntry>();
+const changesTreeInFlightRequests = new Map<string, Promise<ChangesTreeCacheEntry>>();
+
+function getChangesTreeCacheKey(rootPath: string, mode: ChangesMode): string {
+  return `${mode}:${rootPath}`;
+}
+
+async function fetchChangesTreeEntry(rootPath: string, mode: ChangesMode): Promise<ChangesTreeCacheEntry> {
+  const cacheKey = getChangesTreeCacheKey(rootPath, mode);
+  const pending = changesTreeInFlightRequests.get(cacheKey);
+  if (pending) {
+    return pending;
+  }
+
+  const request = (async () => {
+    if (mode === "branch") {
+      const result = await listBranchChanges(rootPath);
+      const entry = {
+        changes: sortGitChangesByPath(result.changes),
+        baseRef: result.base_ref,
+      };
+      changesTreeResultCache.set(cacheKey, entry);
+      return entry;
+    }
+
+    const result = await listGitChanges(rootPath);
+    const entry = {
+      changes: sortGitChangesByPath(result),
+      baseRef: null,
+    };
+    changesTreeResultCache.set(cacheKey, entry);
+    return entry;
+  })().finally(() => {
+    changesTreeInFlightRequests.delete(cacheKey);
+  });
+
+  changesTreeInFlightRequests.set(cacheKey, request);
+  return request;
+}
+
 export function useChangesTree({
   rootPath,
   initialMode = "working",
@@ -45,6 +90,9 @@ export function useChangesTree({
     const folderPaths = collectChangesTreeFolderPaths(treeNodes);
     return new Set(folderPaths.filter((path) => !collapsedPaths.has(path)));
   }, [collapsedPaths, treeNodes]);
+  const isLoadingCurrentKey = rootPath
+    ? changesTreeInFlightRequests.has(getChangesTreeCacheKey(rootPath, mode))
+    : false;
 
   const refresh = useCallback(async () => {
     if (!rootPath) {
@@ -54,17 +102,19 @@ export function useChangesTree({
       return;
     }
 
+    const cacheKey = getChangesTreeCacheKey(rootPath, mode);
+    const cached = changesTreeResultCache.get(cacheKey);
+    if (cached) {
+      setChanges(cached.changes);
+      setBaseRef(cached.baseRef);
+      setError(null);
+    }
+
     try {
       setLoading(true);
-      if (mode === "branch") {
-        const result = await listBranchChanges(rootPath);
-        setChanges(sortGitChangesByPath(result.changes));
-        setBaseRef(result.base_ref);
-      } else {
-        const result = await listGitChanges(rootPath);
-        setChanges(sortGitChangesByPath(result));
-        setBaseRef(null);
-      }
+      const result = await fetchChangesTreeEntry(rootPath, mode);
+      setChanges(result.changes);
+      setBaseRef(result.baseRef);
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load changes.";
@@ -96,12 +146,15 @@ export function useChangesTree({
 
   useEffect(() => {
     const handleFocus = () => {
+      if (isLoadingCurrentKey) {
+        return;
+      }
       void refresh();
     };
 
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
-  }, [refresh]);
+  }, [isLoadingCurrentKey, refresh]);
 
   useEffect(() => {
     if (!pollWhileActive || !rootPath) {
@@ -109,11 +162,14 @@ export function useChangesTree({
     }
 
     const intervalId = window.setInterval(() => {
+      if (changesTreeInFlightRequests.has(getChangesTreeCacheKey(rootPath, mode))) {
+        return;
+      }
       void refresh();
     }, 5_000);
 
     return () => window.clearInterval(intervalId);
-  }, [pollWhileActive, refresh, rootPath]);
+  }, [mode, pollWhileActive, refresh, rootPath]);
 
   return {
     treeNodes,

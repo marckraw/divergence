@@ -17,6 +17,7 @@ export type {
   WorkspaceSessionAttentionState,
 } from "./lib/workspaceSessionAttention.pure";
 export {
+  buildWorkspaceSessionAttentionStateMap,
   compareWorkspaceSessionAttentionPriority,
   getWorkspaceSessionAttentionKey,
   getWorkspaceSessionAttentionPriority,

@@ -73,11 +73,11 @@ import type {
   WorkspaceSession,
 } from "../entities";
 import {
+  buildWorkspaceSessionAttentionStateMap,
   buildWorkspaceDivergenceTerminalSession,
   buildWorkspaceKey,
   buildWorkspaceTerminalSession,
   getWorkspaceSessionAttentionKey,
-  getWorkspaceSessionAttentionState,
   isAgentSession,
   isEditorSession,
   getWorkspaceSessionTargetType,
@@ -1828,6 +1828,16 @@ function App() {
       return next;
     }
 
+    const attentionStateBySessionId = buildWorkspaceSessionAttentionStateMap(
+      workspaceSessions.values(),
+      {
+        activeSessionId,
+        idleAttentionSessionIds,
+        lastViewedRuntimeEventAtMsBySessionId,
+        dismissedAttentionKeyBySessionId,
+      },
+    );
+
     for (const tab of tabGroup.tabs) {
       const hasAttention = tab.layout.panes.some((pane) => {
         if (pane.ref.kind === "pending") {
@@ -1839,14 +1849,7 @@ function App() {
           return false;
         }
 
-        const attentionState = getWorkspaceSessionAttentionState(session, {
-          isActive: session.id === activeSessionId,
-          hasIdleAttention: idleAttentionSessionIds.has(session.id),
-          lastViewedRuntimeEventAtMs:
-            lastViewedRuntimeEventAtMsBySessionId.get(session.id) ?? null,
-          dismissedAttentionKey:
-            dismissedAttentionKeyBySessionId.get(session.id) ?? null,
-        });
+        const attentionState = attentionStateBySessionId.get(session.id) ?? null;
 
         return Boolean(attentionState) || session.status === "busy";
       });

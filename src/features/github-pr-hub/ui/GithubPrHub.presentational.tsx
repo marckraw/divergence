@@ -3,8 +3,10 @@ import {
   Button,
   EmptyState,
   ErrorBanner,
+  PanelHeader,
+  PanelToolbar,
   LoadingSpinner,
-  TextInput,
+  SearchField,
 } from "../../../shared";
 import {
   formatRelativeTime,
@@ -119,12 +121,10 @@ function GithubPrHubPresentational({
   if (!isDetailView) {
     return (
       <div className="h-full flex flex-col bg-main">
-        <div className="px-5 py-4 border-b border-surface space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-text">Pull Requests</h2>
-              <p className="text-xs text-subtext">Open pull requests across configured projects.</p>
-            </div>
+        <PanelHeader
+          title="Pull Requests"
+          description="Open pull requests across configured projects."
+          actions={(
             <Button
               type="button"
               onClick={() => { void onRefresh(); }}
@@ -134,9 +134,10 @@ function GithubPrHubPresentational({
             >
               {refreshing ? "Refreshing..." : "Refresh"}
             </Button>
-          </div>
+          )}
+        />
 
-          <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-3">
+        <PanelToolbar className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
             <label className="text-xs text-subtext flex flex-col gap-1">
               Project
               <select
@@ -158,18 +159,18 @@ function GithubPrHubPresentational({
 
             <label className="text-xs text-subtext flex flex-col gap-1">
               Search
-              <TextInput
+              <SearchField
                 value={searchQuery}
-                onChange={(event) => onSearchQueryChange(event.target.value)}
+                onChange={onSearchQueryChange}
+                onClear={searchQuery ? () => onSearchQueryChange("") : undefined}
                 placeholder="Search by repo, #number, title, author, base/head..."
               />
             </label>
-          </div>
+        </PanelToolbar>
 
-          <div className="text-xs text-subtext">
-            {pullRequests.length} of {totalPullRequests} pull requests
-          </div>
-        </div>
+        <PanelToolbar className="py-2 text-xs text-subtext">
+          <span>{pullRequests.length} of {totalPullRequests} pull requests</span>
+        </PanelToolbar>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
           {error && <ErrorBanner className="mb-3">{error}</ErrorBanner>}

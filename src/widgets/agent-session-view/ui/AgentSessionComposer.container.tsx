@@ -1,18 +1,9 @@
 import type { ChangeEvent, ClipboardEvent, DragEvent, KeyboardEvent, RefObject } from "react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Paperclip, X } from "lucide-react";
 import {
-  Button,
   getAgentProviderLabel,
   getAgentRuntimeProviderAttachmentKinds,
-  IconButton,
-  SegmentedControl,
   supportsAgentRuntimePlanMode,
-  Textarea,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
 } from "../../../shared";
 import type { AgentRuntimeAttachment, AgentSkillDescriptor } from "../../../shared";
 import {
@@ -24,6 +15,7 @@ import {
   supportsAttachmentMimeType,
 } from "../lib/attachmentComposer.pure";
 import { useAgentSkillDiscovery } from "../model/useAgentSkillDiscovery";
+import AgentSessionComposerPresentational from "./AgentSessionComposer.presentational";
 import AgentSkillAutocompletePresentational from "./AgentSkillAutocomplete.presentational";
 import type {
   AgentSessionComposerAttachment,
@@ -424,232 +416,115 @@ const AgentSessionComposerContainer = forwardRef<AgentSessionComposerHandle, Age
   }, [draft.attachments, onDiscardAttachment, session.id, setAttachmentError, updateDraft]);
 
   return (
-    <div className="border-t border-surface bg-sidebar/70 px-3 py-3 sm:px-5 sm:py-4">
-      <div className="mx-auto w-full max-w-5xl space-y-3">
-        {!session.pendingRequest && (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div
-                className={!supportsPlanMode || isSubmitting || session.runtimeStatus === "running"
-                  ? "pointer-events-none opacity-60"
-                  : undefined}
-              >
-                <SegmentedControl
-                  items={[
-                    { id: "default" as const, label: "Chat" },
-                    { id: "plan" as const, label: "Plan" },
-                  ]}
-                  value={draft.interactionMode}
-                  onChange={(value) => {
-                    if (!supportsPlanMode || isSubmitting || session.runtimeStatus === "running") {
-                      return;
-                    }
-                    updateDraft((previous) => ({
-                      ...previous,
-                      interactionMode: value,
-                    }));
-                  }}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={attachmentInputRef as RefObject<HTMLInputElement>}
-                  type="file"
-                  accept={attachmentInputAccept ?? undefined}
-                  multiple
-                  className="hidden"
-                  onChange={handleAttachmentInputChange}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => attachmentInputRef.current?.click()}
-                  disabled={!supportsAttachments || isSubmitting || isStagingAttachment}
-                  title={attachmentSupportMessage}
-                >
-                  <Paperclip className="mr-2 h-4 w-4" />
-                  {isStagingAttachment ? "Staging..." : attachmentButtonLabel}
-                </Button>
-              </div>
-            </div>
-            {draft.attachments.length > 0 && (
-              <TooltipProvider delayDuration={120}>
-                <div className="flex flex-wrap gap-2">
-                  {draft.attachments.map((attachment) => (
-                    <Tooltip key={attachment.id}>
-                      <TooltipTrigger asChild>
-                        <div className="inline-flex items-center gap-2 rounded-full border border-surface/80 bg-main/60 px-3 py-1 text-[11px] text-subtext">
-                          <Paperclip className="h-3.5 w-3.5" />
-                          <span className="max-w-[18rem] truncate">{attachment.name}</span>
-                          <span>{formatAttachmentSize(attachment.sizeBytes)}</span>
-                          <span className="rounded-full border border-surface/80 bg-sidebar/70 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.16em] text-subtext">
-                            {getAttachmentKindLabel(attachment.kind)}
-                          </span>
-                          <IconButton
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            icon={<X className="h-3.5 w-3.5" />}
-                            label={`Remove ${attachment.name}`}
-                            onClick={() => { void handleRemoveAttachment(attachment.id); }}
-                          />
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="top"
-                        align="start"
-                        className="w-[18rem] rounded-xl border border-surface/80 bg-sidebar/95 p-3 text-left"
-                      >
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-[0.18em] text-subtext">
-                              {getAttachmentKindLabel(attachment.kind)} Attachment
-                            </p>
-                            <p className="mt-1 truncate text-sm text-text">{attachment.name}</p>
-                          </div>
-                          {attachment.kind === "image" && attachment.previewUrl ? (
-                            <img
-                              src={attachment.previewUrl}
-                              alt={attachment.name}
-                              className="max-h-[16rem] w-full rounded-lg border border-surface/80 object-contain"
-                            />
-                          ) : (
-                            <div className="rounded-lg border border-surface/80 bg-main/70 px-3 py-3 text-xs text-subtext">
-                              <p>Type: {attachment.mimeType}</p>
-                              <p className="mt-1">Size: {formatAttachmentSize(attachment.sizeBytes)}</p>
-                            </div>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-              </TooltipProvider>
-            )}
-            {draft.attachmentError && (
-              <div className="rounded-xl border border-red/30 bg-red/10 px-3 py-2 text-xs text-red">
-                {draft.attachmentError}
-              </div>
-            )}
-            {!supportsAttachments && (
-              <p className="text-xs text-subtext">
-                {attachmentSupportMessage}
-              </p>
-            )}
-            <div className="relative">
-              {skillAutocompleteOpen && (
-                <div className="absolute bottom-full left-0 z-50 mb-1 w-full max-w-xl rounded-xl border border-surface bg-sidebar shadow-lg">
-                  <AgentSkillAutocompletePresentational
-                    skills={skillDiscovery.matchingSkills}
-                    selectedIndex={skillSelectedIndex}
-                    onSelect={handleSkillSelect}
-                  />
-                </div>
-              )}
-            <Textarea
-              value={draft.text}
-              onChange={(event) => {
-                setDraft((previous) => ({
-                  ...previous,
-                  text: event.target.value,
-                }));
-              }}
-              onBlur={() => {
-                writeStoredDraft(session.id, draftRef.current);
-              }}
-              onPaste={(event) => {
-                void handleComposerPaste(event);
-              }}
-              onDrop={(event) => {
-                void handleComposerDrop(event);
-              }}
-              onDragOver={handleComposerDragOver}
-              onKeyDown={(event) => {
-                if (skillAutocompleteOpen && skillDiscovery.matchingSkills.length > 0) {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    setSkillSelectedIndex((previous) =>
-                      previous < skillDiscovery.matchingSkills.length - 1 ? previous + 1 : 0,
-                    );
-                    return;
-                  }
-                  if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setSkillSelectedIndex((previous) =>
-                      previous > 0 ? previous - 1 : skillDiscovery.matchingSkills.length - 1,
-                    );
-                    return;
-                  }
-                  if (event.key === "Enter" || event.key === "Tab") {
-                    event.preventDefault();
-                    handleSkillSelect(skillDiscovery.matchingSkills[skillSelectedIndex]);
-                    return;
-                  }
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    setSkillAutocompleteOpen(false);
-                    return;
-                  }
-                }
-                if (
-                  isInteractionModeShortcut(event)
-                  && supportsPlanMode
-                  && !isSubmitting
-                  && session.runtimeStatus !== "running"
-                ) {
-                  event.preventDefault();
-                  updateDraft((previous) => ({
-                    ...previous,
-                    interactionMode: previous.interactionMode === "plan" ? "default" : "plan",
-                  }));
-                  return;
-                }
-                if (!isSubmitShortcut(event)) {
-                  return;
-                }
-                event.preventDefault();
-                void handleSubmit();
-              }}
-              placeholder={
-                draft.interactionMode === "plan"
-                  ? `Ask ${session.provider} to investigate and plan work in ${session.path}`
-                  : `Ask ${session.provider} to work in ${session.path}`
-              }
-              className="min-h-[112px] resize-y rounded-2xl bg-main/80"
+    <AgentSessionComposerPresentational
+      sessionPath={session.path}
+      provider={session.provider}
+      pendingRequestKind={session.pendingRequest?.kind ?? null}
+      runtimeStatus={session.runtimeStatus}
+      draft={draft}
+      supportsPlanMode={supportsPlanMode}
+      supportsAttachments={supportsAttachments}
+      attachmentButtonLabel={attachmentButtonLabel}
+      attachmentInputAccept={attachmentInputAccept}
+      attachmentSupportMessage={attachmentSupportMessage}
+      isSubmitting={isSubmitting}
+      isStagingAttachment={isStagingAttachment}
+      attachmentInputRef={attachmentInputRef as RefObject<HTMLInputElement>}
+      onAttachmentInputChange={(event) => {
+        void handleAttachmentInputChange(event);
+      }}
+      onInteractionModeChange={(value) => {
+        if (!supportsPlanMode || isSubmitting || session.runtimeStatus === "running") {
+          return;
+        }
+        updateDraft((previous) => ({
+          ...previous,
+          interactionMode: value,
+        }));
+      }}
+      onOpenAttachmentPicker={() => attachmentInputRef.current?.click()}
+      onRemoveAttachment={(attachmentId) => {
+        void handleRemoveAttachment(attachmentId);
+      }}
+      onTextChange={(value) => {
+        setDraft((previous) => ({
+          ...previous,
+          text: value,
+        }));
+      }}
+      onBlur={() => {
+        writeStoredDraft(session.id, draftRef.current);
+      }}
+      onPaste={(event) => {
+        void handleComposerPaste(event);
+      }}
+      onDrop={(event) => {
+        void handleComposerDrop(event);
+      }}
+      onDragOver={handleComposerDragOver}
+      onKeyDown={(event) => {
+        if (skillAutocompleteOpen && skillDiscovery.matchingSkills.length > 0) {
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setSkillSelectedIndex((previous) =>
+              previous < skillDiscovery.matchingSkills.length - 1 ? previous + 1 : 0
+            );
+            return;
+          }
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setSkillSelectedIndex((previous) =>
+              previous > 0 ? previous - 1 : skillDiscovery.matchingSkills.length - 1
+            );
+            return;
+          }
+          if (event.key === "Enter" || event.key === "Tab") {
+            event.preventDefault();
+            handleSkillSelect(skillDiscovery.matchingSkills[skillSelectedIndex]);
+            return;
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setSkillAutocompleteOpen(false);
+            return;
+          }
+        }
+        if (
+          isInteractionModeShortcut(event) &&
+          supportsPlanMode &&
+          !isSubmitting &&
+          session.runtimeStatus !== "running"
+        ) {
+          event.preventDefault();
+          updateDraft((previous) => ({
+            ...previous,
+            interactionMode: previous.interactionMode === "plan" ? "default" : "plan",
+          }));
+          return;
+        }
+        if (!isSubmitShortcut(event)) {
+          return;
+        }
+        event.preventDefault();
+        void handleSubmit();
+      }}
+      onSubmit={() => {
+        void handleSubmit();
+      }}
+      formatAttachmentSize={formatAttachmentSize}
+      getAttachmentKindLabel={getAttachmentKindLabel}
+      autocomplete={
+        skillAutocompleteOpen ? (
+          <div className="absolute bottom-full left-0 z-50 mb-1 w-full max-w-xl rounded-xl border border-surface bg-sidebar shadow-lg">
+            <AgentSkillAutocompletePresentational
+              skills={skillDiscovery.matchingSkills}
+              selectedIndex={skillSelectedIndex}
+              onSelect={handleSkillSelect}
             />
-            </div>
-          </>
-        )}
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-subtext">
-            {session.pendingRequest
-              ? `Waiting on ${session.pendingRequest.kind}`
-              : `Runtime prompt input. ${
-                draft.interactionMode === "plan" ? "Plan turn enabled." : "Chat turn enabled."
-              } Shift+Tab toggles mode. Cmd/Ctrl+Enter to send`}
-          </p>
-          {!session.pendingRequest && (
-            <Button
-              type="button"
-              onClick={() => { void handleSubmit(); }}
-              disabled={
-                isSubmitting
-                || isStagingAttachment
-                || session.runtimeStatus === "running"
-                || !draft.text.trim()
-              }
-            >
-              {session.runtimeStatus === "running"
-                ? "Running..."
-                : draft.interactionMode === "plan"
-                  ? "Plan"
-                  : "Send"}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
+          </div>
+        ) : null
+      }
+    />
   );
 });
 

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useTmuxSessions } from "../../../entities/terminal-session";
 import type { Project, Divergence, TerminalSession } from "../../../entities";
-import { Button, EmptyState, ErrorBanner, IconButton } from "../../../shared";
+import { Button, EmptyState, ErrorBanner, IconButton, PanelHeader, PanelToolbar, SearchField } from "../../../shared";
 import {
   findSessionIdsByTmuxSessionName,
   filterTmuxSessions,
@@ -70,130 +70,79 @@ function TmuxPanel({
   return (
     <TmuxPanelPresentational>
       <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="border-b border-surface">
-        <div className="flex items-center justify-between px-3 py-2">
-          <div className="text-xs uppercase text-subtext font-medium">
-            Tmux Sessions
-          </div>
-          <Button
-            type="button"
-            className="text-xs text-subtext hover:text-text"
-            onClick={refresh}
-            disabled={loading}
-            variant="ghost"
-            size="xs"
-          >
-            {loading ? "Refreshing..." : "Refresh"}
-          </Button>
-        </div>
-        <div className="px-3 pb-2">
-          <div className="flex items-center gap-2 bg-main px-3 py-2 rounded">
-            <svg
-              className="w-4 h-4 text-subtext"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  setSearchQuery("");
-                  event.currentTarget.blur();
-                }
-              }}
-              placeholder="Search sessions..."
-              className="flex-1 bg-transparent text-text placeholder-subtext focus:outline-none text-xs"
-              aria-label="Search tmux sessions"
-            />
-            {searchQuery && (
-              <IconButton
-                type="button"
-                className="text-subtext hover:text-text"
-                onClick={() => setSearchQuery("")}
-                title="Clear search"
-                variant="ghost"
-                size="xs"
-                label="Clear search"
-                icon={(
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                )}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Summary bar */}
-      {tmuxSessions.length > 0 && (
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface text-[10px] text-subtext">
-          <span>
-            {isFiltering
-              ? `${filteredSessions.length} of ${tmuxSessions.length} session${
-                  tmuxSessions.length !== 1 ? "s" : ""
-                }`
-              : `${tmuxSessions.length} session${tmuxSessions.length !== 1 ? "s" : ""}`}
-            {!ownershipReady && (
-              <span className="text-subtext/70"> · checking ownership…</span>
-            )}
-            {ownershipReady && orphanCount > 0 && (
-              <span className="text-yellow">
-                {" "}
-                &middot; {orphanCount} orphan{orphanCount !== 1 ? "s" : ""}
-              </span>
-            )}
-          </span>
-          <div className="flex items-center gap-2">
-            {ownershipReady && orphanCount > 0 && (
-              <Button
-                type="button"
-                className="text-yellow hover:text-text transition-colors"
-                onClick={handleKillOrphans}
-                disabled={loading}
-                variant="ghost"
-                size="xs"
-              >
-                Kill Orphans
-              </Button>
-            )}
+        <PanelHeader
+          title="Tmux Sessions"
+          description="Inspect active sessions and clean up stale ones."
+          actions={(
             <Button
               type="button"
-              className="text-subtext hover:text-red transition-colors"
-              onClick={handleKillAll}
-              disabled={loading || !ownershipReady}
+              className="text-xs text-subtext hover:text-text"
+              onClick={refresh}
+              disabled={loading}
               variant="ghost"
               size="xs"
             >
-              Kill All
+              {loading ? "Refreshing..." : "Refresh"}
             </Button>
-          </div>
-        </div>
-      )}
+          )}
+        />
 
-      {/* Session list */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
+        <PanelToolbar>
+          <SearchField
+            value={searchQuery}
+            onChange={setSearchQuery}
+            onClear={searchQuery ? () => setSearchQuery("") : undefined}
+            placeholder="Search sessions..."
+            inputClassName="text-xs"
+          />
+        </PanelToolbar>
+
+        {tmuxSessions.length > 0 && (
+          <PanelToolbar className="justify-between py-2 text-[10px] text-subtext">
+            <span>
+              {isFiltering
+                ? `${filteredSessions.length} of ${tmuxSessions.length} session${
+                    tmuxSessions.length !== 1 ? "s" : ""
+                  }`
+                : `${tmuxSessions.length} session${tmuxSessions.length !== 1 ? "s" : ""}`}
+              {!ownershipReady && (
+                <span className="text-subtext/70"> · checking ownership…</span>
+              )}
+              {ownershipReady && orphanCount > 0 && (
+                <span className="text-yellow">
+                  {" "}
+                  &middot; {orphanCount} orphan{orphanCount !== 1 ? "s" : ""}
+                </span>
+              )}
+            </span>
+            <div className="flex items-center gap-2">
+              {ownershipReady && orphanCount > 0 && (
+                <Button
+                  type="button"
+                  className="text-yellow hover:text-text transition-colors"
+                  onClick={handleKillOrphans}
+                  disabled={loading}
+                  variant="ghost"
+                  size="xs"
+                >
+                  Kill Orphans
+                </Button>
+              )}
+              <Button
+                type="button"
+                className="text-subtext hover:text-red transition-colors"
+                onClick={handleKillAll}
+                disabled={loading || !ownershipReady}
+                variant="ghost"
+                size="xs"
+              >
+                Kill All
+              </Button>
+            </div>
+          </PanelToolbar>
+        )}
+
+        <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
         {error && (
           <ErrorBanner className="px-2">{error}</ErrorBanner>
         )}
@@ -340,7 +289,7 @@ function TmuxPanel({
             </div>
           );
         })}
-      </div>
+        </div>
       </div>
     </TmuxPanelPresentational>
   );

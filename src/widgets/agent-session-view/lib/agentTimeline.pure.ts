@@ -40,6 +40,8 @@ type TimelineInputItem =
       sourceIndex: number;
     };
 
+const timelineCache = new WeakMap<AgentMessage[], WeakMap<AgentActivity[], AgentTimelineItem[]>>();
+
 function getTimelineRank(item: TimelineInputItem): number {
   if (item.kind === "activity") {
     return 1;
@@ -148,6 +150,12 @@ export function buildAgentTimeline(
   messages: AgentMessage[],
   activities: AgentActivity[],
 ): AgentTimelineItem[] {
+  const cachedByActivities = timelineCache.get(messages);
+  const cachedTimeline = cachedByActivities?.get(activities);
+  if (cachedTimeline) {
+    return cachedTimeline;
+  }
+
   const timeline: TimelineInputItem[] = [
     ...messages.map((message, sourceIndex) => ({
       id: message.id,
@@ -191,6 +199,12 @@ export function buildAgentTimeline(
     }
 
     appendActivityItem(grouped, item.activity);
+  }
+
+  const nextCachedByActivities = cachedByActivities ?? new WeakMap<AgentActivity[], AgentTimelineItem[]>();
+  nextCachedByActivities.set(activities, grouped);
+  if (!cachedByActivities) {
+    timelineCache.set(messages, nextCachedByActivities);
   }
 
   return grouped;

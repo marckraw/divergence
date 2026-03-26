@@ -11,6 +11,7 @@ function AgentSessionViewPresentational({
   session,
   sessionList,
   activeSessionId,
+  attentionStateBySessionId,
   idleAttentionSessionIds,
   lastViewedRuntimeEventAtMsBySessionId,
   dismissedAttentionKeyBySessionId,
@@ -87,6 +88,7 @@ function AgentSessionViewPresentational({
               idleAttentionSessionIds={idleAttentionSessionIds}
               lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
               dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
+              attentionStateBySessionId={attentionStateBySessionId}
               onSelectSession={onSelectSession}
               onDismissSessionAttention={onDismissSessionAttention}
               onCloseSession={onCloseSession}

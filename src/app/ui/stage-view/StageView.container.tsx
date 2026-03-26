@@ -23,6 +23,7 @@ import type {
 } from "../../../entities";
 import {
   MAX_STAGE_PANES,
+  buildWorkspaceSessionAttentionStateMap,
   getFocusedPane,
   isAgentSession,
   isEditorSession,
@@ -299,17 +300,31 @@ function StageView({
     }
 
     const startPointer = orientation === "vertical" ? event.clientX : event.clientY;
+    let frameId: number | null = null;
+    let latestDeltaRatio = 0;
+
+    const flushResize = () => {
+      frameId = null;
+      onResizeStageAdjacentPanes(dividerIndex, latestDeltaRatio);
+    };
+
     setIsDraggingStageDivider(true);
     document.body.style.userSelect = "none";
     document.body.style.cursor = orientation === "vertical" ? "col-resize" : "row-resize";
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const pointer = orientation === "vertical" ? moveEvent.clientX : moveEvent.clientY;
-      const deltaRatio = (pointer - startPointer) / containerSize;
-      onResizeStageAdjacentPanes(dividerIndex, deltaRatio);
+      latestDeltaRatio = (pointer - startPointer) / containerSize;
+      if (frameId === null) {
+        frameId = window.requestAnimationFrame(flushResize);
+      }
     };
 
     const handleMouseUp = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+        flushResize();
+      }
       setIsDraggingStageDivider(false);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
@@ -347,6 +362,21 @@ function StageView({
 
     return next;
   }, [layout, workspaceSessions]);
+  const attentionStateBySessionId = useMemo(
+    () => buildWorkspaceSessionAttentionStateMap(visibleSessionList, {
+      activeSessionId,
+      idleAttentionSessionIds,
+      lastViewedRuntimeEventAtMsBySessionId,
+      dismissedAttentionKeyBySessionId,
+    }),
+    [
+      activeSessionId,
+      dismissedAttentionKeyBySessionId,
+      idleAttentionSessionIds,
+      lastViewedRuntimeEventAtMsBySessionId,
+      visibleSessionList,
+    ],
+  );
 
   const pendingPaneSourceSessionByPaneId = useMemo(() => {
     const next = new Map<StagePaneId, WorkspaceSession | null>();
@@ -402,6 +432,7 @@ function StageView({
               idleAttentionSessionIds={idleAttentionSessionIds}
               lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
               dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
+              attentionStateBySessionId={attentionStateBySessionId}
               onSelectSession={(sessionId) => {
                 void onSelectSession(sessionId);
               }}
@@ -584,17 +615,11 @@ function StageView({
             onOpenOrFocusEditorChange={onOpenOrFocusEditorChange}
             onOpenOrFocusEditorSearchMatch={onOpenOrFocusEditorSearchMatch}
             onSendPromptToSession={onSendPromptToSession}
-            onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
-            onProjectSettingsSaved={onProjectSettingsSaved}
-            onRunReviewAgentRequest={onRunReviewAgentRequest}
-            onUpdateSessionSettings={onUpdateSessionSettings}
-            onRespondToRequest={onRespondToRequest}
-            onSendPrompt={onSendPrompt}
-            onStageAttachment={onStageAttachment}
-            onDiscardAttachment={onDiscardAttachment}
-            onStopSession={onStopSession}
-          />
-        )}
+             onCloseSessionAndKillTmux={onCloseSessionAndKillTmux}
+             onProjectSettingsSaved={onProjectSettingsSaved}
+             onRunReviewAgentRequest={onRunReviewAgentRequest}
+           />
+         )}
       </div>
     </main>
   );

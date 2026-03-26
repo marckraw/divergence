@@ -8,6 +8,7 @@ import type {
   SplitSessionState,
   TerminalSession,
   WorkspaceSession,
+  WorkspaceSessionAttentionState,
 } from "../../../entities";
 import type { PromptQueueItemRow } from "../../../entities/prompt-queue";
 import type { WorkspaceMember } from "../../../entities/workspace";
@@ -76,6 +77,7 @@ export interface MainAreaOpenDiff {
 }
 
 export interface MainAreaPresentationalProps extends MainAreaProps {
+  attentionStateBySessionId: Map<string, WorkspaceSessionAttentionState | null>;
   sessionList: WorkspaceSession[];
   activeProject: Project | null;
   activeSplit: SplitSessionState | null;

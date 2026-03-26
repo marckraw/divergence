@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState, type RefObject } from "react";
 import { useAgentRuntimeSession } from "../../../features/agent-runtime";
 import { buildAgentSessionSettingsPatch } from "../../../entities";
 import { buildAgentTimeline } from "../../../widgets/agent-session-view/lib/agentTimeline.pure";
@@ -14,7 +14,8 @@ import type {
   AgentRuntimeEffort,
   AgentRuntimeInteractionMode,
 } from "../../../shared";
-import { Button, Textarea } from "../../../shared";
+import AgentPendingApprovalBar from "./AgentPendingApprovalBar.presentational";
+import AgentPendingQuestionForm from "./AgentPendingQuestionForm.presentational";
 
 interface AgentStagePaneProps {
   sessionId: string;
@@ -182,73 +183,28 @@ function AgentStagePane({
         onStopSession={onStopSession}
       />
 
-      {pendingRequest?.kind === "approval" && pendingRequest.options && (
-        <div className="border-b border-surface bg-sidebar/40 px-5 py-4">
-          <div className="mx-auto mt-0 flex w-full max-w-5xl flex-wrap gap-2">
-            {pendingRequest.options.map((option) => (
-              <Button
-                key={option.id}
-                type="button"
-                variant={option.id.includes("decline") || option.id.includes("cancel") ? "ghost" : "secondary"}
-                size="sm"
-                onClick={() => { void handleResolveApproval(option.id); }}
-                disabled={isResolvingRequest}
-                title={option.description}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
+      {pendingRequest?.kind === "approval" && pendingRequest.options ? (
+        <AgentPendingApprovalBar
+          request={pendingRequest}
+          isResolving={isResolvingRequest}
+          onResolve={(decisionId) => {
+            void handleResolveApproval(decisionId);
+          }}
+        />
+      ) : null}
 
-      {pendingRequest?.kind === "user-input" && pendingRequest.questions && (
-        <div className="border-b border-surface bg-sidebar/40 px-5 py-4">
-          <div className="mx-auto mt-0 w-full max-w-5xl space-y-3">
-            {pendingRequest.questions.map((question, index) => (
-              <div key={question.id} className="rounded-xl border border-surface bg-main/60 px-3 py-3">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-subtext">{question.header}</p>
-                <p className="mt-1 text-sm text-text">{question.question}</p>
-                {question.options && question.options.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {question.options.map((option) => {
-                      const isSelected = requestAnswers[index] === option.label;
-                      return (
-                        <Button
-                          key={option.id}
-                          type="button"
-                          variant={isSelected ? "secondary" : "ghost"}
-                          size="sm"
-                          onClick={() => handleRequestAnswerChange(index, option.label)}
-                          disabled={isResolvingRequest}
-                          title={option.description}
-                        >
-                          {option.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                )}
-                <Textarea
-                  value={requestAnswers[index] ?? ""}
-                  onChange={(event: ChangeEvent<HTMLTextAreaElement>) => handleRequestAnswerChange(index, event.target.value)}
-                  placeholder={question.isSecret ? "Enter hidden value" : "Enter response"}
-                  className="mt-3 min-h-[88px]"
-                />
-              </div>
-            ))}
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                onClick={() => { void handleSubmitRequest(); }}
-                disabled={isResolvingRequest || !canSubmitPendingRequest}
-              >
-                {isResolvingRequest ? "Submitting..." : "Submit Answers"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {pendingRequest?.kind === "user-input" && pendingRequest.questions ? (
+        <AgentPendingQuestionForm
+          request={pendingRequest}
+          answers={requestAnswers}
+          isResolving={isResolvingRequest}
+          canSubmit={canSubmitPendingRequest}
+          onAnswerChange={handleRequestAnswerChange}
+          onSubmit={() => {
+            void handleSubmitRequest();
+          }}
+        />
+      ) : null}
 
       <AgentSessionTimelineContainer
         session={session}

@@ -1,4 +1,4 @@
-import { Button, EmptyState, LoadingSpinner, TextInput } from "../../../shared";
+import { Button, EmptyState, ErrorBanner, LoadingSpinner, PanelToolbar, SearchField } from "../../../shared";
 import type {
   ProjectSearchFileResult,
   ProjectSearchResult,
@@ -91,33 +91,27 @@ function ProjectSearchPanelPresentational({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-surface px-3 py-3">
-        <div className="flex items-center gap-2">
-          <TextInput
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search in files"
-            className="h-9"
-          />
-          <Button
-            variant={caseSensitive ? "primary" : "ghost"}
-            size="xs"
-            onClick={onToggleCaseSensitive}
-            className="shrink-0"
-          >
-            Match Case
-          </Button>
-          {trimmedQuery.length > 0 && (
-            <Button variant="ghost" size="xs" onClick={onClear} className="shrink-0 text-subtext hover:text-text">
-              Clear
-            </Button>
-          )}
-        </div>
+      <PanelToolbar className="px-3 py-3">
+        <SearchField
+          value={query}
+          onChange={onQueryChange}
+          onClear={onClear}
+          placeholder="Search in files"
+          inputClassName="h-9"
+        />
+        <Button
+          variant={caseSensitive ? "primary" : "ghost"}
+          size="xs"
+          onClick={onToggleCaseSensitive}
+          className="shrink-0"
+        >
+          Match Case
+        </Button>
         <div className="mt-2 flex items-center justify-between gap-3 text-[10px] uppercase tracking-[0.14em] text-subtext">
           <span className="truncate">{rootPath}</span>
           {loading ? <span>Searching...</span> : result ? <span>{matchCount} matches</span> : null}
         </div>
-      </div>
+      </PanelToolbar>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
         {trimmedQuery.length === 0 ? (
@@ -129,9 +123,7 @@ function ProjectSearchPanelPresentational({
             Type at least {minQueryLength} characters to search.
           </EmptyState>
         ) : error ? (
-          <div className="rounded border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300/90">
-            {error}
-          </div>
+          <ErrorBanner>{error}</ErrorBanner>
         ) : loading && !result ? (
           <div className="flex h-full items-center justify-center text-sm text-subtext">
             <LoadingSpinner>Searching files...</LoadingSpinner>

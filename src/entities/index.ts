@@ -52,6 +52,7 @@ export type {
   WorkspaceSessionStatus,
 } from "./workspace-session";
 export {
+  buildWorkspaceSessionAttentionStateMap,
   compareWorkspaceSessionAttentionPriority,
   getWorkspaceSessionAttentionKey,
   getWorkspaceSessionAttentionPriority,
