@@ -1,5 +1,11 @@
 # divergence
 
+## 0.45.8
+
+### Patch Changes
+
+- 3c3bf92: Restore project loading when the frontend SQL path returns nothing, and make OpenCode model selection discoverable and searchable from the agent session header.
+
 ## 0.45.7
 
 ### Patch Changes
