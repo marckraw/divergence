@@ -43,7 +43,8 @@ const INITIAL_STATE: AgentRuntimeStoreState = {
 let state = INITIAL_STATE;
 let initialized = false;
 let removeListener: (() => void) | null = null;
-const listeners = new Set<() => void>();
+const globalListeners = new Set<() => void>();
+const sessionListeners = new Map<string, Set<() => void>>();
 let pendingSessionUpdates = new Map<string, AgentSessionSnapshot>();
 const pendingSessionHydrations = new Map<string, Promise<AgentSessionSnapshot | null>>();
 const sessionUpdateScheduler = createFrameTask(() => {
@@ -71,7 +72,11 @@ function deriveOrderedOpenSessions(sessions: AgentSessionSnapshot[]): AgentSessi
 }
 
 function emitStoreChange(): void {
-  listeners.forEach((listener) => listener());
+  globalListeners.forEach((listener) => listener());
+}
+
+function emitSessionChange(sessionId: string): void {
+  sessionListeners.get(sessionId)?.forEach((listener) => listener());
 }
 
 function replaceState(nextState: AgentRuntimeStoreState): void {
@@ -80,7 +85,12 @@ function replaceState(nextState: AgentRuntimeStoreState): void {
 }
 
 function updateSessionsMap(mutator: (previous: Map<string, AgentSessionSnapshot>) => Map<string, AgentSessionSnapshot>): void {
-  const nextSessions = mutator(state.sessions);
+  const previousSessions = state.sessions;
+  const nextSessions = mutator(previousSessions);
+  if (nextSessions === previousSessions) {
+    return;
+  }
+
   const orderedSessions = sortSessionsByCreatedAt(nextSessions.values());
   replaceState({
     ...state,
@@ -88,6 +98,19 @@ function updateSessionsMap(mutator: (previous: Map<string, AgentSessionSnapshot>
     orderedSessions,
     orderedOpenSessions: deriveOrderedOpenSessions(orderedSessions),
   });
+
+  const changedSessionIds = new Set<string>();
+  previousSessions.forEach((snapshot, sessionId) => {
+    if (nextSessions.get(sessionId) !== snapshot) {
+      changedSessionIds.add(sessionId);
+    }
+  });
+  nextSessions.forEach((snapshot, sessionId) => {
+    if (previousSessions.get(sessionId) !== snapshot) {
+      changedSessionIds.add(sessionId);
+    }
+  });
+  changedSessionIds.forEach((sessionId) => emitSessionChange(sessionId));
 }
 
 function upsertSession(snapshot: AgentSessionSnapshot): void {
@@ -198,9 +221,26 @@ async function initializeAgentRuntimeStore(): Promise<void> {
 }
 
 function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
+  globalListeners.add(listener);
   return () => {
-    listeners.delete(listener);
+    globalListeners.delete(listener);
+  };
+}
+
+function subscribeToSession(sessionId: string, listener: () => void): () => void {
+  const existing = sessionListeners.get(sessionId) ?? new Set<() => void>();
+  existing.add(listener);
+  sessionListeners.set(sessionId, existing);
+
+  return () => {
+    const current = sessionListeners.get(sessionId);
+    if (!current) {
+      return;
+    }
+    current.delete(listener);
+    if (current.size === 0) {
+      sessionListeners.delete(sessionId);
+    }
   };
 }
 
@@ -270,7 +310,7 @@ export function useOrderedOpenAgentRuntimeSessions(): AgentSessionSnapshot[] {
 export function useAgentRuntimeSessionState(sessionId: string | null): AgentSessionSnapshot | null {
   useInitializeAgentRuntimeStore();
   return useSyncExternalStore(
-    subscribe,
+    (listener) => (sessionId ? subscribeToSession(sessionId, listener) : () => undefined),
     () => getSessionSnapshot(sessionId),
     () => getSessionSnapshot(sessionId),
   );

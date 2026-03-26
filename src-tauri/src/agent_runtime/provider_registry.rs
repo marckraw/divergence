@@ -7,9 +7,11 @@ const LOW_MEDIUM_HIGH_EFFORTS: &[&str] = &["low", "medium", "high"];
 const LOW_TO_XHIGH_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
 const NONE_TO_XHIGH_EFFORTS: &[&str] = &["none", "low", "medium", "high", "xhigh"];
 const LOGIN_SHELL_BINARY_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+const OPENCODE_MODEL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
     let (cursor_default_model, cursor_model_options) = cursor_model_catalog();
+    let opencode_model_options = opencode_model_catalog();
     let gemini_stream_json_supported = gemini_supports_stream_json();
     let mut descriptors = vec![
         AgentRuntimeProviderDescriptor {
@@ -152,10 +154,7 @@ pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
             label: "OpenCode".to_string(),
             transport: AgentRuntimeProviderTransport::AppServer,
             default_model: DEFAULT_OPENCODE_MODEL.to_string(),
-            model_options: vec![AgentRuntimeModelOption {
-                slug: DEFAULT_OPENCODE_MODEL.to_string(),
-                label: "Configured default".to_string(),
-            }],
+            model_options: opencode_model_options,
             readiness: provider_readiness(&AgentProvider::Opencode),
             features: AgentRuntimeProviderFeatures {
                 streaming: true,
@@ -457,6 +456,68 @@ fn cursor_model_catalog() -> (String, Vec<AgentRuntimeModelOption>) {
     (default_model, model_options)
 }
 
+fn opencode_model_catalog() -> Vec<AgentRuntimeModelOption> {
+    let fallback = vec![AgentRuntimeModelOption {
+        slug: DEFAULT_OPENCODE_MODEL.to_string(),
+        label: "Configured default".to_string(),
+    }];
+
+    let Some(command) = detect_opencode_binary() else {
+        return fallback;
+    };
+
+    let mut process = StdCommand::new(&command);
+    apply_binary_dir_to_std_command(&mut process, &command);
+    let Ok(output) =
+        run_std_command_with_timeout(process.arg("models"), OPENCODE_MODEL_DISCOVERY_TIMEOUT)
+    else {
+        return fallback;
+    };
+
+    if !output.status.success() {
+        return fallback;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let model_options = parse_opencode_model_catalog(&stdout);
+    if model_options.len() == 1 {
+        return fallback;
+    }
+
+    model_options
+}
+
+fn parse_opencode_model_catalog(output: &str) -> Vec<AgentRuntimeModelOption> {
+    let mut model_options = vec![AgentRuntimeModelOption {
+        slug: DEFAULT_OPENCODE_MODEL.to_string(),
+        label: "Configured default".to_string(),
+    }];
+    let mut seen = HashSet::from([DEFAULT_OPENCODE_MODEL.to_string()]);
+    let cleaned_output = strip_ansi_sequences(output);
+
+    for line in cleaned_output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if !line.contains('/') {
+            continue;
+        }
+
+        let slug = line.to_string();
+        if !seen.insert(slug.clone()) {
+            continue;
+        }
+
+        model_options.push(AgentRuntimeModelOption {
+            slug: slug.clone(),
+            label: slug,
+        });
+    }
+
+    model_options
+}
+
 fn gemini_supports_stream_json() -> bool {
     let Some(command) = detect_gemini_binary() else {
         return false;
@@ -714,9 +775,9 @@ fn strip_ansi_sequences(input: &str) -> String {
 mod tests {
     use super::{
         build_claude_command, default_effort_for_provider_model, gemini_approval_args,
-        normalize_agent_effort, read_cli_version_line, AgentInteractionMode, AgentProvider,
-        AgentRuntimeStatus, AgentSessionNameMode, AgentSessionRole, AgentSessionSnapshot,
-        AgentSessionStatus, AgentTargetType,
+        normalize_agent_effort, parse_opencode_model_catalog, read_cli_version_line,
+        AgentInteractionMode, AgentProvider, AgentRuntimeStatus, AgentSessionNameMode,
+        AgentSessionRole, AgentSessionSnapshot, AgentSessionStatus, AgentTargetType,
     };
     use std::path::PathBuf;
 
@@ -815,6 +876,22 @@ mod tests {
 
         assert!(args.windows(2).any(|pair| pair == ["--model", "opus"]));
         assert!(args.windows(2).any(|pair| pair == ["--effort", "max"]));
+    }
+
+    #[test]
+    fn parses_opencode_model_catalog_and_preserves_default_option() {
+        let options = parse_opencode_model_catalog(
+            "\u{1b}[32mgithub-copilot/gpt-5.4\u{1b}[0m\n\
+             github-copilot/gpt-5.4\n\
+             openai/gpt-5.4\n\
+             not-a-model\n",
+        );
+
+        assert_eq!(options[0].slug, "default");
+        assert_eq!(options[0].label, "Configured default");
+        assert_eq!(options[1].slug, "github-copilot/gpt-5.4");
+        assert_eq!(options[2].slug, "openai/gpt-5.4");
+        assert_eq!(options.len(), 3);
     }
 }
 

@@ -11,7 +11,7 @@ import {
   isEditorSession,
   isTerminalSession,
 } from "../../../entities";
-import { DEFAULT_EDITOR_THEME_DARK, DEFAULT_EDITOR_THEME_LIGHT, TabButton, useFileEditor, type AppSettings, type ChangesMode, type EditorThemeId, type GitChangeEntry, type LinearWorkflowState } from "../../../shared";
+import { DEFAULT_EDITOR_THEME_DARK, DEFAULT_EDITOR_THEME_LIGHT, useFileEditor, type AppSettings, type ChangesMode, type EditorThemeId, type GitChangeEntry, type LinearWorkflowState } from "../../../shared";
 
 import { ProjectSearchPanel } from "../../../features/project-search";
 import { ChangesTree } from "../../../features/changes-tree";
@@ -28,7 +28,6 @@ import {
   type DiffReviewAnchor,
   type DiffReviewComment,
 } from "../../../features/diff-review";
-import type { AgentRuntimeAttachment, AgentRuntimeInteractionMode } from "../../../shared";
 import type { AgentSessionComposerHandle } from "../../../widgets/agent-session-view/ui/AgentSessionView.types";
 import AgentSessionChangeDrawer from "../../../widgets/agent-session-view/ui/AgentSessionChangeDrawer.container";
 import { useAgentLinearTaskQueue } from "../../../widgets/agent-session-view/model/useAgentLinearTaskQueue";
@@ -42,6 +41,8 @@ import { resolveActivePaneSessionId } from "../../../widgets/main-area/lib/activ
 import { resolvePromptQueueScope } from "../../../widgets/main-area/lib/promptQueueScope.pure";
 import { useLinearTaskQueue } from "../../../widgets/main-area/model/useLinearTaskQueue";
 import { usePromptQueue } from "../../../widgets/main-area/model/usePromptQueue";
+import StageSidebarPresentational from "./StageSidebar.presentational";
+import StageSidebarTabStrip from "./StageSidebarTabStrip.presentational";
 
 type TerminalSidebarTab = "settings" | "files" | "changes" | "search" | "queue" | "linear" | "review" | "tmux";
 type EditorSidebarTab = "files" | "changes" | "search";
@@ -110,31 +111,6 @@ interface StageSidebarProps {
     agent: DiffReviewAgent;
     briefMarkdown: string;
   }) => Promise<void>;
-  onUpdateSessionSettings: (sessionId: string, input: {
-    model?: string;
-    effort?: import("../../../shared").AgentRuntimeEffort;
-  }) => Promise<void>;
-  onRespondToRequest: (
-    sessionId: string,
-    requestId: string,
-    input: { decision?: string; answers?: string[] }
-  ) => Promise<void>;
-  onSendPrompt: (
-    sessionId: string,
-    prompt: string,
-    options?: {
-      interactionMode?: AgentRuntimeInteractionMode;
-      attachments?: AgentRuntimeAttachment[];
-    }
-  ) => Promise<void>;
-  onStageAttachment: (input: {
-    sessionId: string;
-    name: string;
-    mimeType: string;
-    base64Content: string;
-  }) => Promise<AgentRuntimeAttachment>;
-  onDiscardAttachment: (sessionId: string, attachmentId: string) => Promise<void>;
-  onStopSession: (sessionId: string) => Promise<void>;
 }
 
 function StageSidebar({
@@ -732,53 +708,41 @@ function StageSidebar({
     );
   }
 
+  const terminalTabs = (["settings", "files", "changes", "search", "queue", "linear", "tmux", "review"] as const).map((tab) => ({
+    id: tab,
+    label: tab === "tmux" ? "Tmux" : tab[0].toUpperCase() + tab.slice(1),
+  }));
+  const editorTabs = (["files", "changes", "search"] as const).map((tab) => ({
+    id: tab,
+    label: tab[0].toUpperCase() + tab.slice(1),
+  }));
+  const agentTabs = (["files", "changes", "linear", "queue"] as const).map((tab) => ({
+    id: tab,
+    label: tab[0].toUpperCase() + tab.slice(1),
+  }));
+
   return (
     <>
-      <aside className="flex h-full w-96 shrink-0 flex-col border-l border-surface bg-sidebar">
-        <div className="flex items-center justify-between border-b border-surface px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-xs uppercase tracking-[0.16em] text-subtext">Focused pane</p>
-            <p className="truncate text-sm text-text">{focusedSession.name}</p>
-          </div>
-          <span className="rounded-full border border-surface px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-subtext">
-            {isAgentSession(focusedSession) ? "Agent" : isEditorSession(focusedSession) ? "Editor" : "Terminal"}
-          </span>
-        </div>
-
-        {activeTerminalSession ? (
-          <div className="flex items-center border-b border-surface">
-            {(["settings", "files", "changes", "search", "queue", "linear", "tmux", "review"] as const).map((tab) => (
-              <TabButton key={tab} active={terminalTab === tab} onClick={() => setTerminalTab(tab)}>
-                {tab === "tmux" ? "Tmux" : tab[0].toUpperCase() + tab.slice(1)}
-              </TabButton>
-            ))}
-          </div>
-        ) : activeEditorSession ? (
-          <div className="flex items-center border-b border-surface">
-            {(["files", "changes", "search"] as const).map((tab) => (
-              <TabButton key={tab} active={editorTab === tab} onClick={() => setEditorTab(tab)}>
-                {tab[0].toUpperCase() + tab.slice(1)}
-              </TabButton>
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center border-b border-surface">
-            {(["files", "changes", "linear", "queue"] as const).map((tab) => (
-              <TabButton key={tab} active={agentTab === tab} onClick={() => setAgentTab(tab)}>
-                {tab[0].toUpperCase() + tab.slice(1)}
-              </TabButton>
-            ))}
-          </div>
-        )}
-
-        <div className="flex-1 min-h-0 overflow-hidden">
-          {activeTerminalSession
+      <StageSidebarPresentational
+        focusedSessionName={focusedSession.name}
+        focusedSessionKindLabel={isAgentSession(focusedSession) ? "Agent" : isEditorSession(focusedSession) ? "Editor" : "Terminal"}
+        tabStrip={
+          activeTerminalSession ? (
+            <StageSidebarTabStrip tabs={terminalTabs} activeTab={terminalTab} onTabChange={setTerminalTab} />
+          ) : activeEditorSession ? (
+            <StageSidebarTabStrip tabs={editorTabs} activeTab={editorTab} onTabChange={setEditorTab} />
+          ) : (
+            <StageSidebarTabStrip tabs={agentTabs} activeTab={agentTab} onTabChange={setAgentTab} />
+          )
+        }
+        content={
+          activeTerminalSession
             ? renderTerminalTab(terminalTab)
             : activeEditorSession
               ? renderEditorTab(editorTab)
-              : renderAgentTab(agentTab)}
-        </div>
-      </aside>
+              : renderAgentTab(agentTab)
+        }
+      />
 
       {activeTerminalSession && (
         <>

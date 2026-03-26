@@ -7,6 +7,7 @@ import LoadingSpinner from "../../ui/LoadingSpinner.presentational";
 
 interface UnifiedDiffViewerProps {
   diff: string | null;
+  lines?: ParsedDiffLine[];
   isBinary: boolean;
   isLoading: boolean;
   error: string | null;
@@ -26,6 +27,7 @@ interface UnifiedDiffViewerProps {
 
 function UnifiedDiffViewer({
   diff,
+  lines,
   isBinary,
   isLoading,
   error,
@@ -42,7 +44,7 @@ function UnifiedDiffViewer({
   renderLineAside,
   renderLineFooter,
 }: UnifiedDiffViewerProps) {
-  const lines = useMemo(() => parseUnifiedDiffLines(diff), [diff]);
+  const parsedLines = useMemo(() => lines ?? parseUnifiedDiffLines(diff), [diff, lines]);
 
   if (isLoading) {
     return loadingContent ?? (
@@ -83,7 +85,7 @@ function UnifiedDiffViewer({
   return (
     <div className={cn("h-full w-full overflow-auto font-mono text-[11px] leading-5", className)}>
       {header}
-      {lines.map((line) => {
+      {parsedLines.map((line) => {
         const key = getLineKey?.(line) ?? line.index;
         const aside = renderLineAside?.(line);
         const footer = renderLineFooter?.(line);

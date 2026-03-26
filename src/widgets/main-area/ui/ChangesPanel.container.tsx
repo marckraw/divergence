@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangesMode, GitChangeEntry, GitChangeStatus } from "../../../entities";
 import { Button, EmptyState, ErrorBanner, SegmentedControl } from "../../../shared";
+import { ChangeFileBadge, ChangeStatusBadge } from "../../../features/changes-tree";
 import { getRelativePathFromRoot, sortGitChangesByPath } from "../lib/changes.pure";
 import {
   listBranchChanges,
@@ -15,19 +16,6 @@ interface ChangesPanelProps {
   onModeChange: (mode: ChangesMode) => void;
   onOpenChange: (entry: GitChangeEntry) => void;
 }
-
-const STATUS_STYLES: Record<
-  GitChangeStatus,
-  { label: string; className: string; textClassName: string }
-> = {
-  A: { label: "A", className: "bg-green/20", textClassName: "text-green" },
-  M: { label: "M", className: "bg-yellow/20", textClassName: "text-yellow" },
-  D: { label: "D", className: "bg-red/20", textClassName: "text-red" },
-  R: { label: "R", className: "bg-accent/20", textClassName: "text-accent" },
-  C: { label: "C", className: "bg-accent/20", textClassName: "text-accent" },
-  U: { label: "U", className: "bg-red/20", textClassName: "text-red" },
-  "?": { label: "?", className: "bg-surface", textClassName: "text-subtext" },
-};
 
 function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChange }: ChangesPanelProps) {
   const [changes, setChanges] = useState<GitChangeEntry[]>([]);
@@ -138,7 +126,6 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
             </EmptyState>
           )}
           {changes.map((entry) => {
-            const statusStyle = STATUS_STYLES[entry.status] ?? STATUS_STYLES["?"];
             const isActive = activeRelative === entry.path;
             return (
               <Button
@@ -151,11 +138,8 @@ function ChangesPanel({ rootPath, activeFilePath, mode, onModeChange, onOpenChan
                 variant="ghost"
                 size="xs"
               >
-                <span
-                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${statusStyle.className} ${statusStyle.textClassName}`}
-                >
-                  {statusStyle.label}
-                </span>
+                <ChangeStatusBadge status={entry.status as GitChangeStatus} />
+                <ChangeFileBadge name={entry.path} />
                 <div className="flex-1 min-w-0">
                   {entry.old_path ? (
                     <div className="text-xs text-text truncate">

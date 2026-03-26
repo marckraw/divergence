@@ -104,18 +104,32 @@ function TerminalStagePane({
 
     const startPointer = orientation === "vertical" ? event.clientX : event.clientY;
     const startSizes = [...paneSizes];
+    let frameId: number | null = null;
+    let latestDeltaRatio = 0;
+
+    const flushResize = () => {
+      frameId = null;
+      const nextSizes = resizeSplitPaneSizes(startSizes, dividerIndex, latestDeltaRatio);
+      onResizeSplitPanes(sessionId, nextSizes);
+    };
+
     setIsDraggingSplitPane(true);
     document.body.style.userSelect = "none";
     document.body.style.cursor = orientation === "vertical" ? "col-resize" : "row-resize";
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const pointer = orientation === "vertical" ? moveEvent.clientX : moveEvent.clientY;
-      const deltaRatio = (pointer - startPointer) / containerSize;
-      const nextSizes = resizeSplitPaneSizes(startSizes, dividerIndex, deltaRatio);
-      onResizeSplitPanes(sessionId, nextSizes);
+      latestDeltaRatio = (pointer - startPointer) / containerSize;
+      if (frameId === null) {
+        frameId = window.requestAnimationFrame(flushResize);
+      }
     };
 
     const handleMouseUp = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+        flushResize();
+      }
       setIsDraggingSplitPane(false);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";

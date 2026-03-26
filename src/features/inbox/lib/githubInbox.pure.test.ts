@@ -10,13 +10,17 @@ import {
 
 describe("github inbox utils", () => {
   it("builds repo keys and titles", () => {
-    expect(buildGithubRepoKey("OpenAI", "Divergence")).toBe("openai/divergence");
-    expect(buildGithubRepoTarget({
-      projectId: 9,
-      projectName: "divergence",
-      owner: "OpenAI",
-      repo: "Divergence",
-    })).toEqual({
+    expect(buildGithubRepoKey("OpenAI", "Divergence")).toBe(
+      "openai/divergence"
+    );
+    expect(
+      buildGithubRepoTarget({
+        projectId: 9,
+        projectName: "divergence",
+        owner: "OpenAI",
+        repo: "Divergence",
+      })
+    ).toEqual({
       projectId: 9,
       projectName: "divergence",
       owner: "OpenAI",
@@ -38,14 +42,24 @@ describe("github inbox utils", () => {
       updatedAtMs: 4_000,
     };
 
-    expect(classifyGithubPullRequestEvent(pullRequest, 1_000)).toBe("github_pr_opened");
-    expect(classifyGithubPullRequestEvent(pullRequest, 3_000)).toBe("github_pr_updated");
+    expect(classifyGithubPullRequestEvent(pullRequest, 1_000)).toBe(
+      "github_pr_opened"
+    );
+    expect(classifyGithubPullRequestEvent(pullRequest, 3_000)).toBe(
+      "github_pr_updated"
+    );
     expect(classifyGithubPullRequestEvent(pullRequest, 5_000)).toBeNull();
   });
 
   it("builds external ids and bodies", () => {
-    expect(buildGithubInboxExternalId("openai/divergence", 99, "github_pr_updated", 123))
-      .toBe("github:openai/divergence:pr:99:github_pr_updated:123");
+    expect(
+      buildGithubInboxExternalId(
+        "openai/divergence",
+        99,
+        "github_pr_updated",
+        123
+      )
+    ).toBe("github:openai/divergence:pr:99:github_pr_updated:123");
 
     const body = buildGithubInboxBody({
       id: 1,

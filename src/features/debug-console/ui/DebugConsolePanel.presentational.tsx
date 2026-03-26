@@ -1,8 +1,11 @@
 import {
+  Badge,
   Button,
-  ModalHeader,
-  ModalShell,
-  TextInput,
+  FilterChipGroup,
+  FormModalShell,
+  PanelHeader,
+  PanelToolbar,
+  SearchField,
   type DebugEvent,
 } from "../../../shared";
 import type { DebugConsolePanelProps } from "./DebugConsolePanel.types";
@@ -25,6 +28,11 @@ const CATEGORY_FILTER_OPTIONS: Array<{ id: DebugCategoryFilter; label: string }>
   { id: "tmux", label: "Tmux" },
   { id: "automation", label: "Automation" },
   { id: "agent_runtime", label: "Agent Runtime" },
+];
+
+const FAILURE_FILTER_OPTIONS = [
+  { id: "all", label: "All events" },
+  { id: "failures", label: "Only failures/stuck", tone: "danger" as const },
 ];
 
 function formatTimestamp(atMs: number): string {
@@ -99,14 +107,11 @@ function DebugConsolePanelPresentational({
 }: DebugConsolePanelProps) {
   return (
     <div className="h-full flex flex-col bg-main">
-      <div className="px-5 py-4 border-b border-surface flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-text">Debug Console</h2>
-          <p className="text-xs text-subtext">
-            In-app diagnostics for terminal/tmux stalls. Data is in-memory and clears on restart.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PanelHeader
+        title="Debug Console"
+        description="In-app diagnostics for terminal/tmux stalls. Data is in-memory and clears on restart."
+        actions={(
+          <>
           <Button
             type="button"
             onClick={() => {
@@ -150,72 +155,37 @@ function DebugConsolePanelPresentational({
           >
             Clear
           </Button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
-      <div className="px-5 py-3 border-b border-surface flex items-center gap-2 text-xs">
-        <span className="px-2 py-1 rounded bg-accent/10 text-accent">Info: {infoCount}</span>
-        <span className="px-2 py-1 rounded bg-yellow/20 text-yellow">Warn: {warnCount}</span>
-        <span className="px-2 py-1 rounded bg-red/20 text-red">Error: {errorCount}</span>
+      <PanelToolbar>
+        <Badge variant="outline" className="border-accent/20 bg-accent/10 text-accent">Info: {infoCount}</Badge>
+        <Badge variant="outline" className="border-yellow/30 bg-yellow/20 text-yellow">Warn: {warnCount}</Badge>
+        <Badge variant="outline" className="border-red/30 bg-red/20 text-red">Error: {errorCount}</Badge>
         <span className="ml-auto text-subtext">Visible: {visibleCount} / Total: {totalCount}</span>
-      </div>
+      </PanelToolbar>
 
-      <div className="px-5 py-3 border-b border-surface space-y-2">
-        <TextInput
-          type="text"
+      <PanelToolbar className="flex-col items-stretch">
+        <SearchField
           value={searchQuery}
-          onChange={(event) => onSearchQueryChange(event.target.value)}
+          onChange={onSearchQueryChange}
+          onClear={searchQuery ? () => onSearchQueryChange("") : undefined}
           placeholder="Search message, details, metadata..."
-          className="text-xs placeholder:text-subtext/70 focus:ring-1"
+          inputClassName="text-xs placeholder:text-subtext/70 focus:ring-1"
         />
+        <FilterChipGroup items={LEVEL_FILTER_OPTIONS} value={levelFilter} onChange={onLevelFilterChange} />
         <div className="flex flex-wrap items-center gap-2">
-          {LEVEL_FILTER_OPTIONS.map((option) => (
-            <Button
-              key={option.id}
-              type="button"
-              onClick={() => onLevelFilterChange(option.id)}
-              variant={levelFilter === option.id ? "primary" : "subtle"}
-              size="xs"
-              className={`px-2.5 py-1 text-xs rounded border ${
-                levelFilter === option.id
-                  ? "border-accent bg-accent/15 text-accent"
-                  : "border-surface text-subtext hover:text-text hover:bg-surface"
-              }`}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {CATEGORY_FILTER_OPTIONS.map((option) => (
-            <Button
-              key={option.id}
-              type="button"
-              onClick={() => onCategoryFilterChange(option.id)}
-              variant={categoryFilter === option.id ? "primary" : "subtle"}
-              size="xs"
-              className={`px-2.5 py-1 text-xs rounded border ${
-                categoryFilter === option.id
-                  ? "border-accent bg-accent/15 text-accent"
-                  : "border-surface text-subtext hover:text-text hover:bg-surface"
-              }`}
-            >
-              {option.label}
-            </Button>
-          ))}
-          <Button
-            type="button"
-            onClick={onToggleOnlyFailureOrStuck}
-            variant={onlyFailureOrStuck ? "danger" : "subtle"}
-            size="xs"
-            className={`px-2.5 py-1 text-xs rounded border ${
-              onlyFailureOrStuck
-                ? "border-red/50 bg-red/10 text-red"
-                : "border-surface text-subtext hover:text-text hover:bg-surface"
-            }`}
-          >
-            Only failures/stuck
-          </Button>
+          <FilterChipGroup items={CATEGORY_FILTER_OPTIONS} value={categoryFilter} onChange={onCategoryFilterChange} />
+          <FilterChipGroup
+            items={FAILURE_FILTER_OPTIONS}
+            value={onlyFailureOrStuck ? "failures" : "all"}
+            onChange={(value) => {
+              if ((value === "failures") !== onlyFailureOrStuck) {
+                onToggleOnlyFailureOrStuck();
+              }
+            }}
+          />
           <Button
             type="button"
             onClick={onResetFilters}
@@ -226,7 +196,7 @@ function DebugConsolePanelPresentational({
             Reset filters
           </Button>
         </div>
-      </div>
+      </PanelToolbar>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {events.length === 0 ? (
@@ -283,19 +253,17 @@ function DebugConsolePanelPresentational({
       </div>
 
       {selectedEvent && (
-        <ModalShell
+        <FormModalShell
           onRequestClose={onCloseInspectModal}
           size="xl"
           surface="sidebar"
           overlayClassName="z-50"
           panelClassName="w-[760px] max-w-[95vw] max-h-[85vh] flex flex-col"
-        >
-          <ModalHeader
-            title="Debug Event Details"
-            description={`${selectedEvent.category} • ${selectedEvent.level} • ${formatTimestamp(selectedEvent.atMs)}`}
-            onClose={onCloseInspectModal}
-          />
-          <div className="px-4 py-3 space-y-3 overflow-y-auto min-h-0">
+          title="Debug Event Details"
+          description={`${selectedEvent.category} • ${selectedEvent.level} • ${formatTimestamp(selectedEvent.atMs)}`}
+          scrollableBody
+          body={(
+            <>
             <section className="space-y-1">
               <h4 className="text-xs font-semibold text-subtext uppercase tracking-wide">Message</h4>
               <div className="text-sm text-text break-words">{selectedEvent.message}</div>
@@ -318,8 +286,9 @@ function DebugConsolePanelPresentational({
                 {renderEventJson(selectedEvent)}
               </pre>
             </section>
-          </div>
-          <div className="px-4 py-3 border-t border-surface flex justify-end">
+            </>
+          )}
+          footer={(
             <Button
               type="button"
               onClick={onCloseInspectModal}
@@ -328,8 +297,8 @@ function DebugConsolePanelPresentational({
             >
               Close
             </Button>
-          </div>
-        </ModalShell>
+          )}
+        />
       )}
     </div>
   );

@@ -7,13 +7,14 @@ use crate::agent_runtime::{
 use crate::db::{get_divergence_dir, get_repos_dir, get_workspaces_dir};
 use crate::git;
 use ignore::WalkBuilder;
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,6 +59,21 @@ enum GithubPrDivergenceMode {
 
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
+}
+
+fn open_app_database(app_handle: &AppHandle) -> Result<Connection, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data directory: {e}"))?;
+    let db_path = app_data_dir.join("divergence.db");
+
+    Connection::open(&db_path).map_err(|e| {
+        format!(
+            "Failed to open database at {}: {e}",
+            path_to_string(&db_path)
+        )
+    })
 }
 
 #[tauri::command]
@@ -198,9 +214,32 @@ pub async fn remove_project(_id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn list_projects() -> Result<Vec<Project>, String> {
-    // Database query handled by frontend with tauri-plugin-sql
-    Ok(vec![])
+pub async fn list_projects(app_handle: AppHandle) -> Result<Vec<Project>, String> {
+    let conn = open_app_database(&app_handle)?;
+    let mut stmt =
+        match conn.prepare("SELECT id, name, path, created_at FROM projects ORDER BY name") {
+            Ok(stmt) => stmt,
+            Err(err) if err.to_string().contains("no such table: projects") => return Ok(vec![]),
+            Err(err) => return Err(format!("Failed to prepare project query: {err}")),
+        };
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(Project {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })
+        .map_err(|err| format!("Failed to query projects: {err}"))?;
+
+    let mut projects = Vec::new();
+    for row in rows {
+        projects.push(row.map_err(|err| format!("Failed to read project row: {err}"))?);
+    }
+
+    Ok(projects)
 }
 
 #[tauri::command]

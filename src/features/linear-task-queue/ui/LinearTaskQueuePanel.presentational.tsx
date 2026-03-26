@@ -2,8 +2,10 @@ import {
   Button,
   EmptyState,
   ErrorBanner,
+  FilterChipGroup,
   LoadingSpinner,
-  TextInput,
+  PanelToolbar,
+  SearchField,
 } from "../../../shared";
 import type { LinearWorkflowState } from "../../../shared";
 import {
@@ -202,31 +204,15 @@ function LinearTaskQueuePanel({
           </span>
         </div>
 
-        <TextInput
-          type="text"
-          value={searchQuery}
-          onChange={(event) => onSearchQueryChange(event.target.value)}
-          placeholder="Search identifier, title, description, assignee, state..."
-          className="text-xs"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          {STATUS_FILTER_OPTIONS.map((option) => (
-            <Button
-              key={option.id}
-              type="button"
-              onClick={() => onStatusFilterChange(option.id)}
-              variant={statusFilter === option.id ? "primary" : "subtle"}
-              size="xs"
-              className={`px-2.5 py-1 text-xs rounded border ${
-                statusFilter === option.id
-                  ? "border-accent bg-accent/15 text-accent"
-                  : "border-surface text-subtext hover:text-text hover:bg-surface"
-              }`}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
+        <PanelToolbar className="px-0 py-0 border-b-0">
+          <SearchField
+            value={searchQuery}
+            onChange={onSearchQueryChange}
+            placeholder="Search identifier, title, description, assignee, state..."
+            inputClassName="text-xs"
+          />
+          <FilterChipGroup items={STATUS_FILTER_OPTIONS} value={statusFilter} onChange={onStatusFilterChange} />
+        </PanelToolbar>
 
         {error && <ErrorBanner>{error}</ErrorBanner>}
         {infoMessage && (

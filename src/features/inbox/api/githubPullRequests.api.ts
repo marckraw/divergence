@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { GithubPullRequestEvent } from "../model/githubPullRequests.types";
+import type { GithubPullRequestEvent } from "../model/githubInbox.types";
 
 export async function fetchGithubPullRequests(
   token: string,

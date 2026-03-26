@@ -1,5 +1,11 @@
 import type { ReactNode, Ref } from "react";
-import type { AgentSessionSnapshot, Project, WorkspaceMember, WorkspaceSession } from "../../../entities";
+import type {
+  AgentSessionSnapshot,
+  Project,
+  WorkspaceMember,
+  WorkspaceSession,
+  WorkspaceSessionAttentionState,
+} from "../../../entities";
 import type {
   AgentRuntimeAttachment,
   AgentRuntimeAttachmentKind,
@@ -103,6 +109,7 @@ export interface AgentSessionViewPresentationalProps {
   session: AgentSessionSnapshot;
   sessionList: WorkspaceSession[];
   activeSessionId: string | null;
+  attentionStateBySessionId: Map<string, WorkspaceSessionAttentionState | null>;
   idleAttentionSessionIds: Set<string>;
   lastViewedRuntimeEventAtMsBySessionId: Map<string, number>;
   dismissedAttentionKeyBySessionId: Map<string, string>;

@@ -1,5 +1,5 @@
 import type { InboxFilter } from "../../../entities/inbox-event";
-import { Button, EmptyState, ErrorBanner, PanelHeader } from "../../../shared";
+import { Button, EmptyState, ErrorBanner, FilterChipGroup, PanelHeader, PanelToolbar } from "../../../shared";
 import type { InboxPanelProps } from "./InboxPanel.types";
 
 const FILTERS: Array<{ id: InboxFilter; label: string }> = [
@@ -59,22 +59,9 @@ function InboxPanelPresentational({
         }
       />
 
-      <div className="px-5 py-3 border-b border-surface flex items-center gap-2">
-        {FILTERS.map((item) => (
-          <Button
-            key={item.id}
-            type="button"
-            onClick={() => onFilterChange(item.id)}
-            variant={filter === item.id ? "primary" : "subtle"}
-            size="xs"
-            className={`px-2.5 py-1 text-xs rounded ${
-              filter === item.id ? "bg-primary text-primary-foreground" : "bg-surface text-subtext hover:text-text"
-            }`}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </div>
+      <PanelToolbar>
+        <FilterChipGroup items={FILTERS} value={filter} onChange={onFilterChange} />
+      </PanelToolbar>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
         {error && <ErrorBanner className="mb-3">{error}</ErrorBanner>}

@@ -12,6 +12,7 @@ import MainAreaPresentational from "./MainArea.presentational";
 import type { MainAreaProps, RightPanelTab } from "./MainArea.types";
 import {
   buildEqualSplitPaneSizes,
+  buildWorkspaceSessionAttentionStateMap,
   normalizeSplitPaneSizes,
   resizeSplitPaneSizes,
 } from "../../../entities";
@@ -46,6 +47,9 @@ const EMPTY_REVIEW_COMMENTS: DiffReviewComment[] = [];
 function MainAreaContainer({
   projects,
   sessions,
+  idleAttentionSessionIds,
+  lastViewedRuntimeEventAtMsBySessionId,
+  dismissedAttentionKeyBySessionId,
   activeSession,
   onCloseSession,
   onSelectSession,
@@ -98,6 +102,21 @@ function MainAreaContainer({
   const activePaneSessionId = useMemo(
     () => resolveActivePaneSessionId(activeSessionId, activeSplit),
     [activeSessionId, activeSplit],
+  );
+  const attentionStateBySessionId = useMemo(
+    () => buildWorkspaceSessionAttentionStateMap(sessionList, {
+      activeSessionId,
+      idleAttentionSessionIds,
+      lastViewedRuntimeEventAtMsBySessionId,
+      dismissedAttentionKeyBySessionId,
+    }),
+    [
+      activeSessionId,
+      dismissedAttentionKeyBySessionId,
+      idleAttentionSessionIds,
+      lastViewedRuntimeEventAtMsBySessionId,
+      sessionList,
+    ],
   );
   const activePaneSessionIdRef = useRef(activePaneSessionId);
   activePaneSessionIdRef.current = activePaneSessionId;
@@ -280,18 +299,32 @@ function MainAreaContainer({
 
     const startPointer = orientation === "vertical" ? event.clientX : event.clientY;
     const startSizes = [...paneSizes];
+    let frameId: number | null = null;
+    let latestDeltaRatio = 0;
+
+    const flushResize = () => {
+      frameId = null;
+      const nextSizes = resizeSplitPaneSizes(startSizes, dividerIndex, latestDeltaRatio);
+      onResizeSplitPanes(sessionId, nextSizes);
+    };
+
     setIsDraggingSplitPane(true);
     document.body.style.userSelect = "none";
     document.body.style.cursor = orientation === "vertical" ? "col-resize" : "row-resize";
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const pointer = orientation === "vertical" ? moveEvent.clientX : moveEvent.clientY;
-      const deltaRatio = (pointer - startPointer) / containerSize;
-      const nextSizes = resizeSplitPaneSizes(startSizes, dividerIndex, deltaRatio);
-      onResizeSplitPanes(sessionId, nextSizes);
+      latestDeltaRatio = (pointer - startPointer) / containerSize;
+      if (frameId === null) {
+        frameId = window.requestAnimationFrame(flushResize);
+      }
     };
 
     const handleMouseUp = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+        flushResize();
+      }
       setIsDraggingSplitPane(false);
       document.body.style.userSelect = "";
       document.body.style.cursor = "";
@@ -410,6 +443,9 @@ function MainAreaContainer({
       {...props}
       projects={projects}
       sessions={sessions}
+      idleAttentionSessionIds={idleAttentionSessionIds}
+      lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
+      dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
       activeSession={activeSession}
       onCloseSession={onCloseSession}
       onSelectSession={onSelectSession}
@@ -424,6 +460,7 @@ function MainAreaContainer({
       onReconnectSession={onReconnectSession}
       onSendPromptToSession={onSendPromptToSession}
       workspaceMembersByWorkspaceId={workspaceMembersByWorkspaceId}
+      attentionStateBySessionId={attentionStateBySessionId}
       sessionList={sessionList}
       activeProject={activeProject}
       activeSplit={activeSplit}

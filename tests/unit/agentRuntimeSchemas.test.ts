@@ -157,7 +157,10 @@ describe("agentRuntime.schemas", () => {
           label: "OpenCode",
           transport: "appServer",
           defaultModel: "default",
-          modelOptions: [{ slug: "default", label: "Configured default" }],
+          modelOptions: [
+            { slug: "default", label: "Configured default" },
+            { slug: "github-copilot/gpt-5.4", label: "github-copilot/gpt-5.4" },
+          ],
           readiness: {
             status: "partial",
             summary: "OpenCode CLI detected.",

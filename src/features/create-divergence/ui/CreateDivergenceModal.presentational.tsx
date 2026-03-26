@@ -1,4 +1,4 @@
-import { Button, ErrorBanner, ModalShell, TextInput } from "../../../shared";
+import { Button, CheckboxRow, ErrorBanner, FieldGroup, FormField, FormModalShell, TextInput } from "../../../shared";
 import type { CreateDivergenceModalPresentationalProps } from "./CreateDivergenceModal.types";
 
 function CreateDivergenceModalPresentational({
@@ -17,94 +17,87 @@ function CreateDivergenceModalPresentational({
   onInputKeyDown,
 }: CreateDivergenceModalPresentationalProps) {
   return (
-    <ModalShell
+    <FormModalShell
       onRequestClose={onClose}
       size="sm"
       surface="sidebar"
-      panelClassName="w-96 p-4"
-    >
-      <h2 className="text-lg font-semibold text-text mb-4">Create Divergence</h2>
+      panelClassName="w-96"
+      title="Create Divergence"
+      body={(
+        <div className="space-y-4">
+          <FieldGroup title="Project">
+            <div className="text-text">{project.name}</div>
+            <div className="text-xs text-subtext truncate">{project.path}</div>
+          </FieldGroup>
 
-      <div className="mb-4">
-        <label className="block text-sm text-subtext mb-1">Project</label>
-        <div className="text-text">{project.name}</div>
-        <div className="text-xs text-subtext truncate">{project.path}</div>
-      </div>
+          <FormField label="Branch Name" htmlFor="create-divergence-branch-name">
+            <TextInput
+              id="create-divergence-branch-name"
+              type="text"
+              value={branchName}
+              onChange={(event) => onBranchNameChange(event.target.value)}
+              onKeyDown={onInputKeyDown}
+              placeholder="feature/my-feature"
+              list={useExistingBranch ? "remote-branches" : undefined}
+              autoFocus
+              disabled={isCreating}
+            />
+            {useExistingBranch && (
+              <datalist id="remote-branches">
+                {remoteBranches.map((branch) => (
+                  <option value={branch} key={branch} />
+                ))}
+              </datalist>
+            )}
+          </FormField>
 
-      <div className="mb-4">
-        <label className="block text-sm text-subtext mb-1">Branch Name</label>
-        <TextInput
-          type="text"
-          value={branchName}
-          onChange={(event) => onBranchNameChange(event.target.value)}
-          onKeyDown={onInputKeyDown}
-          placeholder="feature/my-feature"
-          list={useExistingBranch ? "remote-branches" : undefined}
-          autoFocus
-          disabled={isCreating}
-        />
-        {useExistingBranch && (
-          <datalist id="remote-branches">
-            {remoteBranches.map((branch) => (
-              <option value={branch} key={branch} />
-            ))}
-          </datalist>
-        )}
-      </div>
+          <CheckboxRow
+            label="Use existing branch from origin"
+            description={useExistingBranch && loadingBranches
+              ? "Loading remote branches..."
+              : "When enabled, Divergence checks out the remote branch instead of creating a new one."}
+            checked={useExistingBranch}
+            onChange={onUseExistingBranchChange}
+            disabled={isCreating}
+          />
 
-      <div className="mb-4 flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={useExistingBranch}
-          onChange={(event) => onUseExistingBranchChange(event.target.checked)}
-          className="mt-1 accent-primary"
-          disabled={isCreating}
-        />
-        <div>
-          <p className="text-sm text-text">Use existing branch from origin</p>
-          <p className="text-xs text-subtext">
-            When enabled, Divergence checks out the remote branch instead of creating a new one.
-          </p>
-          {useExistingBranch && loadingBranches && (
-            <p className="text-xs text-subtext mt-1">Loading remote branches...</p>
+          {isCreating && (
+            <div>
+              <div className="text-xs text-subtext mb-2">Creating divergence...</div>
+              <div className="h-2 bg-surface rounded-full overflow-hidden">
+                <div className="h-full w-1/3 bg-accent progress-indeterminate" />
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <ErrorBanner className="text-sm">{error}</ErrorBanner>
           )}
         </div>
-      </div>
-
-      {isCreating && (
-        <div className="mb-4">
-          <div className="text-xs text-subtext mb-2">Creating divergence...</div>
-          <div className="h-2 bg-surface rounded-full overflow-hidden">
-            <div className="h-full w-1/3 bg-accent progress-indeterminate" />
-          </div>
-        </div>
       )}
-
-      {error && (
-        <ErrorBanner className="mb-4 text-sm">{error}</ErrorBanner>
+      footer={(
+        <>
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="md"
+            disabled={isCreating}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              void onCreateClick();
+            }}
+            disabled={isCreating || Boolean(validationError)}
+            variant="primary"
+            size="md"
+          >
+            {isCreating ? "Creating..." : "Create"}
+          </Button>
+        </>
       )}
-
-      <div className="flex justify-end gap-2">
-        <Button
-          onClick={onClose}
-          variant="ghost"
-          size="md"
-          disabled={isCreating}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={() => {
-            void onCreateClick();
-          }}
-          disabled={isCreating || Boolean(validationError)}
-          variant="primary"
-          size="md"
-        >
-          {isCreating ? "Creating..." : "Create"}
-        </Button>
-      </div>
-    </ModalShell>
+    />
   );
 }
 

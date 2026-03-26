@@ -4,11 +4,14 @@ import type { EditorSession } from "../../../entities";
 import {
   CodeEditorCore,
   DEFAULT_EDITOR_THEME,
+  DocumentPanelBannerStack,
+  DocumentPanelHeader,
+  DocumentPanelShell,
+  DocumentPanelTabs,
   FAST_EASE_OUT,
   LoadingSpinner,
   Markdown,
   SOFT_SPRING,
-  TabButton,
   ToolbarButton,
   UnifiedDiffViewer,
   getContentSwapVariants,
@@ -115,6 +118,69 @@ function EditorSessionView({
   const shouldShowLoadingState = !resolvedState.isLoaded
     && resolvedState.fileLoadError === null
     && !resolvedState.isDeleted;
+  const activeTab = resolvedState.activeTab === "diff" && !hasDiffState
+    ? "edit"
+    : resolvedState.activeTab;
+  const tabItems = [
+    hasDiffState
+      ? {
+          id: diffTabId,
+          panelId: diffPanelId,
+          label: "Diff",
+          active: activeTab === "diff",
+          onClick: () => onSetActiveTab(session.id, "diff"),
+        }
+      : null,
+    {
+      id: editTabId,
+      panelId: editPanelId,
+      label: "Edit",
+      active: activeTab === "edit",
+      onClick: () => onSetActiveTab(session.id, "edit"),
+    },
+    isMarkdownFile
+      ? {
+          id: viewTabId,
+          panelId: viewPanelId,
+          label: "View",
+          active: activeTab === "view",
+          onClick: () => onSetActiveTab(session.id, "view"),
+        }
+      : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+  const bannerItems = [
+    resolvedState.largeFileWarning
+      ? {
+          id: "large-file-warning",
+          tone: "warning" as const,
+          message: resolvedState.largeFileWarning,
+        }
+      : null,
+    resolvedState.fileLoadError
+      ? {
+          id: "load-error",
+          tone: "error" as const,
+          message: resolvedState.fileLoadError,
+          action: (
+            <ToolbarButton
+              onClick={() => {
+                void onEnsureLoaded(session.id, { force: true });
+              }}
+              disabled={resolvedState.isLoadingFile}
+            >
+              Retry
+            </ToolbarButton>
+          ),
+        }
+      : null,
+    resolvedState.fileSaveError
+      ? {
+          id: "save-error",
+          tone: "error" as const,
+          message: resolvedState.fileSaveError,
+        }
+      : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
 
   useEffect(() => {
     lastAppliedRequestKeyRef.current = null;
@@ -130,102 +196,59 @@ function EditorSessionView({
     void onApplyViewState(session.id, viewState);
   }, [onApplyViewState, session.id, viewState]);
 
-  const activeTab = resolvedState.activeTab === "diff" && !hasDiffState
-    ? "edit"
-    : resolvedState.activeTab;
-
   return (
-    <div className="flex h-full min-h-0 flex-col bg-main" data-editor-root="true">
-      <div className="flex items-center justify-between gap-4 border-b border-surface px-4 py-2">
-        <div className="min-w-0">
-          <p className="text-xs text-subtext/70">Editor Session</p>
-          <p className="truncate text-sm text-text">
-            {session.filePath}
-            {session.status === "active" ? <span className="text-accent"> *</span> : null}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {resolvedState.isReadOnly && (
-            <span className="rounded bg-surface px-2 py-1 text-[10px] text-subtext">
-              Read-only
-            </span>
+    <DocumentPanelShell
+      className="bg-main"
+      data-editor-root="true"
+      header={(
+        <DocumentPanelHeader
+          eyebrow="Editor Session"
+          title={session.filePath}
+          titleSuffix={
+            session.status === "active" ? (
+              <span className="text-accent"> *</span>
+            ) : null
+          }
+          actions={(
+            <>
+              {resolvedState.isReadOnly ? (
+                <span className="rounded bg-surface px-2 py-1 text-[10px] text-subtext">
+                  Read-only
+                </span>
+              ) : null}
+              <ToolbarButton
+                onClick={() => {
+                  void onSave(session.id);
+                }}
+                disabled={
+                  !canEdit ||
+                  resolvedState.isSavingFile ||
+                  resolvedState.isLoadingFile
+                }
+              >
+                {resolvedState.isSavingFile ? "Saving..." : "Save"}
+              </ToolbarButton>
+              <ToolbarButton onClick={() => onClose(session.id)}>
+                Close
+              </ToolbarButton>
+            </>
           )}
-          <ToolbarButton
-            onClick={() => { void onSave(session.id); }}
-            disabled={!canEdit || resolvedState.isSavingFile || resolvedState.isLoadingFile}
-          >
-            {resolvedState.isSavingFile ? "Saving..." : "Save"}
-          </ToolbarButton>
-          <ToolbarButton onClick={() => onClose(session.id)}>
-            Close
-          </ToolbarButton>
-        </div>
-      </div>
-      {showTabBar && (
-        <div className="flex items-center border-b border-surface text-xs" role="tablist" aria-label="Editor session tabs">
-          {hasDiffState && (
-            <TabButton
-              active={activeTab === "diff"}
-              role="tab"
-              id={diffTabId}
-              aria-selected={activeTab === "diff"}
-              aria-controls={diffPanelId}
-              tabIndex={activeTab === "diff" ? 0 : -1}
-              onClick={() => onSetActiveTab(session.id, "diff")}
-            >
-              Diff
-            </TabButton>
-          )}
-          <TabButton
-            active={activeTab === "edit"}
-            role="tab"
-            id={editTabId}
-            aria-selected={activeTab === "edit"}
-            aria-controls={editPanelId}
-            tabIndex={activeTab === "edit" ? 0 : -1}
-            onClick={() => onSetActiveTab(session.id, "edit")}
-          >
-            Edit
-          </TabButton>
-          {isMarkdownFile && (
-            <TabButton
-              active={activeTab === "view"}
-              role="tab"
-              id={viewTabId}
-              aria-selected={activeTab === "view"}
-              aria-controls={viewPanelId}
-              tabIndex={activeTab === "view" ? 0 : -1}
-              onClick={() => onSetActiveTab(session.id, "view")}
-            >
-              View
-            </TabButton>
-          )}
-        </div>
+        />
       )}
-      {resolvedState.largeFileWarning && (
-        <div className="border-b border-yellow-400/20 bg-yellow-400/10 px-4 py-2 text-[11px] text-yellow-200/90">
-          {resolvedState.largeFileWarning}
-        </div>
-      )}
-      {resolvedState.fileLoadError && (
-        <div className="flex items-center justify-between gap-3 border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-[11px] text-red-300/90">
-          <span className="min-w-0 flex-1 break-all">
-            {resolvedState.fileLoadError}
-          </span>
-          <ToolbarButton
-            onClick={() => { void onEnsureLoaded(session.id, { force: true }); }}
-            disabled={resolvedState.isLoadingFile}
-          >
-            Retry
-          </ToolbarButton>
-        </div>
-      )}
-      {resolvedState.fileSaveError && (
-        <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-[11px] text-red-300/90">
-          {resolvedState.fileSaveError}
-        </div>
-      )}
-      <div className="flex-1 min-h-0">
+      tabs={
+        showTabBar ? (
+          <DocumentPanelTabs
+            ariaLabel="Editor session tabs"
+            items={tabItems}
+          />
+        ) : undefined
+      }
+      banners={
+        bannerItems.length > 0 ? (
+          <DocumentPanelBannerStack items={bannerItems} />
+        ) : undefined
+      }
+    >
         <AnimatePresence mode="wait" initial={false}>
           {activeTab === "view" && isMarkdownFile ? (
             <motion.div
@@ -313,8 +336,7 @@ function EditorSessionView({
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
-    </div>
+    </DocumentPanelShell>
   );
 }
 

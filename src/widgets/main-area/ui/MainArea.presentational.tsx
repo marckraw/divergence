@@ -19,6 +19,7 @@ import WorkspaceSessionTabsPresentational from "../../workspace-session-tabs";
 function MainAreaPresentational({
   projects,
   activeSession,
+  attentionStateBySessionId,
   idleAttentionSessionIds,
   lastViewedRuntimeEventAtMsBySessionId,
   dismissedAttentionKeyBySessionId,
@@ -164,6 +165,7 @@ function MainAreaPresentational({
               idleAttentionSessionIds={idleAttentionSessionIds}
               lastViewedRuntimeEventAtMsBySessionId={lastViewedRuntimeEventAtMsBySessionId}
               dismissedAttentionKeyBySessionId={dismissedAttentionKeyBySessionId}
+              attentionStateBySessionId={attentionStateBySessionId}
               onSelectSession={onSelectSession}
               onDismissSessionAttention={onDismissSessionAttention}
               onCloseSession={onCloseSession}

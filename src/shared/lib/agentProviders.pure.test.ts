@@ -136,7 +136,10 @@ const capabilities: AgentRuntimeCapabilities = {
       label: "OpenCode",
       transport: "app-server",
       defaultModel: "default",
-      modelOptions: [{ slug: "default", label: "Configured default" }],
+      modelOptions: [
+        { slug: "default", label: "Configured default" },
+        { slug: "github-copilot/gpt-5.4", label: "github-copilot/gpt-5.4" },
+      ],
       readiness: {
         status: "partial",
         summary: "Installed",

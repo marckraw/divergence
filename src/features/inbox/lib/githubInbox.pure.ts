@@ -1,9 +1,11 @@
 import type {
   GithubPullRequestEvent,
   GithubRepoTarget,
-} from "../model/githubPullRequests.types";
+} from "../model/githubInbox.types";
 
-export type GithubPullRequestInboxKind = "github_pr_opened" | "github_pr_updated";
+export type GithubPullRequestInboxKind =
+  | "github_pr_opened"
+  | "github_pr_updated";
 
 export function buildGithubRepoKey(owner: string, repo: string): string {
   return `${owner.trim().toLowerCase()}/${repo.trim().toLowerCase()}`;
@@ -32,7 +34,10 @@ export function classifyGithubPullRequestEvent(
     return "github_pr_opened";
   }
 
-  if (pullRequest.updatedAtMs > lastPolledAtMs && pullRequest.updatedAtMs > pullRequest.createdAtMs) {
+  if (
+    pullRequest.updatedAtMs > lastPolledAtMs &&
+    pullRequest.updatedAtMs > pullRequest.createdAtMs
+  ) {
     return "github_pr_updated";
   }
 
@@ -57,12 +62,11 @@ export function buildGithubInboxTitle(
   return `${repoKey} PR #${pullRequestNumber} ${verb}`;
 }
 
-export function buildGithubInboxBody(pullRequest: GithubPullRequestEvent): string {
-  const authorText = pullRequest.userLogin ? `Author: @${pullRequest.userLogin}` : "Author: unknown";
-  return [
-    pullRequest.title,
-    authorText,
-    pullRequest.htmlUrl,
-  ].join("\n");
+export function buildGithubInboxBody(
+  pullRequest: GithubPullRequestEvent
+): string {
+  const authorText = pullRequest.userLogin
+    ? `Author: @${pullRequest.userLogin}`
+    : "Author: unknown";
+  return [pullRequest.title, authorText, pullRequest.htmlUrl].join("\n");
 }
-

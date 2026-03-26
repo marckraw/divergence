@@ -6,7 +6,7 @@ import { useAgentRuntimeSession } from "../../../features/agent-runtime";
 import AgentSessionChangeDrawer from "./AgentSessionChangeDrawer.container";
 import { DEFAULT_EDITOR_THEME_DARK, DEFAULT_EDITOR_THEME_LIGHT } from "../../../shared";
 import { useAppSettings, useFileEditor, type ChangesMode, type GitChangeEntry } from "../../../shared";
-import { buildAgentSessionSettingsPatch } from "../../../entities";
+import { buildAgentSessionSettingsPatch, buildWorkspaceSessionAttentionStateMap } from "../../../entities";
 import { LinearTaskQueuePanel } from "../../../features/linear-task-queue";
 import { PromptQueuePanel } from "../../../features/prompt-queue";
 import { useAgentLinearTaskQueue } from "../model/useAgentLinearTaskQueue";
@@ -52,6 +52,21 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
   const timelineItems = useMemo(
     () => sessionMessages && sessionActivities ? buildAgentTimeline(sessionMessages, sessionActivities) : [],
     [sessionActivities, sessionMessages],
+  );
+  const attentionStateBySessionId = useMemo(
+    () => buildWorkspaceSessionAttentionStateMap(props.sessionList, {
+      activeSessionId: props.activeSessionId,
+      idleAttentionSessionIds: props.idleAttentionSessionIds,
+      lastViewedRuntimeEventAtMsBySessionId: props.lastViewedRuntimeEventAtMsBySessionId,
+      dismissedAttentionKeyBySessionId: props.dismissedAttentionKeyBySessionId,
+    }),
+    [
+      props.activeSessionId,
+      props.dismissedAttentionKeyBySessionId,
+      props.idleAttentionSessionIds,
+      props.lastViewedRuntimeEventAtMsBySessionId,
+      props.sessionList,
+    ],
   );
   const editorTheme = appSettings.theme === "light"
     ? appSettings.editorThemeForLightMode ?? DEFAULT_EDITOR_THEME_LIGHT
@@ -295,6 +310,7 @@ function AgentSessionViewContainer(props: AgentSessionViewProps) {
       session={session}
       sessionList={props.sessionList}
       activeSessionId={props.activeSessionId}
+      attentionStateBySessionId={attentionStateBySessionId}
       idleAttentionSessionIds={props.idleAttentionSessionIds}
       lastViewedRuntimeEventAtMsBySessionId={props.lastViewedRuntimeEventAtMsBySessionId}
       dismissedAttentionKeyBySessionId={props.dismissedAttentionKeyBySessionId}
