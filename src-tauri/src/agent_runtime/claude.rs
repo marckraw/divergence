@@ -1,5 +1,20 @@
 use super::provider_registry::build_claude_command;
-use super::*;
+use super::{
+    AgentActivityStatus, AgentAttachment, AgentMessageStatus, AgentRuntimeState,
+    AgentRuntimeStatus, AgentSessionSnapshot, AgentSessionStatus, AgentTurnInvocation,
+    RunningSessionHandle, RunningTransport, append_assistant_text, complete_activity,
+    create_activity, last_assistant_message_mut, now_ms, push_runtime_event,
+    resolve_staged_attachment_path, session_attachment_dir, truncate_details,
+    truncate_json_details,
+};
+use serde_json::Value;
+use std::path::PathBuf;
+use std::process::Stdio;
+use std::sync::Arc;
+use tauri::AppHandle;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::sync::Mutex as AsyncMutex;
+use uuid::Uuid;
 
 impl AgentRuntimeState {
     pub(super) async fn run_claude_turn_process(

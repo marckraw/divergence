@@ -79,6 +79,21 @@ Use these dependency directions:
 
 Cross-slice imports must go through that slice `index.ts` public API. Avoid deep private imports across slices.
 
+### Rust backend structure
+
+Rust/Tauri code should use thin boundary modules and domain folders:
+
+- keep `src-tauri/src/lib.rs` focused on app bootstrap and wiring
+- keep Tauri commands in `commands.rs` or `<feature>/commands.rs`
+- organize large backend features as folders, not single large files
+- keep `mod.rs` thin: module declarations and re-exports only when possible
+- split mixed-responsibility modules into focused files such as `types.rs`, `state.rs`, `persistence.rs`, `service.rs`, `commands.rs`
+- isolate provider/transport integrations in dedicated modules
+- prefer explicit imports over `use super::*`
+- when touching a large Rust module, prefer opportunistic extraction into smaller modules if risk is acceptable
+
+Rust architecture and boundary checks under chaperone/clippy are blocking.
+
 ### Migration behavior for agents
 
 When touching large legacy component files, prefer opportunistic migration toward this model (especially Phase 1 presentational/container split) if risk is acceptable for the current task.

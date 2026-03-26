@@ -1,5 +1,19 @@
 use super::provider_registry::build_gemini_command;
-use super::*;
+use super::{
+    AgentAttachment, AgentMessageStatus, AgentRuntimeState, AgentRuntimeStatus,
+    AgentSessionSnapshot, AgentSessionStatus, AgentTurnInvocation, ProviderOutputChunk,
+    RunningSessionHandle, RunningTransport, append_assistant_paragraph, append_assistant_text,
+    last_assistant_message_mut, now_ms, push_runtime_event, read_provider_text_delta,
+    read_provider_thread_id, resolve_staged_attachment_path, session_attachment_dir,
+    split_provider_output_chunks, truncate_details,
+};
+use serde_json::Value;
+use std::path::PathBuf;
+use std::process::Stdio;
+use std::sync::Arc;
+use tauri::AppHandle;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::sync::Mutex as AsyncMutex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GeminiCliFailure {

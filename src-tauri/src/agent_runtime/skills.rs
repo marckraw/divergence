@@ -33,22 +33,50 @@ pub fn discover_skills(project_path: &str) -> Vec<AgentSkillDescriptor> {
     let home = dirs::home_dir().unwrap_or_default();
 
     // 1. Claude Code legacy commands (~/.claude/commands/*.md)
-    collect_legacy_commands(&home.join(".claude").join("commands"), AgentSkillScope::Global, &mut skills);
+    collect_legacy_commands(
+        &home.join(".claude").join("commands"),
+        AgentSkillScope::Global,
+        &mut skills,
+    );
 
     // 2. Project-level Claude commands ({project}/.claude/commands/*.md)
-    collect_legacy_commands(&Path::new(project_path).join(".claude").join("commands"), AgentSkillScope::Project, &mut skills);
+    collect_legacy_commands(
+        &Path::new(project_path).join(".claude").join("commands"),
+        AgentSkillScope::Project,
+        &mut skills,
+    );
 
     // 3. Claude Code skills (~/.claude/skills/*/SKILL.md)
-    collect_skill_md_entries(&home.join(".claude").join("skills"), AgentSkillScope::Global, None, &mut skills);
+    collect_skill_md_entries(
+        &home.join(".claude").join("skills"),
+        AgentSkillScope::Global,
+        None,
+        &mut skills,
+    );
 
     // 4. Project-level Claude skills ({project}/.claude/skills/*/SKILL.md)
-    collect_skill_md_entries(&Path::new(project_path).join(".claude").join("skills"), AgentSkillScope::Project, None, &mut skills);
+    collect_skill_md_entries(
+        &Path::new(project_path).join(".claude").join("skills"),
+        AgentSkillScope::Project,
+        None,
+        &mut skills,
+    );
 
     // 5. Codex skills (~/.codex/skills/*/SKILL.md, excluding .system)
-    collect_skill_md_entries(&home.join(".codex").join("skills"), AgentSkillScope::Global, Some("codex"), &mut skills);
+    collect_skill_md_entries(
+        &home.join(".codex").join("skills"),
+        AgentSkillScope::Global,
+        Some("codex"),
+        &mut skills,
+    );
 
     // 6. Project-level Codex skills ({project}/.codex/skills/*/SKILL.md)
-    collect_skill_md_entries(&Path::new(project_path).join(".codex").join("skills"), AgentSkillScope::Project, Some("codex"), &mut skills);
+    collect_skill_md_entries(
+        &Path::new(project_path).join(".codex").join("skills"),
+        AgentSkillScope::Project,
+        Some("codex"),
+        &mut skills,
+    );
 
     // Deduplicate by name, preferring project-scoped over global
     deduplicate_skills(&mut skills);
@@ -56,7 +84,11 @@ pub fn discover_skills(project_path: &str) -> Vec<AgentSkillDescriptor> {
     skills
 }
 
-fn collect_legacy_commands(dir: &Path, scope: AgentSkillScope, out: &mut Vec<AgentSkillDescriptor>) {
+fn collect_legacy_commands(
+    dir: &Path,
+    scope: AgentSkillScope,
+    out: &mut Vec<AgentSkillDescriptor>,
+) {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(_) => return,
@@ -217,7 +249,8 @@ fn extract_first_content_line(content: &str) -> String {
 }
 
 fn deduplicate_skills(skills: &mut Vec<AgentSkillDescriptor>) {
-    let mut seen: std::collections::HashMap<String, (usize, bool)> = std::collections::HashMap::new();
+    let mut seen: std::collections::HashMap<String, (usize, bool)> =
+        std::collections::HashMap::new();
     let mut indices_to_remove: Vec<usize> = Vec::new();
 
     for (index, skill) in skills.iter().enumerate() {
@@ -243,7 +276,10 @@ fn deduplicate_skills(skills: &mut Vec<AgentSkillDescriptor>) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        deduplicate_skills, extract_first_content_line, parse_skill_frontmatter,
+        AgentSkillDescriptor, AgentSkillScope, AgentSkillSource,
+    };
 
     #[test]
     fn parses_skill_frontmatter_with_name_and_description() {
@@ -284,7 +320,10 @@ description: 'Single quoted description'
     #[test]
     fn extracts_first_content_line_skipping_headings_and_blanks() {
         let content = "# Title\n\n\nActual description here.\n\nMore text.";
-        assert_eq!(extract_first_content_line(content), "Actual description here.");
+        assert_eq!(
+            extract_first_content_line(content),
+            "Actual description here."
+        );
     }
 
     #[test]

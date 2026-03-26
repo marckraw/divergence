@@ -1,7 +1,19 @@
-use super::*;
+use super::{
+    AgentAttachmentKind, AgentInteractionMode, AgentMessageRole, AgentProvider,
+    AgentRuntimeModelOption, AgentRuntimeProviderAuthStatus, AgentRuntimeProviderDescriptor,
+    AgentRuntimeProviderFeatures, AgentRuntimeProviderReadiness,
+    AgentRuntimeProviderReadinessStatus, AgentRuntimeProviderTransport, AgentSessionSnapshot,
+    DEFAULT_CLAUDE_MODEL, DEFAULT_CODEX_MODEL, DEFAULT_CURSOR_MODEL, DEFAULT_GEMINI_MODEL,
+    DEFAULT_OPENCODE_MODEL,
+};
+use std::collections::HashSet;
 use std::ffi::OsString;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Command as StdCommand, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+use tokio::process::Command;
 
 const LOW_MEDIUM_HIGH_EFFORTS: &[&str] = &["low", "medium", "high"];
 const LOW_TO_XHIGH_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
@@ -9,7 +21,7 @@ const NONE_TO_XHIGH_EFFORTS: &[&str] = &["none", "low", "medium", "high", "xhigh
 const LOGIN_SHELL_BINARY_PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const OPENCODE_MODEL_DISCOVERY_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
+pub(crate) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
     let (cursor_default_model, cursor_model_options) = cursor_model_catalog();
     let opencode_model_options = opencode_model_catalog();
     let gemini_stream_json_supported = gemini_supports_stream_json();
@@ -172,7 +184,7 @@ pub(super) fn provider_descriptors() -> Vec<AgentRuntimeProviderDescriptor> {
     descriptors
 }
 
-pub(super) fn default_model_for_provider(provider: &AgentProvider) -> &'static str {
+pub(crate) fn default_model_for_provider(provider: &AgentProvider) -> &'static str {
     match provider {
         AgentProvider::Claude => DEFAULT_CLAUDE_MODEL,
         AgentProvider::Codex => DEFAULT_CODEX_MODEL,
@@ -182,21 +194,21 @@ pub(super) fn default_model_for_provider(provider: &AgentProvider) -> &'static s
     }
 }
 
-pub(super) fn normalize_agent_model(provider: &AgentProvider, raw_model: Option<&str>) -> String {
+pub(crate) fn normalize_agent_model(provider: &AgentProvider, raw_model: Option<&str>) -> String {
     let Some(trimmed_model) = raw_model.map(str::trim).filter(|model| !model.is_empty()) else {
         return default_model_for_provider(provider).to_string();
     };
     trimmed_model.to_string()
 }
 
-pub(super) fn default_effort_for_provider_model(
+pub(crate) fn default_effort_for_provider_model(
     provider: &AgentProvider,
     model: &str,
 ) -> Option<&'static str> {
     (!supported_efforts_for_provider_model(provider, model).is_empty()).then_some("medium")
 }
 
-pub(super) fn normalize_agent_effort(
+pub(crate) fn normalize_agent_effort(
     provider: &AgentProvider,
     model: &str,
     raw_effort: Option<&str>,
@@ -223,7 +235,7 @@ pub(super) fn normalize_agent_effort(
     default_effort_for_provider_model(provider, model).map(str::to_string)
 }
 
-pub(super) fn build_claude_command(
+pub(crate) fn build_claude_command(
     session: &AgentSessionSnapshot,
     interaction_mode: AgentInteractionMode,
     claude_oauth_token: &str,
@@ -264,7 +276,7 @@ pub(super) fn build_claude_command(
     command
 }
 
-pub(super) fn build_cursor_command(
+pub(crate) fn build_cursor_command(
     session: &AgentSessionSnapshot,
     prompt: &str,
     interaction_mode: AgentInteractionMode,
@@ -300,7 +312,7 @@ pub(super) fn build_cursor_command(
     Ok(command)
 }
 
-pub(super) fn build_gemini_command(
+pub(crate) fn build_gemini_command(
     session: &AgentSessionSnapshot,
     prompt: &str,
     interaction_mode: AgentInteractionMode,
@@ -720,7 +732,7 @@ fn path_with_binary_dir(binary: &str) -> Option<OsString> {
     std::env::join_paths(paths).ok()
 }
 
-pub(super) fn apply_binary_dir_to_tokio_command(command: &mut Command, binary: &str) {
+pub(crate) fn apply_binary_dir_to_tokio_command(command: &mut Command, binary: &str) {
     if let Some(path) = path_with_binary_dir(binary) {
         command.env("PATH", path);
     }
@@ -899,7 +911,7 @@ fn detect_claude_binary() -> Option<String> {
     detect_binary(&["claude"])
 }
 
-pub(super) fn detect_codex_binary() -> Option<String> {
+pub(crate) fn detect_codex_binary() -> Option<String> {
     detect_binary(&["codex"])
 }
 
@@ -911,7 +923,7 @@ fn detect_gemini_binary() -> Option<String> {
     detect_binary(&["gemini"])
 }
 
-pub(super) fn detect_opencode_binary() -> Option<String> {
+pub(crate) fn detect_opencode_binary() -> Option<String> {
     detect_binary(&["opencode"])
 }
 

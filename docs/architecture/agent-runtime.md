@@ -80,8 +80,11 @@ Provider adapters may emit richer internal events, but only the canonical contra
   - `codex.rs`
   - `cursor.rs`
   - `gemini.rs`
+  - `opencode.rs`
   - `provider_registry.rs`
-  Shared session/persistence helpers remain in `mod.rs`.
+  - `skills.rs`
+- `mod.rs` is the agent-runtime facade/module entrypoint and should stay focused on module declarations, re-exports, and small glue where practical.
+- Shared runtime logic should move toward focused backend modules such as state, persistence, attachments, requests, events, and message/activity helpers instead of accumulating in `mod.rs`.
 
 ## Frontend responsibilities
 
