@@ -114,6 +114,8 @@ export {
 export {
   areSplitPaneSizesEqual,
   buildTerminalSession,
+  buildManualWorkspaceDivergenceTerminalSession,
+  buildManualWorkspaceTerminalSession,
   buildEqualSplitPaneSizes,
   buildWorkspaceDivergenceTerminalSession,
   buildWorkspaceKey,

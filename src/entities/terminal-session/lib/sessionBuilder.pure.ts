@@ -9,7 +9,10 @@ import type {
 import type { ProjectSettings } from "../../project";
 import { DEFAULT_USE_TMUX } from "../../project";
 import { buildPortEnvVars } from "../../port-management";
-import { buildTmuxSessionName } from "../../../shared/lib/tmux.pure";
+import {
+  buildSplitTmuxSessionName,
+  buildTmuxSessionName,
+} from "../../../shared/lib/tmux.pure";
 
 export interface BuildTerminalSessionInput {
   type: "project" | "divergence";
@@ -156,6 +159,27 @@ export function buildWorkspaceTerminalSession(
   };
 }
 
+export function buildManualWorkspaceTerminalSession(
+  input: BuildWorkspaceSessionInput & { existingSessions: TerminalSession[] }
+): TerminalSession {
+  const entropy = generateSessionEntropy();
+  const manualIndex =
+    input.existingSessions.filter((session) => session.sessionRole === "manual")
+      .length + 1;
+  const base = buildWorkspaceTerminalSession(input);
+
+  return {
+    ...base,
+    id: input.sessionId ?? `workspace-${input.workspace.id}#manual-${entropy}`,
+    sessionRole: input.sessionRole ?? "manual",
+    name: input.sessionName ?? `${base.name} • session #${manualIndex}`,
+    tmuxSessionName: input.tmuxSessionName
+      ?? buildSplitTmuxSessionName(base.tmuxSessionName, `manual-${entropy}`),
+    status: "idle",
+    lastActivity: new Date(),
+  };
+}
+
 export function buildWorkspaceDivergenceTerminalSession(
   input: BuildWorkspaceDivergenceSessionInput
 ): TerminalSession {
@@ -195,5 +219,30 @@ export function buildWorkspaceDivergenceTerminalSession(
     tmuxHistoryLimit: globalTmuxHistoryLimit,
     status: "idle",
     portEnv,
+  };
+}
+
+export function buildManualWorkspaceDivergenceTerminalSession(
+  input: BuildWorkspaceDivergenceSessionInput & {
+    existingSessions: TerminalSession[];
+  }
+): TerminalSession {
+  const entropy = generateSessionEntropy();
+  const manualIndex =
+    input.existingSessions.filter((session) => session.sessionRole === "manual")
+      .length + 1;
+  const base = buildWorkspaceDivergenceTerminalSession(input);
+
+  return {
+    ...base,
+    id:
+      input.sessionId
+      ?? `workspace_divergence-${input.workspaceDivergence.id}#manual-${entropy}`,
+    sessionRole: input.sessionRole ?? "manual",
+    name: input.sessionName ?? `${base.name} • session #${manualIndex}`,
+    tmuxSessionName: input.tmuxSessionName
+      ?? buildSplitTmuxSessionName(base.tmuxSessionName, `manual-${entropy}`),
+    status: "idle",
+    lastActivity: new Date(),
   };
 }

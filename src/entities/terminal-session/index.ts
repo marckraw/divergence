@@ -23,6 +23,8 @@ export {
 } from "./lib/tmuxOwnership.pure";
 export {
   buildTerminalSession,
+  buildManualWorkspaceDivergenceTerminalSession,
+  buildManualWorkspaceTerminalSession,
   buildWorkspaceDivergenceTerminalSession,
   buildWorkspaceKey,
   buildWorkspaceTerminalSession,
