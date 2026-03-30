@@ -2,13 +2,11 @@ import type {
   AgentProvider,
   Divergence,
   Project,
-  StageTab,
   Workspace,
   WorkspaceDivergence,
   WorkspaceSession,
 } from "../../../entities";
 import {
-  getFocusedPane,
   getWorkspaceSessionTargetId,
   getWorkspaceSessionTargetType,
   isAgentSession,
@@ -29,7 +27,6 @@ export interface CommandCenterContext {
   sessions: Map<string, WorkspaceSession>;
   workspaces?: Workspace[];
   workspaceDivergences?: WorkspaceDivergence[];
-  stageTabs?: StageTab[];
   files?: string[];
   agentProviders?: AgentProvider[];
   sourceSession?: WorkspaceSession | null;
@@ -44,11 +41,16 @@ export function buildCommandCenterSearchResults(
   const items: CommandCenterSearchResult[] = [];
   const projectById = new Map<number, Project>();
   context.projects.forEach((project) => projectById.set(project.id, project));
+  const workspaceById = new Map<number, Workspace>();
+  context.workspaces?.forEach((workspace) => workspaceById.set(workspace.id, workspace));
 
-  if (mode.kind === "replace" || mode.kind === "open-in-pane") {
+  if (mode.kind === "reveal" || mode.kind === "open-in-pane") {
     // Sessions (recent)
     const sessionsList = Array.from(context.sessions.values()).sort((a, b) => a.name.localeCompare(b.name));
     for (const session of sessionsList) {
+      if (isEditorSession(session)) {
+        continue;
+      }
       const projectName = projectById.get(session.projectId)?.name;
       const targetType = getWorkspaceSessionTargetType(session);
       const targetId = getWorkspaceSessionTargetId(session);
@@ -67,37 +69,16 @@ export function buildCommandCenterSearchResults(
   }
 
   if (mode.kind === "reveal") {
-    // Sessions
-    const sessionsList = Array.from(context.sessions.values()).sort((a, b) => a.name.localeCompare(b.name));
-    for (const session of sessionsList) {
-      const projectName = projectById.get(session.projectId)?.name;
-      const targetType = getWorkspaceSessionTargetType(session);
-      const targetId = getWorkspaceSessionTargetId(session);
-      const workspaceName = targetType === "divergence"
-        ? (context.divergencesByProject.get(session.projectId) ?? []).find((item) => item.id === targetId)?.branch
-        : projectName;
-      items.push({
-        type: "session",
-        item: session,
-        projectName,
-        workspaceName,
-        detail: isEditorSession(session) ? session.filePath : undefined,
-        category: "recent",
-      });
-    }
+    // Projects & divergences
+    for (const project of context.projects) {
+      items.push({ type: "project", item: project, category: "navigation" });
 
-    // Stage tabs
-    if (context.stageTabs) {
-      const sortedTabs = [...context.stageTabs].sort((a, b) => a.label.localeCompare(b.label));
-      for (const tab of sortedTabs) {
-        const focusedPane = getFocusedPane(tab.layout);
-        const focusedLabel = focusedPane.ref.kind === "pending"
-          ? "Empty pane"
-          : context.sessions.get(focusedPane.ref.sessionId)?.name ?? focusedPane.ref.sessionId;
+      const divergences = context.divergencesByProject.get(project.id) || [];
+      for (const divergence of divergences) {
         items.push({
-          type: "stage_tab",
-          item: tab,
-          detail: `${tab.layout.panes.length} pane${tab.layout.panes.length === 1 ? "" : "s"} • Focused: ${focusedLabel}`,
+          type: "divergence",
+          item: divergence,
+          projectName: project.name,
           category: "navigation",
         });
       }
@@ -107,6 +88,18 @@ export function buildCommandCenterSearchResults(
     if (context.workspaces) {
       for (const workspace of context.workspaces) {
         items.push({ type: "workspace", item: workspace, category: "navigation" });
+      }
+
+      if (context.workspaceDivergences) {
+        for (const wd of context.workspaceDivergences) {
+          const parentWs = workspaceById.get(wd.workspaceId);
+          items.push({
+            type: "workspace_divergence",
+            item: wd,
+            workspaceName: parentWs?.name,
+            category: "navigation",
+          });
+        }
       }
     }
 
@@ -127,7 +120,7 @@ export function buildCommandCenterSearchResults(
     return items;
   }
 
-  // replace and open-in-pane: files
+  // open-in-pane: files
   if (context.files) {
     for (const filePath of context.files) {
       items.push({
@@ -138,47 +131,8 @@ export function buildCommandCenterSearchResults(
     }
   }
 
-  if (mode.kind === "replace") {
-    // Projects & divergences
-    for (const project of context.projects) {
-      items.push({ type: "project", item: project, category: "navigation" });
-
-      const divergences = context.divergencesByProject.get(project.id) || [];
-      for (const divergence of divergences) {
-        items.push({
-          type: "divergence",
-          item: divergence,
-          projectName: project.name,
-          category: "navigation",
-        });
-      }
-    }
-
-    // Workspaces
-    if (context.workspaces) {
-      const workspaceById = new Map<number, Workspace>();
-      context.workspaces.forEach((ws) => workspaceById.set(ws.id, ws));
-
-      for (const workspace of context.workspaces) {
-        items.push({ type: "workspace", item: workspace, category: "navigation" });
-      }
-
-      if (context.workspaceDivergences) {
-        for (const wd of context.workspaceDivergences) {
-          const parentWs = workspaceById.get(wd.workspaceId);
-          items.push({
-            type: "workspace_divergence",
-            item: wd,
-            workspaceName: parentWs?.name,
-            category: "navigation",
-          });
-        }
-      }
-    }
-  }
-
-  // Create actions for replace and open-in-pane
-  if (mode.kind === "replace" || mode.kind === "open-in-pane") {
+  // Create actions for explicit pane placement
+  if (mode.kind === "open-in-pane") {
     const createActions = buildCommandCenterCreateActions(
       context.sourceSession ?? null,
       context.agentProviders ?? [],
@@ -209,7 +163,7 @@ export function filterCommandCenterSearchResults(
         case "files":
           return result.type === "file";
         case "sessions":
-          return result.type === "session" || result.type === "stage_tab"
+          return result.type === "session"
             || result.type === "project" || result.type === "divergence"
             || result.type === "workspace" || result.type === "workspace_divergence";
         case "create":
@@ -327,14 +281,6 @@ function getResultMatch(
     ]);
   }
 
-  if (result.type === "stage_tab") {
-    const tab = result.item as StageTab;
-    return findBestMatch(query, [
-      { text: tab.label, shouldHighlight: true },
-      { text: result.detail },
-    ]);
-  }
-
   const name = "name" in result.item
     ? (result.item as { name: string }).name
     : "label" in result.item
@@ -375,8 +321,6 @@ export function getCommandCenterContextLabel(
 
 export function getModeBadgeLabel(mode: CommandCenterMode): string {
   switch (mode.kind) {
-    case "replace":
-      return "Replace";
     case "reveal":
       return "Reveal";
     case "open-in-pane":
@@ -402,9 +346,9 @@ export function groupResultsByCategory(
   }
 
   const categoryLabels: Record<string, string> = {
-    recent: "Recent Sessions",
+    recent: "Sessions",
     files: "Files",
-    navigation: "Projects & Divergences",
+    navigation: "Targets",
     create: "Create New",
   };
   const categoryOrder = ["recent", "files", "navigation", "create"];

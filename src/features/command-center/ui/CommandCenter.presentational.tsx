@@ -152,7 +152,7 @@ function CommandCenterPresentational({
 function getPlaceholder(kind: string): string {
   switch (kind) {
     case "reveal":
-      return "Jump to an existing session or tab...";
+      return "Jump to a project, session, workspace, or divergence...";
     case "open-file":
       return "Search files...";
     case "open-in-pane":

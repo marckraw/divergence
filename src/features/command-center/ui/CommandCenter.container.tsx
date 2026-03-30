@@ -22,7 +22,6 @@ function CommandCenterContainer({
   projects,
   divergencesByProject,
   sessions,
-  stageTabs,
   workspaces,
   workspaceDivergences,
   agentProviders,
@@ -41,13 +40,23 @@ function CommandCenterContainer({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const focusSearchInput = useCallback(() => {
+    const input = inputRef.current;
+    if (!input || document.activeElement === input) {
+      return;
+    }
+
+    input.focus({ preventScroll: true });
+    const valueLength = input.value.length;
+    input.setSelectionRange(valueLength, valueLength);
+  }, []);
+
   // Determine if we need file listing
   const rootPath = mode.kind === "open-file"
     ? mode.rootPath
     : sourceSession?.path ?? null;
 
   const needsFiles = mode.kind === "open-file"
-    || mode.kind === "replace"
     || mode.kind === "open-in-pane";
 
   // Fetch files when root path is available
@@ -77,10 +86,18 @@ function CommandCenterContainer({
     return () => { cancelled = true; };
   }, [excludePatterns, needsFiles, respectGitignore, rootPath]);
 
-  // Focus input on mount
+  // Keep the search input focused whenever the command center is visible.
+  // This covers fast close/reopen cycles where the exiting modal instance can
+  // linger briefly under AnimatePresence and a mount-only focus effect is too early.
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    const frameId = window.requestAnimationFrame(() => {
+      focusSearchInput();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -92,7 +109,7 @@ function CommandCenterContainer({
     };
   }, [query]);
 
-  const showCategoryTabs = mode.kind === "replace" || mode.kind === "open-in-pane";
+  const showCategoryTabs = mode.kind === "open-in-pane";
 
   // Build and filter search results
   const allItems = useMemo(() => {
@@ -102,12 +119,11 @@ function CommandCenterContainer({
       sessions,
       workspaces,
       workspaceDivergences,
-      stageTabs,
       files: needsFiles ? files : undefined,
       agentProviders,
       sourceSession,
     });
-  }, [mode, projects, divergencesByProject, sessions, workspaces, workspaceDivergences, stageTabs, files, agentProviders, sourceSession, needsFiles]);
+  }, [mode, projects, divergencesByProject, sessions, workspaces, workspaceDivergences, files, agentProviders, sourceSession, needsFiles]);
 
   // Reset category when mode changes (e.g. replace → reveal)
   useEffect(() => {

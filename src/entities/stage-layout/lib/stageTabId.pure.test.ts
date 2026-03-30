@@ -4,6 +4,7 @@ import {
   STAGE_TAB_IDS,
   getDefaultStageTabLabel,
   getStageTabOrdinal,
+  isDefaultStageTabLabel,
   isStageTabId,
 } from "./stageTabId.pure";
 
@@ -23,5 +24,7 @@ describe("stageTabId", () => {
     expect(isStageTabId("tab-1")).toBe(false);
     expect(getStageTabOrdinal("stage-tab-3")).toBe(3);
     expect(getDefaultStageTabLabel("stage-tab-3")).toBe("Tab 3");
+    expect(isDefaultStageTabLabel("stage-tab-3", "Tab 3")).toBe(true);
+    expect(isDefaultStageTabLabel("stage-tab-3", "PR Review")).toBe(false);
   });
 });

@@ -38,3 +38,7 @@ export function getStageTabOrdinal(tabId: StageTabId): number {
 export function getDefaultStageTabLabel(tabId: StageTabId): string {
   return `Tab ${getStageTabOrdinal(tabId)}`;
 }
+
+export function isDefaultStageTabLabel(tabId: StageTabId, label: string): boolean {
+  return label.trim() === getDefaultStageTabLabel(tabId);
+}

@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import type { Divergence, StageTab, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
+import type { Divergence, WorkspaceSession, Workspace, WorkspaceDivergence } from "../../../entities";
 import { isAgentSession, isEditorSession } from "../../../entities";
 import { FAST_EASE_OUT, getContentSwapVariants } from "../../../shared";
 import type { CommandCenterSearchResult, CreateAction, FileResult } from "./CommandCenter.types";
@@ -104,15 +104,6 @@ function ResultIcon({ result }: { result: CommandCenterSearchResult }) {
     );
   }
 
-  if (result.type === "stage_tab") {
-    return (
-      <svg className={`${cls} text-subtext`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M3 7a2 2 0 012-2h14a2 2 0 012 2v3H3V7zm0 5h18v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5z" />
-      </svg>
-    );
-  }
-
   // project
   return (
     <svg className={`${cls} text-text`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -203,18 +194,6 @@ function ResultContent({ result }: { result: CommandCenterSearchResult }) {
     );
   }
 
-  if (result.type === "stage_tab") {
-    const tab = result.item as StageTab;
-    return (
-      <div className="flex-1 min-w-0">
-        <div className="text-text truncate">
-          <HighlightedText text={tab.label} matchedIndices={result.matchedIndices} />
-        </div>
-        {result.detail && <div className="text-xs text-subtext truncate">{result.detail}</div>}
-      </div>
-    );
-  }
-
   // project
   const project = result.item as { name: string };
   return (
@@ -256,7 +235,6 @@ function getBadgeConfig(result: CommandCenterSearchResult): { className: string;
   if (result.type === "divergence") return { className: "bg-accent/20 text-accent", label: "divergence" };
   if (result.type === "workspace") return { className: "bg-blue/20 text-blue", label: "workspace" };
   if (result.type === "workspace_divergence") return { className: "bg-accent/20 text-accent", label: "ws divergence" };
-  if (result.type === "stage_tab") return { className: "bg-surface text-subtext", label: "tab" };
   return { className: "bg-surface text-subtext", label: result.type };
 }
 

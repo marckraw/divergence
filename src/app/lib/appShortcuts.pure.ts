@@ -17,7 +17,6 @@ export interface AppShortcutContext {
 }
 
 export type AppShortcutAction =
-  | { type: "toggle_quick_switcher" }
   | { type: "toggle_quick_switcher_reveal" }
   | { type: "toggle_file_quick_switcher" }
   | { type: "open_work_inbox" }
@@ -57,7 +56,7 @@ export function resolveAppShortcut(
   }
 
   if (isMeta && keyLower === "k") {
-    return { type: "toggle_quick_switcher" };
+    return { type: "toggle_quick_switcher_reveal" };
   }
 
   if (isMeta && event.shiftKey && keyLower === "o") {

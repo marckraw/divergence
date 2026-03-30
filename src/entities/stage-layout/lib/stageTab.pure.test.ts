@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { WorkspaceSession } from "../../workspace-session";
 import { buildSplitLayout, buildSinglePaneLayout, getFocusedPane } from "./stageLayout.pure";
 import {
   addTab,
@@ -9,6 +10,7 @@ import {
   focusNextTab,
   focusPreviousTab,
   focusTab,
+  getStageTabDisplayLabel,
   getActiveTab,
   removeTab,
   removeTabIfEmpty,
@@ -152,5 +154,81 @@ describe("stageTab", () => {
       sessionId: "terminal-2",
     });
     expect(withFirstTabFocused ? revealSessionInTabGroup(withFirstTabFocused, "missing") : null).toBeNull();
+  });
+
+  it("derives display labels from the focused session while preserving custom labels", () => {
+    const group = addTabWithRef(
+      buildSingleTabGroup({ kind: "terminal", sessionId: "terminal-1" }),
+      { kind: "agent", sessionId: "agent-1" },
+    );
+    const terminalSession: WorkspaceSession = {
+      id: "terminal-1",
+      type: "project",
+      targetId: 1,
+      projectId: 1,
+      workspaceKey: "project:1",
+      sessionRole: "default",
+      name: "Payments Shell",
+      path: "/payments",
+      useTmux: true,
+      tmuxSessionName: "payments-shell",
+      tmuxHistoryLimit: 50000,
+      status: "idle",
+    };
+    const agentSession: WorkspaceSession = {
+      kind: "agent",
+      id: "agent-1",
+      provider: "codex",
+      model: "gpt-5.4",
+      effort: "medium",
+      targetType: "project",
+      targetId: 1,
+      projectId: 1,
+      workspaceKey: "project:1",
+      sessionRole: "default",
+      nameMode: "default",
+      name: "Review Agent",
+      path: "/payments",
+      status: "idle",
+      runtimeStatus: "idle",
+      isOpen: true,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+      currentTurnStartedAtMs: null,
+      lastRuntimeEventAtMs: null,
+      runtimePhase: null,
+      conversationContext: null,
+      runtimeEvents: [],
+      messages: [],
+      activities: [],
+      pendingRequest: null,
+      errorMessage: null,
+    };
+    const sessionMap = new Map<string, WorkspaceSession>([
+      ["terminal-1", terminalSession],
+      ["agent-1", agentSession],
+    ]);
+
+    expect(group ? getStageTabDisplayLabel(group.tabs[0], sessionMap) : null).toBe("Payments Shell");
+    expect(group ? getStageTabDisplayLabel(group.tabs[1], sessionMap) : null).toBe("Review Agent");
+
+    const customLabeledGroup = group
+      ? {
+        ...group,
+        tabs: group.tabs.map((tab) => (
+          tab.id === "stage-tab-2" ? { ...tab, label: "Pinned Review" } : tab
+        )),
+      }
+      : null;
+    expect(customLabeledGroup ? getStageTabDisplayLabel(customLabeledGroup.tabs[1], sessionMap) : null).toBe("Pinned Review");
+
+    const multiPaneGroup = group
+      ? updateTabLayout(
+        group,
+        "stage-tab-1",
+        buildSplitLayout(group.tabs[0].layout, { kind: "pending" }, "vertical"),
+      )
+      : null;
+    expect(multiPaneGroup ? getStageTabDisplayLabel(multiPaneGroup.tabs[0], sessionMap) : null).toBe("Payments Shell +1");
   });
 });

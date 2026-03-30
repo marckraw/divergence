@@ -19,6 +19,7 @@ export {
   STAGE_TAB_IDS,
   getDefaultStageTabLabel,
   getStageTabOrdinal,
+  isDefaultStageTabLabel,
   isStageTabId,
   type StageTabId,
 } from "./lib/stageTabId.pure";
@@ -43,6 +44,7 @@ export {
   focusNextTab,
   focusPreviousTab,
   focusTab,
+  getStageTabDisplayLabel,
   getActiveTab,
   removeTab,
   removeTabIfEmpty,
