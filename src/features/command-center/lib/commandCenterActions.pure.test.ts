@@ -89,7 +89,7 @@ describe("commandCenterActions.pure", () => {
     }));
   });
 
-  it("uses open-terminal copy for workspace contexts", () => {
+  it("uses new-session copy for workspace contexts", () => {
     const actions = buildCommandCenterCreateActions(
       makeAgentSession({ targetType: "workspace", targetId: 12, workspaceOwnerId: 12 }),
       ["claude"],
@@ -97,7 +97,7 @@ describe("commandCenterActions.pure", () => {
 
     expect(actions).toHaveLength(2);
     expect(actions[0]).toEqual(expect.objectContaining({
-      label: "Open Terminal",
+      label: "New Session",
       targetType: "workspace",
       targetId: 12,
       sessionKind: "terminal",
@@ -108,6 +108,24 @@ describe("commandCenterActions.pure", () => {
       targetId: 12,
       sessionKind: "agent",
       provider: "claude",
+    }));
+  });
+
+  it("uses new-session copy for workspace divergence contexts", () => {
+    const actions = buildCommandCenterCreateActions(
+      makeAgentSession({
+        targetType: "workspace_divergence",
+        targetId: 21,
+        workspaceOwnerId: 12,
+      }),
+      ["claude"],
+    );
+
+    expect(actions[0]).toEqual(expect.objectContaining({
+      label: "New Session",
+      targetType: "workspace_divergence",
+      targetId: 21,
+      sessionKind: "terminal",
     }));
   });
 

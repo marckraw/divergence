@@ -18,13 +18,14 @@ function getTargetCopy(targetType: CreateAction["targetType"]): {
       };
     case "workspace":
       return {
-        terminalLabel: "Open Terminal",
-        terminalDescription: "Open the workspace terminal in this pane.",
+        terminalLabel: "New Session",
+        terminalDescription: "Create another terminal session for this workspace.",
       };
     case "workspace_divergence":
       return {
-        terminalLabel: "Open Terminal",
-        terminalDescription: "Open the workspace divergence terminal in this pane.",
+        terminalLabel: "New Session",
+        terminalDescription:
+          "Create another terminal session for this workspace divergence.",
       };
     case "project":
     default:

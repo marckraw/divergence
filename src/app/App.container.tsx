@@ -67,12 +67,15 @@ import type {
   StagePaneId,
   StagePaneRef,
   StageTabId,
+  TerminalSession,
   Workspace,
   WorkspaceDivergence,
   WorkspaceSession,
 } from "../entities";
 import {
   buildWorkspaceSessionAttentionStateMap,
+  buildManualWorkspaceDivergenceTerminalSession,
+  buildManualWorkspaceTerminalSession,
   buildWorkspaceDivergenceTerminalSession,
   buildWorkspaceKey,
   buildWorkspaceTerminalSession,
@@ -1032,6 +1035,67 @@ function App() {
     ]
   );
 
+  const createManualWorkspaceSessionId = useCallback(
+    (workspace: Workspace): string => {
+      const existingSessions: TerminalSession[] = Array.from(
+        sessionsRef.current.values()
+      ).filter(
+        (session: TerminalSession) =>
+          session.type === "workspace" && session.targetId === workspace.id
+      );
+      const session = buildManualWorkspaceTerminalSession({
+        workspace,
+        globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+        existingSessions,
+      });
+
+      setSessions((previous: Map<string, TerminalSession>) => {
+        const next = new Map(previous);
+        next.set(session.id, session);
+        return next;
+      });
+
+      return session.id;
+    },
+    [appSettings.tmuxHistoryLimit, sessionsRef, setSessions]
+  );
+
+  const createManualWorkspaceDivergenceSessionId = useCallback(
+    (workspaceDivergence: WorkspaceDivergence): string => {
+      const existingSessions: TerminalSession[] = Array.from(
+        sessionsRef.current.values()
+      ).filter(
+        (session: TerminalSession) =>
+          session.type === "workspace_divergence"
+          && session.targetId === workspaceDivergence.id
+      );
+      const portAllocation =
+        portAllocationByEntityKey.get(
+          `workspace_divergence:${workspaceDivergence.id}`
+        ) ?? null;
+      const session = buildManualWorkspaceDivergenceTerminalSession({
+        workspaceDivergence,
+        globalTmuxHistoryLimit: appSettings.tmuxHistoryLimit,
+        existingSessions,
+        portAllocation,
+      });
+
+      setSessions((previous: Map<string, TerminalSession>) => {
+        const next = new Map(previous);
+        next.set(session.id, session);
+        return next;
+      });
+
+      return session.id;
+    },
+    [
+      appSettings.tmuxHistoryLimit,
+      portAllocationByEntityKey,
+      sessionsRef,
+      setSessions,
+    ]
+  );
+
   const resolveQuickSwitcherSelectionRef = useCallback(
     async (
       type:
@@ -1255,7 +1319,7 @@ function App() {
             }
             ref = {
               kind: "terminal",
-              sessionId: ensureWorkspaceSessionId(workspace),
+              sessionId: createManualWorkspaceSessionId(workspace),
             };
             break;
           }
@@ -1268,8 +1332,9 @@ function App() {
             }
             ref = {
               kind: "terminal",
-              sessionId:
-                ensureWorkspaceDivergenceSessionId(workspaceDivergence),
+              sessionId: createManualWorkspaceDivergenceSessionId(
+                workspaceDivergence
+              ),
             };
             break;
           }
@@ -1346,10 +1411,10 @@ function App() {
     },
     [
       createManualSession,
+      createManualWorkspaceDivergenceSessionId,
+      createManualWorkspaceSessionId,
       createTargetedAgentSession,
       divergenceById,
-      ensureWorkspaceDivergenceSessionId,
-      ensureWorkspaceSessionId,
       handleReplaceStagePaneRef,
       projectById,
       setSidebarMode,

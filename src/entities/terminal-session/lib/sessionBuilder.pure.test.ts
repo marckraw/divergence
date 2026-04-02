@@ -8,6 +8,8 @@ import type {
 import type { ProjectSettings } from "../../project";
 import {
   buildTerminalSession,
+  buildManualWorkspaceDivergenceTerminalSession,
+  buildManualWorkspaceTerminalSession,
   buildWorkspaceDivergenceTerminalSession,
   buildWorkspaceKey,
   buildWorkspaceTerminalSession,
@@ -132,6 +134,26 @@ describe("buildWorkspaceTerminalSession", () => {
     expect(session.tmuxHistoryLimit).toBe(50000);
     expect(session.name).toBe(workspace.name);
   });
+
+  it("builds a manual workspace session with a unique id and label", () => {
+    const session = buildManualWorkspaceTerminalSession({
+      workspace,
+      globalTmuxHistoryLimit: 50000,
+      existingSessions: [
+        buildWorkspaceTerminalSession({
+          workspace,
+          globalTmuxHistoryLimit: 50000,
+        }),
+      ],
+    });
+
+    expect(session.id).toMatch(/^workspace-5#manual-\d+-\d+$/);
+    expect(session.sessionRole).toBe("manual");
+    expect(session.name).toBe("My Workspace • session #1");
+    expect(session.tmuxSessionName).toMatch(
+      /^divergence-workspace-my-workspace-5-manual-\d+-\d+$/
+    );
+  });
 });
 
 describe("buildWorkspaceDivergenceTerminalSession", () => {
@@ -152,6 +174,26 @@ describe("buildWorkspaceDivergenceTerminalSession", () => {
     expect(session.useTmux).toBe(true);
     expect(session.tmuxHistoryLimit).toBe(50000);
     expect(session.name).toBe(workspaceDivergence.name);
+  });
+
+  it("builds a manual workspace divergence session with a unique id and label", () => {
+    const session = buildManualWorkspaceDivergenceTerminalSession({
+      workspaceDivergence,
+      globalTmuxHistoryLimit: 50000,
+      existingSessions: [
+        buildWorkspaceDivergenceTerminalSession({
+          workspaceDivergence,
+          globalTmuxHistoryLimit: 50000,
+        }),
+      ],
+    });
+
+    expect(session.id).toMatch(/^workspace_divergence-7#manual-\d+-\d+$/);
+    expect(session.sessionRole).toBe("manual");
+    expect(session.name).toBe("my-workspace--feat-xyz • session #1");
+    expect(session.tmuxSessionName).toMatch(
+      /^divergence-ws-div-my-workspace-feat-xyz-7-manual-\d+-\d+$/
+    );
   });
 });
 
