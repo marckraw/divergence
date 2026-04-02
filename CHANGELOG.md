@@ -1,5 +1,11 @@
 # divergence
 
+## 0.45.11
+
+### Patch Changes
+
+- 37f7d4b: Align workspace command-center session creation with project behavior by opening a new manual terminal session instead of reusing the default workspace terminal.
+
 ## 0.45.10
 
 ### Patch Changes
