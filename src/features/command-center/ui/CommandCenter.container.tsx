@@ -40,6 +40,13 @@ function CommandCenterContainer({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  const resetSearchState = useCallback(() => {
+    setQuery("");
+    setDebouncedQuery("");
+    setSelectedIndex(0);
+    setActiveCategory("all");
+  }, []);
+
   const focusSearchInput = useCallback(() => {
     const input = inputRef.current;
     if (!input || document.activeElement === input) {
@@ -158,6 +165,16 @@ function CommandCenterContainer({
   const contextLabel = getCommandCenterContextLabel(mode, sourceSession);
   const resultsKey = `${mode.kind}:${showCategoryTabs ? activeCategory : "all"}:${debouncedQuery}`;
 
+  const handleClose = useCallback(() => {
+    resetSearchState();
+    onClose();
+  }, [onClose, resetSearchState]);
+
+  const handleSelectResult = useCallback((result: CommandCenterSearchResult) => {
+    resetSearchState();
+    onSelect(result);
+  }, [onSelect, resetSearchState]);
+
   const handleInputKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     switch (event.key) {
       case "ArrowDown":
@@ -171,7 +188,7 @@ function CommandCenterContainer({
       case "Enter":
         event.preventDefault();
         if (visibleItems[selectedIndex]) {
-          onSelect(visibleItems[selectedIndex]);
+          handleSelectResult(visibleItems[selectedIndex]);
         }
         break;
       case "Tab":
@@ -188,14 +205,10 @@ function CommandCenterContainer({
         break;
       case "Escape":
         event.preventDefault();
-        onClose();
+        handleClose();
         break;
     }
-  }, [onClose, onSelect, selectedIndex, showCategoryTabs, visibleItems]);
-
-  const handleSelectResult = useCallback((result: CommandCenterSearchResult) => {
-    onSelect(result);
-  }, [onSelect]);
+  }, [handleClose, handleSelectResult, selectedIndex, showCategoryTabs, visibleItems]);
 
   const handleHoverResult = useCallback((index: number) => {
     setSelectedIndex(index);
@@ -215,7 +228,7 @@ function CommandCenterContainer({
       resultsKey={resultsKey}
       inputRef={inputRef}
       listRef={listRef}
-      onClose={onClose}
+      onClose={handleClose}
       onQueryChange={setQuery}
       onInputKeyDown={handleInputKeyDown}
       onSelectResult={handleSelectResult}
