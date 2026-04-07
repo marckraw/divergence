@@ -4,6 +4,7 @@ import { isAgentSession } from "../../entities";
 import type { CommandCenterMode } from "../../features/command-center";
 import type { WorkSidebarMode, WorkSidebarTab } from "../../features/work-sidebar";
 import { resolveAppShortcut } from "../lib/appShortcuts.pure";
+import { resolveQuickSwitcherMode } from "../lib/quickSwitcherMode.pure";
 import type { StagePaneId } from "../../entities";
 
 interface UseAppKeyboardShortcutsParams {
@@ -150,9 +151,11 @@ export function useAppKeyboardShortcuts({
 
     switch (action.type) {
       case "toggle_quick_switcher_reveal":
-        onSetCommandCenterMode((prev) =>
-          prev?.kind === "reveal" ? null : { kind: "reveal" },
-        );
+        onSetCommandCenterMode((prev) => resolveQuickSwitcherMode({
+          previousMode: prev,
+          stageLayout: currentStageLayout,
+          focusedPaneId: currentFocusedPaneId,
+        }));
         return;
       case "toggle_file_quick_switcher":
         onSetCommandCenterMode((prev) =>
